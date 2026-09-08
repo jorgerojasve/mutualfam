@@ -1,0 +1,24 @@
+Metadata-Version: 2.4
+Name: civiccore
+Version: 0.1.0
+Summary: A framework for building civic, cooperative, and scientific organization backends.
+Author-email: CivicCore Team <team@civiccore.org>
+Project-URL: Homepage, https://github.com/civiccore/civiccore
+Project-URL: Bug Tracker, https://github.com/civiccore/civiccore/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: uvicorn>=0.23.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: pydantic-settings>=2.0.0
+Requires-Dist: python-jose[cryptography]>=3.3.0
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: bcrypt>=4.0.0
+Requires-Dist: python-multipart>=0.0.6
+
+# CivicCore Framework
+This is the backend component of the CivicCore framework.

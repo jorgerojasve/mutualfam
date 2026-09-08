@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "civiccore"
+version = "0.1.0"
+authors = [
+  { name="CivicCore Team", email="team@civiccore.org" },
+]
+description = "A framework for building civic, cooperative, and scientific organization backends."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "sqlalchemy>=2.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/civiccore/civiccore"
+"Bug Tracker" = "https://github.com/civiccore/civiccore/issues"

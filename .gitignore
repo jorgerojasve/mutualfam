@@ -1,0 +1,8 @@
+.android/
+.cache/
+.config/
+.emulator_console_auth_token
+.expo/
+.npm-cache/
+.npm/
+expo-debug.log
