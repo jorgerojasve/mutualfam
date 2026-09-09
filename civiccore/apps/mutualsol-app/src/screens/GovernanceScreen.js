@@ -1,86 +1,128 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus } from 'lucide-react-native';
+import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
+import { gobernanzaApi, configApi } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import { useIsFocused } from '@react-navigation/native';
 
 // Habilitar animaciones en Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const INITIAL_PROPOSALS = [
-  {
-    id: 'prop-1',
-    type: 'Crédito Extraordinario',
-    applicant: 'Miembro #189',
-    title: 'Financiamiento de Equipo para Emprendimiento Local',
-    description: 'Solicitud de $1,500 USD para adquirir hornos industriales para panadería cooperativa. El plan de retorno es a 12 meses con una tasa solidaria del 2% mensual.',
-    quorumNeeded: 100,
-    votes: {
-      yes: 42,
-      no: 12,
-      abstain: 5,
-      delegated: 18
-    },
-    timeLeft: '2 días',
-    status: 'active'
-  },
-  {
-    id: 'prop-2',
-    type: 'Cambio de Regla',
-    applicant: 'Comité de Tesorería',
-    title: 'Ajuste de Tasa de Interés Solidaria',
-    description: 'Propuesta para reducir la tasa de interés mensual de 5% a 4.5% debido al incremento del fondo comunitario y mejora en la liquidez.',
-    quorumNeeded: 150,
-    votes: {
-      yes: 110,
-      no: 10,
-      abstain: 2,
-      delegated: 25
-    },
-    timeLeft: '5 horas',
-    status: 'active'
-  }
-];
-
 export default function GovernanceScreen({ navigation }) {
-  const [proposals, setProposals] = useState(INITIAL_PROPOSALS);
+  const [proposals, setProposals] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
-  const [userVotes, setUserVotes] = useState({}); // { 'prop-1': 'yes' }
+  const [userVotes, setUserVotes] = useState({}); 
+  const [loading, setLoading] = useState(true);
+  const [sistemaGobernanza, setSistemaGobernanza] = useState('DOS_FASES');
+  const [activeTab, setActiveTab] = useState('debate'); // 'debate' o 'referendos'
+  const { user } = useAuthStore();
+  
+  const isFocused = useIsFocused();
 
-  const toggleExpand = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedId(expandedId === id ? null : id);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [data, config] = await Promise.all([
+        gobernanzaApi.listarPropuestas(),
+        configApi.getVariables()
+      ]);
+      setProposals(data);
+      const sysGov = config.find(c => c.key === 'SISTEMA_GOBERNANZA');
+      if (sysGov) setSistemaGobernanza(sysGov.value);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'No se pudieron cargar las asambleas');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleVote = (proposalId, voteType) => {
-    if (userVotes[proposalId]) return; // Ya votó
+  useEffect(() => {
+    if (isFocused) {
+      loadData();
+    }
+  }, [isFocused]);
 
-    setProposals(current => 
-      current.map(prop => {
-        if (prop.id === proposalId) {
-          return {
-            ...prop,
-            votes: {
-              ...prop.votes,
-              [voteType]: prop.votes[voteType] + 1
-            }
-          };
+  const toggleExpand = async (id) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId(expandedId === id ? null : id);
+    
+    // Si expande y no sabemos si ha votado, lo buscamos
+    if (expandedId !== id && userVotes[id] === undefined) {
+      try {
+        const myVote = await gobernanzaApi.miVoto(id);
+        if (myVote) {
+          setUserVotes(prev => ({ ...prev, [id]: myVote.vote_value }));
+        } else {
+          setUserVotes(prev => ({ ...prev, [id]: null })); // null significa 'no ha votado'
         }
-        return prop;
-      })
-    );
-    setUserVotes(prev => ({ ...prev, [proposalId]: voteType }));
+      } catch (e) {
+        console.error("Error al cargar mi voto:", e);
+      }
+    }
+  };
+
+  const handleVote = async (proposalId, voteType) => {
+    if (userVotes[proposalId]) return;
+
+    let voteValue = 0.0;
+    if (voteType === 'yes') voteValue = 1.0;
+    if (voteType === 'no') voteValue = -1.0;
+    if (voteType === 'abstain') voteValue = 0.0;
+
+    try {
+      await gobernanzaApi.votar(proposalId, voteValue);
+      // Optimistic update
+      setProposals(current => 
+        current.map(prop => {
+          if (prop.id === proposalId) {
+            return {
+              ...prop,
+              votes_yes: voteType === 'yes' ? prop.votes_yes + 1 : prop.votes_yes,
+              votes_no: voteType === 'no' ? prop.votes_no + 1 : prop.votes_no,
+              votes_abstain: voteType === 'abstain' ? prop.votes_abstain + 1 : prop.votes_abstain,
+            };
+          }
+          return prop;
+        })
+      );
+      setUserVotes(prev => ({ ...prev, [proposalId]: voteValue }));
+      Alert.alert('Voto Registrado', 'Tu decisión ha sido guardada exitosamente en la asamblea.');
+    } catch (e) {
+      Alert.alert('Error', e.message);
+      if (e.message.includes('already resolved')) {
+         setUserVotes(prev => ({ ...prev, [proposalId]: 'already' }));
+      }
+    }
   };
 
   const renderProposal = (prop) => {
     const isExpanded = expandedId === prop.id;
-    const hasVoted = !!userVotes[prop.id];
     
-    const totalVotes = prop.votes.yes + prop.votes.no + prop.votes.abstain + prop.votes.delegated;
-    const progress = Math.min((totalVotes / prop.quorumNeeded) * 100, 100);
-    const yesPercent = totalVotes > 0 ? (prop.votes.yes / totalVotes) * 100 : 0;
+    const totalVotes = prop.votes_yes + prop.votes_no + prop.votes_abstain + prop.votes_delegated;
+    const progress = prop.quorum_needed > 0 ? Math.min((totalVotes / prop.quorum_needed) * 100, 100) : 0;
+    const yesPercent = totalVotes > 0 ? (prop.votes_yes / totalVotes) * 100 : 0;
+    const isAutomatic = prop.extra_fields?.variable;
+    
+    // Calcular tiempo restante (mock o real si voting_ends_at existe)
+    let timeLeft = "Debate Abierto";
+    if (prop.status === 'voting' && prop.voting_ends_at) {
+      const ends = new Date(prop.voting_ends_at);
+      const now = new Date();
+      const diffDays = Math.ceil((ends - now) / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) timeLeft = `${diffDays} días`;
+      else timeLeft = "Finalizando";
+    } else if (prop.status === 'approved') {
+      timeLeft = "Aprobada";
+    } else if (prop.status === 'rejected') {
+      timeLeft = "Rechazada";
+    }
+
+    const isAuthor = user?.id === prop.author_id;
 
     return (
       <TouchableOpacity 
@@ -90,19 +132,19 @@ export default function GovernanceScreen({ navigation }) {
         onPress={() => toggleExpand(prop.id)}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.propType}>{prop.type}</Text>
+          <Text style={styles.propType}>{isAutomatic ? "Implementación Automática" : "Acción Humana"}</Text>
           <View style={styles.timeBadge}>
             <Clock color={COLORS.textMuted} size={14} />
-            <Text style={styles.timeText}>{prop.timeLeft}</Text>
+            <Text style={styles.timeText}>{timeLeft}</Text>
           </View>
         </View>
 
         <Text style={styles.propTitle}>{prop.title}</Text>
-        <Text style={styles.propApplicant}>Solicitante: {prop.applicant}</Text>
+        <Text style={styles.propApplicant}>Categoría: {prop.category.toUpperCase()}</Text>
 
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>Quórum: {totalVotes}/{prop.quorumNeeded}</Text>
+            <Text style={styles.progressLabel}>Quórum: {totalVotes}/{prop.quorum_needed}</Text>
             <Text style={styles.progressLabel}>A Favor: {yesPercent.toFixed(0)}%</Text>
           </View>
           <View style={styles.progressBarBg}>
@@ -112,39 +154,85 @@ export default function GovernanceScreen({ navigation }) {
 
         {isExpanded && (
           <View style={styles.expandedContent}>
-            <Text style={styles.propDescription}>{prop.description}</Text>
+            <Text style={styles.propDescription}>{prop.content}</Text>
+            {isAutomatic && (
+               <View style={{backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 10, borderRadius: 8, marginBottom: 15}}>
+                 <Text style={{color: COLORS.accent, fontWeight: 'bold'}}>Modificará: {prop.extra_fields.variable}</Text>
+                 <Text style={{color: COLORS.textMuted}}>Nuevo valor: {prop.extra_fields.new_value}</Text>
+               </View>
+            )}
             
-            {!hasVoted ? (
+            {userVotes[prop.id] === null || userVotes[prop.id] === undefined ? (
               <View style={styles.votingArea}>
-                <Text style={styles.votingTitle}>Emite tu Voto (1 Voto = 1 Miembro)</Text>
-                <View style={styles.votingButtonsGrid}>
-                  <TouchableOpacity style={[styles.voteBtn, styles.voteYes]} onPress={() => handleVote(prop.id, 'yes')}>
-                    <CheckCircle color={COLORS.success} size={20} />
-                    <Text style={styles.voteBtnTextYes}>A Favor</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={[styles.voteBtn, styles.voteNo]} onPress={() => handleVote(prop.id, 'no')}>
-                    <XCircle color={COLORS.accent} size={20} />
-                    <Text style={styles.voteBtnTextNo}>En Contra</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={[styles.voteBtn, styles.voteAbstain]} onPress={() => handleVote(prop.id, 'abstain')}>
-                    <AlertCircle color={COLORS.textMuted} size={20} />
-                    <Text style={styles.voteBtnTextAbstain}>Abstenerse</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={[styles.voteBtn, styles.voteDelegate]} onPress={() => handleVote(prop.id, 'delegated')}>
-                    <Share2 color={COLORS.text} size={20} />
-                    <Text style={styles.voteBtnTextDelegate}>Delegar</Text>
-                  </TouchableOpacity>
-                </View>
+                {prop.status === 'debate' ? (
+                  <>
+                    <Text style={styles.votingTitle}>Fase de Ideación</Text>
+                    <TouchableOpacity style={[styles.voteBtn, styles.voteYes, { width: '100%' }]} onPress={() => handleVote(prop.id, 'yes')}>
+                      <CheckCircle color={COLORS.success} size={20} />
+                      <Text style={styles.voteBtnTextYes}>Apoyar Propuesta</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.votingTitle}>Referendo Oficial (1 Voto = 1 Miembro)</Text>
+                    <View style={styles.votingButtonsGrid}>
+                      <TouchableOpacity style={[styles.voteBtn, styles.voteYes]} onPress={() => handleVote(prop.id, 'yes')}>
+                        <CheckCircle color={COLORS.success} size={20} />
+                        <Text style={styles.voteBtnTextYes}>A Favor</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity style={[styles.voteBtn, styles.voteNo]} onPress={() => handleVote(prop.id, 'no')}>
+                        <XCircle color={COLORS.accent} size={20} />
+                        <Text style={styles.voteBtnTextNo}>En Contra</Text>
+                      </TouchableOpacity>
+    
+                      <TouchableOpacity style={[styles.voteBtn, styles.voteAbstain]} onPress={() => handleVote(prop.id, 'abstain')}>
+                        <AlertCircle color={COLORS.textMuted} size={20} />
+                        <Text style={styles.voteBtnTextAbstain}>Abstenerse</Text>
+                      </TouchableOpacity>
+    
+                      <TouchableOpacity style={[styles.voteBtn, styles.voteDelegate]} onPress={() => handleVote(prop.id, 'delegated')}>
+                        <Share2 color={COLORS.text} size={20} />
+                        <Text style={styles.voteBtnTextDelegate}>Delegar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             ) : (
               <View style={styles.votedState}>
                 <CheckCircle color={COLORS.success} size={24} />
-                <Text style={styles.votedText}>Has participado en esta asamblea. ¡Gracias!</Text>
+                <Text style={styles.votedText}>Has apoyado o participado en esta asamblea.</Text>
               </View>
             )}
+
+            {/* Author Actions */}
+            {isAuthor && prop.status === 'debate' && (
+              <TouchableOpacity 
+                style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.accent }]}
+                onPress={async () => {
+                  await gobernanzaApi.iniciarReferendo(prop.id);
+                  loadData();
+                }}
+              >
+                <Play color={COLORS.accent} size={20} />
+                <Text style={[styles.voteBtnTextNo, { marginLeft: 10 }]}>Llamar a Referendo General</Text>
+              </TouchableOpacity>
+            )}
+
+            {isAuthor && prop.status === 'voting' && sistemaGobernanza === 'UNA_FASE_MANUAL' && (
+              <TouchableOpacity 
+                style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.success, backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}
+                onPress={async () => {
+                  await gobernanzaApi.calcularResultados(prop.id);
+                  loadData();
+                }}
+              >
+                <CheckSquare color={COLORS.success} size={20} />
+                <Text style={[styles.voteBtnTextYes, { marginLeft: 10 }]}>Finalizar Votación Manualmente</Text>
+              </TouchableOpacity>
+            )}
+            
           </View>
         )}
       </TouchableOpacity>
@@ -164,8 +252,39 @@ export default function GovernanceScreen({ navigation }) {
           MutualSol es una economía verdaderamente democrática. Un miembro representa un voto, independientemente del capital aportado. Revisa las propuestas y ejerce tu decisión soberana o delega tu voto a alguien de confianza.
         </Text>
 
+        {sistemaGobernanza === 'DOS_FASES' && (
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'debate' && styles.activeTab]}
+              onPress={() => setActiveTab('debate')}
+            >
+              <Text style={[styles.tabText, activeTab === 'debate' && styles.activeTabText]}>Foro de Debate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'referendos' && styles.activeTab]}
+              onPress={() => setActiveTab('referendos')}
+            >
+              <Text style={[styles.tabText, activeTab === 'referendos' && styles.activeTabText]}>Referendos Oficiales</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.proposalsContainer}>
-          {proposals.map(renderProposal)}
+          {loading ? (
+             <ActivityIndicator size="large" color={COLORS.accent} style={{marginTop: 50}} />
+          ) : proposals.filter(p => 
+              sistemaGobernanza === 'DOS_FASES' 
+                ? (activeTab === 'debate' ? p.status === 'debate' : p.status !== 'debate')
+                : true
+            ).length === 0 ? (
+             <Text style={{color: COLORS.textMuted, textAlign: 'center', marginTop: 50}}>No hay asambleas activas en esta sección.</Text>
+          ) : (
+             proposals.filter(p => 
+              sistemaGobernanza === 'DOS_FASES' 
+                ? (activeTab === 'debate' ? p.status === 'debate' : p.status !== 'debate')
+                : true
+             ).map(renderProposal)
+          )}
         </View>
 
       </ScrollView>
@@ -208,6 +327,34 @@ const styles = StyleSheet.create({
   },
   proposalsContainer: {
     gap: 15,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: 'rgba(245, 166, 35, 0.1)',
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.accent,
+  },
+  tabText: {
+    color: COLORS.textMuted,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  activeTabText: {
+    color: COLORS.accent,
+    fontWeight: 'bold',
   },
   card: {
     backgroundColor: COLORS.card,

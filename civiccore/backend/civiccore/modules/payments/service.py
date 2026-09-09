@@ -57,7 +57,7 @@ class PaymentService:
     def update_transaction_status(
         db: Session, tx_id: int, update_data: TransactionUpdateStatus
     ) -> Transaction:
-        tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+        tx = db.query(Transaction).filter(Transaction.id == tx_id).with_for_update().first()
         if not tx:
             raise ValueError("Transaction not found")
             
@@ -106,7 +106,7 @@ class CreditService:
 
     @staticmethod
     def update_credit_status(db: Session, credit_id: int, status: CreditStatus) -> CreditRequest:
-        credit = db.query(CreditRequest).filter(CreditRequest.id == credit_id).first()
+        credit = db.query(CreditRequest).filter(CreditRequest.id == credit_id).with_for_update().first()
         if not credit:
             raise ValueError("Credit request not found")
             

@@ -44,8 +44,10 @@ class Proposal(Base):
     
     # Coalescence (Gambetta)
     merged_into_id = Column(Integer, ForeignKey("proposals.id"), nullable=True)
+    cited_proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=True)
 
     created_at = Column(DateTime, default=utcnow)
+    last_activity_at = Column(DateTime, default=utcnow)
     voting_starts_at = Column(DateTime, nullable=True)
     voting_ends_at = Column(DateTime, nullable=True)
     

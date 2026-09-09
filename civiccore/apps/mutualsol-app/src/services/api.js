@@ -3,13 +3,13 @@
  * Gestiona todas las llamadas HTTP al backend FastAPI,
  * inyecta el JWT automáticamente y maneja errores globalmente.
  */
-import { saveToken, getToken, removeToken } from './storage';
+import { saveToken, getToken, removeToken, saveBiometricToken, getBiometricToken, removeBiometricToken } from './storage';
 
 // IP de tu computadora en la red local (vista en el QR de Expo)
 const BASE_URL = 'http://172.16.0.12:8001/api/v1';
 
 // Re-exportar para que authStore.js los pueda usar directamente
-export { saveToken, getToken, removeToken };
+export { saveToken, getToken, removeToken, saveBiometricToken, getBiometricToken, removeBiometricToken };
 
 // ─────────────────────────────────────────────
 // Fetch Wrapper con Auth automática
@@ -101,16 +101,38 @@ export const creditosApi = {
 // ─────────────────────────────────────────────
 
 export const gobernanzaApi = {
-  listarPropuestas: () => request('/gobernanza/propuestas'),
+  listarPropuestas: () => request('/governance/proposals'),
 
   crearPropuesta: (data) =>
-    request('/gobernanza/propuestas', { method: 'POST', body: JSON.stringify(data) }),
+    request('/governance/proposals', { method: 'POST', body: JSON.stringify(data) }),
 
-  votar: (propuestaId, data) =>
-    request(`/gobernanza/propuestas/${propuestaId}/votar`, {
+  votar: (propuestaId, vote_value) =>
+    request(`/governance/proposals/${propuestaId}/vote`, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ vote_value }),
     }),
+    
+  miVoto: (propuestaId) => request(`/governance/proposals/${propuestaId}/my-vote`),
+  
+  // Nuevos endpoints de Meta-Gobernanza y Coalescencia
+  buscarSimilares: (q) => request(`/governance/proposals/search?q=${encodeURIComponent(q)}`),
+  
+  solicitarFusion: (id, target_id, as_citation = false) => 
+    request(`/governance/proposals/${id}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ target_proposal_id: target_id, as_citation })
+    }),
+    
+  iniciarReferendo: (id) => request(`/governance/proposals/${id}/start-referendum`, { method: 'POST' }),
+  
+  calcularResultados: (id) => request(`/governance/proposals/${id}/results`, { method: 'POST' })
+};
+
+// ─────────────────────────────────────────────
+// CONFIG API
+// ─────────────────────────────────────────────
+export const configApi = {
+  getVariables: () => request('/config/')
 };
 
 // ─────────────────────────────────────────────

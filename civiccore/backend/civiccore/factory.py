@@ -12,7 +12,8 @@ def create_app(
     include_membership: bool = True,
     include_governance: bool = True,
     include_payments: bool = False,
-    include_authorship: bool = False
+    include_authorship: bool = False,
+    include_config: bool = True
 ) -> FastAPI:
     """
     Creates and configures a FastAPI instance with the selected CivicCore modules.
@@ -60,6 +61,10 @@ def create_app(
     if include_authorship:
         from .modules.authorship.router import router as authorship_router
         app.include_router(authorship_router, prefix="/api/v1/authorship", tags=["Authorship"])
+        
+    if include_config:
+        from .modules.config.router import router as config_router
+        app.include_router(config_router, prefix="/api/v1/config", tags=["System Config"])
         
     @app.get("/health", tags=["Health"])
     def health_check():

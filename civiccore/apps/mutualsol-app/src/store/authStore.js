@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { authApi, saveToken, getToken, removeToken } from '../services/api';
+import { authApi, saveToken, getToken, removeToken, saveBiometricToken, getBiometricToken } from '../services/api';
 
 export const useAuthStore = create((set) => ({
   isAuthenticated: false,
@@ -38,6 +38,7 @@ export const useAuthStore = create((set) => ({
   login: async (email, password) => {
     const tokenResponse = await authApi.login(email, password);
     await saveToken(tokenResponse.access_token);
+    await saveBiometricToken(tokenResponse.access_token); // Guardamos para huella
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -48,6 +49,9 @@ export const useAuthStore = create((set) => ({
    * Si no hay token, lanza un error para informar al usuario.
    */
   loginBiometric: async () => {
+    const token = await getBiometricToken();
+    if (!token) throw new Error("No hay token biométrico");
+    await saveToken(token); // Restauramos token normal para las peticiones
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -61,6 +65,7 @@ export const useAuthStore = create((set) => ({
     // Después del registro exitoso, iniciar sesión automáticamente
     const tokenResponse = await authApi.login(userData.email, userData.password);
     await saveToken(tokenResponse.access_token);
+    await saveBiometricToken(tokenResponse.access_token); // Guardamos para huella
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -70,6 +75,8 @@ export const useAuthStore = create((set) => ({
    * Cierra sesión y elimina el token del dispositivo.
    */
   logout: async () => {
+    // Borramos el token normal para que AppLoader no inicie sesión
+    // pero dejamos el biometricToken en SecureStore
     await removeToken();
     set({ isAuthenticated: false, user: null });
   },

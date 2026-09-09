@@ -32,10 +32,10 @@ export default function RegisterScreen({ navigation }) {
     setLoading(true);
     try {
       await register({ 
-        first_name: nombre, 
-        last_name: apellido, 
-        identifier: cedula, 
-        email, 
+        first_name: nombre.trim(), 
+        last_name: apellido.trim(), 
+        identifier: cedula.trim(), 
+        email: email.trim(), 
         password 
       });
       // El store maneja la navegación al cambiar isAuthenticated

@@ -25,6 +25,12 @@ class ProposalResponse(ProposalBase):
     created_at: datetime
     voting_starts_at: Optional[datetime] = None
     voting_ends_at: Optional[datetime] = None
+    
+    votes_yes: Optional[float] = 0.0
+    votes_no: Optional[float] = 0.0
+    votes_abstain: Optional[float] = 0.0
+    votes_delegated: Optional[float] = 0.0
+    quorum_needed: Optional[int] = 100
 
     class Config:
         from_attributes = True

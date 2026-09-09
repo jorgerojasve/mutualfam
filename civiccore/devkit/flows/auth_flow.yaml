@@ -1,0 +1,18 @@
+appId: com.mutualsol.app # Reemplazar por el package name de la app final
+---
+- launchApp
+- assertVisible: "MutualSol"
+- tapOn: "Solicitar Membresía"
+- assertVisible: "Crear Cuenta"
+- inputText: "Usuario Maestro"
+- tapOn: "Apellido"
+- inputText: "Test"
+- tapOn: "Cédula de Identidad"
+- inputText: "V-99999999"
+- tapOn: "tu@correo.com"
+- inputText: "maestro@test.com"
+- tapOn: "Contraseña"
+- inputText: "test1234"
+- tapOn: "Crear Cuenta"
+- assertVisible: "¡Hola, Usuario Test!"
+- tapOn: "LogOut" # Asumiendo que el ícono/botón de cierre tiene un id o texto reconocible (o se tapOn el ícono de LogOut)

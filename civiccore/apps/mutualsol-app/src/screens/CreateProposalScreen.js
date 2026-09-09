@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, Settings, Users, Info } from 'lucide-react-native';
+import { ChevronLeft, Send, Settings, Users, Info, ChevronDown, Check, AlertCircle } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
+import { gobernanzaApi, configApi } from '../services/api';
 
 export default function CreateProposalScreen({ navigation }) {
   const [type, setType] = useState('automatic'); // 'automatic' or 'human'
@@ -10,8 +11,33 @@ export default function CreateProposalScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [variable, setVariable] = useState('');
   const [newValue, setNewValue] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  const [configVariables, setConfigVariables] = useState([]);
+  const [loadingConfig, setLoadingConfig] = useState(true);
 
-  const handleSubmit = () => {
+  // Coalescence states
+  const [similarProposals, setSimilarProposals] = useState([]);
+  const [showSimilarityModal, setShowSimilarityModal] = useState(false);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const vars = await configApi.getVariables();
+      setConfigVariables(vars);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingConfig(false);
+    }
+  };
+
+  const handleInitialSubmit = async () => {
     if (!title || !description) {
       Alert.alert('Error', 'Por favor llena los campos obligatorios (Título y Exposición de motivos).');
       return;
@@ -20,13 +46,56 @@ export default function CreateProposalScreen({ navigation }) {
       Alert.alert('Error', 'Para propuestas automáticas debes indicar la variable y el nuevo valor.');
       return;
     }
+    if (type === 'automatic' && variable === 'QUORUM_ASAMBLEA' && parseFloat(newValue) > 100) {
+      Alert.alert('Valor Inválido', 'El porcentaje de quórum no puede ser mayor a 100.');
+      return;
+    }
 
-    // Aquí iría la lógica para enviar al backend
-    Alert.alert(
-      'Propuesta Sometida', 
-      'Tu propuesta ha sido enviada a la asamblea exitosamente.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+    try {
+      setIsSubmitting(true);
+      // Buscar similitudes
+      const similares = await gobernanzaApi.buscarSimilares(title);
+      if (similares && similares.length > 0) {
+        setSimilarProposals(similares);
+        setShowSimilarityModal(true);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Si no hay similares, ejecutar creación normal
+      await executeCreation();
+    } catch (e) {
+      Alert.alert('Error', e.message);
+      setIsSubmitting(false);
+    }
+  };
+
+  const executeCreation = async (mergeOptions = {}) => {
+    try {
+      setIsSubmitting(true);
+      const data = {
+        title,
+        content: description,
+        category: type === 'automatic' ? 'configuracion' : 'general',
+        extra_fields: type === 'automatic' ? { variable, new_value: newValue } : {}
+      };
+      
+      const newProposal = await gobernanzaApi.crearPropuesta(data);
+      
+      if (mergeOptions.targetId) {
+        await gobernanzaApi.solicitarFusion(newProposal.id, mergeOptions.targetId, mergeOptions.asCitation);
+      }
+      
+      Alert.alert(
+        'Propuesta Sometida', 
+        'Tu propuesta ha sido guardada exitosamente.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -88,28 +157,40 @@ export default function CreateProposalScreen({ navigation }) {
 
           {type === 'automatic' && (
             <View style={styles.automaticFieldsRow}>
-              <View style={styles.flex1}>
+              <View style={[styles.flex1, { flex: 1.2 }]}>
                 <Text style={styles.inputLabel}>Variable *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. Tasa de Interés"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={variable}
-                  onChangeText={setVariable}
-                />
+                <TouchableOpacity 
+                  style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                  onPress={() => setModalVisible(true)}
+                  disabled={loadingConfig}
+                >
+                  {loadingConfig ? <ActivityIndicator size="small" color={COLORS.accent} /> : (
+                    <Text style={{ color: variable ? COLORS.text : COLORS.textMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+                      {variable ? configVariables.find(v => v.key === variable)?.description || variable : "Seleccionar..."}
+                    </Text>
+                  )}
+                  <ChevronDown color={COLORS.textMuted} size={16} />
+                </TouchableOpacity>
               </View>
-              <View style={{ width: 15 }} />
-              <View style={styles.flex1}>
+              <View style={{ width: 10 }} />
+              <View style={[styles.flex1, { flex: 0.8 }]}>
                 <Text style={styles.inputLabel}>Nuevo Valor *</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Ej. 3%"
+                  placeholder={variable === 'SISTEMA_GOBERNANZA' ? 'DOS_FASES...' : 'Ej. 3'}
                   placeholderTextColor={COLORS.textMuted}
                   value={newValue}
                   onChangeText={setNewValue}
+                  keyboardType={variable === 'SISTEMA_GOBERNANZA' ? 'default' : 'numeric'}
                 />
               </View>
             </View>
+          )}
+
+          {type === 'automatic' && variable && (
+            <Text style={{ color: COLORS.textMuted, fontSize: 13, marginBottom: 20, marginTop: -10 }}>
+              Valor actual del sistema: <Text style={{ color: COLORS.text, fontWeight: 'bold' }}>{configVariables.find(v => v.key === variable)?.value}</Text>
+            </Text>
           )}
 
           <Text style={styles.inputLabel}>Exposición de Motivos *</Text>
@@ -124,13 +205,112 @@ export default function CreateProposalScreen({ navigation }) {
             onChangeText={setDescription}
           />
 
-          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
+          <TouchableOpacity style={styles.submitBtn} onPress={handleInitialSubmit} disabled={isSubmitting}>
             <Send color={COLORS.background} size={20} />
-            <Text style={styles.submitBtnText}>Someter a Votación</Text>
+            <Text style={styles.submitBtnText}>{isSubmitting ? "Procesando..." : "Someter Propuesta"}</Text>
           </TouchableOpacity>
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Selector Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Seleccionar Variable</Text>
+            <FlatList
+              data={configVariables}
+              keyExtractor={(item) => item.key}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalOption, variable === item.key && styles.modalOptionSelected]}
+                  onPress={() => {
+                    setVariable(item.key);
+                    setModalVisible(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modalOptionText, variable === item.key && styles.modalOptionTextSelected]}>
+                      {item.description || item.key}
+                    </Text>
+                    <Text style={{ color: COLORS.textMuted, fontSize: 11, marginTop: 2 }}>
+                      Actual: {item.value}
+                    </Text>
+                  </View>
+                  {variable === item.key && <Check color={COLORS.accent} size={18} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Similares Modal */}
+      <Modal
+        visible={showSimilarityModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+              <AlertCircle color={COLORS.accent} size={24} />
+              <Text style={[styles.modalTitle, { marginBottom: 0, marginLeft: 10 }]}>Propuestas Similares</Text>
+            </View>
+            <Text style={{ color: COLORS.textMuted, marginBottom: 15 }}>
+              Encontramos otras propuestas que podrían tratar de lo mismo. Para no dividir los votos, considera unirte a una existente.
+            </Text>
+            
+            <FlatList
+              data={similarProposals}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <View style={{ backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 8, marginBottom: 10 }}>
+                  <Text style={{ color: COLORS.text, fontWeight: 'bold' }}>{item.title}</Text>
+                  <Text style={{ color: COLORS.textMuted, fontSize: 12, marginTop: 5 }} numberOfLines={2}>{item.content}</Text>
+                  
+                  <View style={{ flexDirection: 'row', marginTop: 15, justifyContent: 'space-between' }}>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, { backgroundColor: COLORS.accent, flex: 1, marginRight: 5 }]}
+                      onPress={() => {
+                        setShowSimilarityModal(false);
+                        executeCreation({ targetId: item.id, asCitation: false });
+                      }}
+                    >
+                      <Text style={{ color: COLORS.background, fontWeight: 'bold', fontSize: 12, textAlign: 'center' }}>Fusionar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, { backgroundColor: 'transparent', borderColor: COLORS.accent, borderWidth: 1, flex: 1, marginLeft: 5 }]}
+                      onPress={() => {
+                        setShowSimilarityModal(false);
+                        executeCreation({ targetId: item.id, asCitation: true });
+                      }}
+                    >
+                      <Text style={{ color: COLORS.accent, fontWeight: 'bold', fontSize: 12, textAlign: 'center' }}>Solo Citar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            />
+            
+            <TouchableOpacity 
+              style={{ padding: 15, alignItems: 'center', marginTop: 10 }}
+              onPress={() => {
+                setShowSimilarityModal(false);
+                executeCreation({});
+              }}
+            >
+              <Text style={{ color: COLORS.textMuted, textDecorationLine: 'underline' }}>Ignorar y crear como nueva</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -254,5 +434,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '50%',
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalOptionSelected: {
+    backgroundColor: 'rgba(245, 166, 35, 0.05)',
+  },
+  modalOptionText: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  modalOptionTextSelected: {
+    color: COLORS.accent,
+    fontWeight: 'bold',
+  },
+  actionBtn: {
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
   }
 });

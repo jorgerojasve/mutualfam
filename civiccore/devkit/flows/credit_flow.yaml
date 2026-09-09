@@ -1,0 +1,22 @@
+appId: com.mutualsol.app
+---
+- launchApp
+- assertVisible: "Iniciar Sesión"
+# Asumimos que el usuario ya existe
+- tapOn: "tu@correo.com"
+- inputText: "maestro@test.com"
+- tapOn: "••••••••"
+- inputText: "test1234"
+- tapOn: "Iniciar Sesión"
+- assertVisible: "¡Hola"
+- tapOn: "Solicitar\nCrédito"
+- assertVisible: "Monto Solicitado"
+- tapOn: "Monto Solicitado"
+- inputText: "50"
+- tapOn: "Motivo del préstamo"
+- inputText: "Prueba automatizada DevKit"
+- tapOn: "Plazo (meses)"
+- inputText: "3"
+- tapOn: "Enviar Solicitud"
+- assertVisible: "Solicitud enviada exitosamente"
+- tapOn: "Volver al Inicio"

@@ -5,7 +5,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Fingerprint, LogIn, UserPlus } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
-import { getToken } from '../services/api';
+import { getBiometricToken } from '../services/api';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -21,7 +21,7 @@ export default function LoginScreen({ navigation }) {
       try {
         const compatible = await LocalAuthentication.hasHardwareAsync();
         const enrolled = await LocalAuthentication.isEnrolledAsync();
-        const token = await getToken();
+        const token = await getBiometricToken();
         if (mounted) {
           setIsBiometricSupported(compatible && enrolled);
           setHasSavedSession(!!token);

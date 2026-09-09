@@ -13,18 +13,52 @@ async def lifespan(app):
     # We can add mock seed data for MutualSol here if needed
     yield
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import time
+from collections import defaultdict
+
+# Rate Limiting configuration
+RATE_LIMIT_DB = defaultdict(list)
+RATE_LIMIT = 20 # requests per window
+RATE_WINDOW = 60 # seconds
+
 app = create_app(
     include_membership=True,
-    include_governance=False,  # We don't need Governance for MutualSol base
-    include_payments=True,     # Payments now includes Credits and Transactions
+    include_governance=True,
+    include_payments=True,
     include_authorship=False
 )
 
+@app.middleware("http")
+async def security_and_rate_limit_middleware(request: Request, call_next):
+    # 1. Rate Limiting (DDoS & Brute Force protection)
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    RATE_LIMIT_DB[ip] = [t for t in RATE_LIMIT_DB[ip] if now - t < RATE_WINDOW]
+    if len(RATE_LIMIT_DB[ip]) >= RATE_LIMIT:
+        return JSONResponse(
+            status_code=429, 
+            content={"detail": "Too Many Requests - Rate limit exceeded"}
+        )
+    RATE_LIMIT_DB[ip].append(now)
+
+    # 2. Process request
+    response = await call_next(request)
+
+    # 3. Security Headers (Helmet-like)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    
+    return response
+
 app.router.lifespan_context = lifespan
 
-# Mount custom MutualSol routers
 app.include_router(mercado.router, prefix="/api/v1/mercado", tags=["Mercado Solidario (MutualSol)"])
 app.include_router(tasas.router, prefix="/api/v1/tasas", tags=["Tasas de Cambio (MutualSol)"])
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)
