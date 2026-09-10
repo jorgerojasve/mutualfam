@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform, ActivityIndicator, Alert, Modal, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare } from 'lucide-react-native';
+import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { gobernanzaApi, configApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -18,21 +18,48 @@ export default function GovernanceScreen({ navigation }) {
   const [userVotes, setUserVotes] = useState({}); 
   const [loading, setLoading] = useState(true);
   const [sistemaGobernanza, setSistemaGobernanza] = useState('DOS_FASES');
+  const [comentariosReferendo, setComentariosReferendo] = useState('false');
+  const [puntosHabilitadosReferendo, setPuntosHabilitadosReferendo] = useState('true');
+  const [puntosHabilitadosDebate, setPuntosHabilitadosDebate] = useState('false');
+  const [maxPuntosPorVoto, setMaxPuntosPorVoto] = useState(5);
   const [activeTab, setActiveTab] = useState('debate'); // 'debate' o 'referendos'
   const { user } = useAuthStore();
+  
+  // Points state
+  const [userPoints, setUserPoints] = useState(null);
+  const [selectedPoints, setSelectedPoints] = useState({});
+  
+  // Comments state
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [selectedProposalForComments, setSelectedProposalForComments] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [loadingComments, setLoadingComments] = useState(false);
   
   const isFocused = useIsFocused();
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [data, config] = await Promise.all([
+      const [data, config, pointsData] = await Promise.all([
         gobernanzaApi.listarPropuestas(),
-        configApi.getVariables()
+        configApi.getVariables(),
+        gobernanzaApi.misPuntos().catch(() => null)
       ]);
       setProposals(data);
+      if (pointsData) setUserPoints(pointsData);
+      
       const sysGov = config.find(c => c.key === 'SISTEMA_GOBERNANZA');
       if (sysGov) setSistemaGobernanza(sysGov.value);
+      const comRef = config.find(c => c.key === 'COMENTARIOS_EN_REFERENDO');
+      if (comRef) setComentariosReferendo(comRef.value);
+      const ptRef = config.find(c => c.key === 'PUNTOS_HABILITADOS_REFERENDO');
+      if (ptRef) setPuntosHabilitadosReferendo(ptRef.value);
+      const ptDeb = config.find(c => c.key === 'PUNTOS_HABILITADOS_DEBATE');
+      if (ptDeb) setPuntosHabilitadosDebate(ptDeb.value);
+      const maxPt = config.find(c => c.key === 'MAX_PUNTOS_POR_VOTO');
+      if (maxPt) setMaxPuntosPorVoto(parseInt(maxPt.value, 10));
+      
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'No se pudieron cargar las asambleas');
@@ -74,8 +101,10 @@ export default function GovernanceScreen({ navigation }) {
     if (voteType === 'no') voteValue = -1.0;
     if (voteType === 'abstain') voteValue = 0.0;
 
+    const points = selectedPoints[proposalId] || 0;
+
     try {
-      await gobernanzaApi.votar(proposalId, voteValue);
+      await gobernanzaApi.votar(proposalId, voteValue, points);
       // Optimistic update
       setProposals(current => 
         current.map(prop => {
@@ -91,6 +120,9 @@ export default function GovernanceScreen({ navigation }) {
         })
       );
       setUserVotes(prev => ({ ...prev, [proposalId]: voteValue }));
+      if (points > 0 && userPoints) {
+          setUserPoints(prev => ({ ...prev, balance: prev.balance - points }));
+      }
       Alert.alert('Voto Registrado', 'Tu decisión ha sido guardada exitosamente en la asamblea.');
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -98,6 +130,20 @@ export default function GovernanceScreen({ navigation }) {
          setUserVotes(prev => ({ ...prev, [proposalId]: 'already' }));
       }
     }
+  };
+
+  const updateSelectedPoints = (id, delta) => {
+      setSelectedPoints(prev => {
+          const current = prev[id] || 0;
+          const next = current + delta;
+          if (next < 0) return prev;
+          if (next > maxPuntosPorVoto) return prev;
+          if (userPoints && next > userPoints.balance) {
+              Alert.alert('Saldo Insuficiente', 'No tienes suficientes Puntos de Voto disponibles.');
+              return prev;
+          }
+          return { ...prev, [id]: next };
+      });
   };
 
   const renderProposal = (prop) => {
@@ -123,6 +169,13 @@ export default function GovernanceScreen({ navigation }) {
     }
 
     const isAuthor = user?.id === prop.author_id;
+    const canComment = prop.status === 'debate' || comentariosReferendo === 'true';
+    const arePointsEnabled = (prop.status === 'debate' && puntosHabilitadosDebate === 'true') || 
+                             (prop.status === 'voting' && puntosHabilitadosReferendo === 'true');
+    const pointsUsed = selectedPoints[prop.id] || 0;
+    
+    // Simplistic Welfare Optimization logic
+    const isDirectlyAffected = prop.extra_fields?.affected_cohort === "author_cohort" && isAuthor;
 
     return (
       <TouchableOpacity 
@@ -164,6 +217,27 @@ export default function GovernanceScreen({ navigation }) {
             
             {userVotes[prop.id] === null || userVotes[prop.id] === undefined ? (
               <View style={styles.votingArea}>
+                {arePointsEnabled && (
+                  <View style={{ marginBottom: 15, padding: 10, backgroundColor: 'rgba(245, 166, 35, 0.05)', borderRadius: 8 }}>
+                    <Text style={{ color: COLORS.text, fontSize: 13, fontWeight: 'bold', marginBottom: 5 }}>Asignar Puntos de Voto (Opcional)</Text>
+                    <Text style={{ color: COLORS.textMuted, fontSize: 11, marginBottom: 10 }}>Usa tus puntos para darle más peso a tu voto.</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 15 }}>
+                       <TouchableOpacity onPress={() => updateSelectedPoints(prop.id, -1)} style={{ padding: 10, backgroundColor: COLORS.card, borderRadius: 20 }}>
+                          <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: 'bold' }}>-</Text>
+                       </TouchableOpacity>
+                       <Text style={{ color: COLORS.accent, fontSize: 20, fontWeight: 'bold', width: 30, textAlign: 'center' }}>{pointsUsed}</Text>
+                       <TouchableOpacity onPress={() => updateSelectedPoints(prop.id, 1)} style={{ padding: 10, backgroundColor: COLORS.card, borderRadius: 20 }}>
+                          <Text style={{ color: COLORS.text, fontSize: 20, fontWeight: 'bold' }}>+</Text>
+                       </TouchableOpacity>
+                    </View>
+                    {isDirectlyAffected && (
+                        <Text style={{ color: COLORS.success, fontSize: 12, marginTop: 10, textAlign: 'center' }}>
+                            ¡Eres una parte directamente afectada! Tus votos tendrán x1.5 de impacto.
+                        </Text>
+                    )}
+                  </View>
+                )}
+                
                 {prop.status === 'debate' ? (
                   <>
                     <Text style={styles.votingTitle}>Fase de Ideación</Text>
@@ -232,6 +306,17 @@ export default function GovernanceScreen({ navigation }) {
                 <Text style={[styles.voteBtnTextYes, { marginLeft: 10 }]}>Finalizar Votación Manualmente</Text>
               </TouchableOpacity>
             )}
+
+            {/* Comments Action */}
+            {canComment && (
+              <TouchableOpacity 
+                style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.textMuted }]}
+                onPress={() => openComments(prop)}
+              >
+                <MessageSquare color={COLORS.textMuted} size={20} />
+                <Text style={[styles.voteBtnTextDelegate, { marginLeft: 10 }]}>Ver Foro de Discusión</Text>
+              </TouchableOpacity>
+            )}
             
           </View>
         )}
@@ -239,13 +324,45 @@ export default function GovernanceScreen({ navigation }) {
     );
   };
 
+  const openComments = async (prop) => {
+    setSelectedProposalForComments(prop);
+    setShowCommentsModal(true);
+    setLoadingComments(true);
+    try {
+      const data = await gobernanzaApi.listarComentarios(prop.id);
+      setComments(data);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudieron cargar los comentarios');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const submitComment = async () => {
+    if (!newComment.trim()) return;
+    try {
+      const added = await gobernanzaApi.crearComentario(selectedProposalForComments.id, newComment);
+      setComments(current => [...current, added]);
+      setNewComment('');
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.header}>
-          <Users color={COLORS.accent} size={28} />
-          <Text style={styles.headerTitle}>Asamblea Comunitaria</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <Users color={COLORS.accent} size={28} />
+            <Text style={styles.headerTitle}>Asamblea Comunitaria</Text>
+          </View>
+          {userPoints && (
+            <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 6, borderRadius: 12}}>
+              <Text style={{color: COLORS.accent, fontWeight: 'bold'}}>⭐ {userPoints.balance} pts</Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.subtitle}>
@@ -295,6 +412,59 @@ export default function GovernanceScreen({ navigation }) {
       >
         <Plus color={COLORS.background} size={24} />
       </TouchableOpacity>
+
+      {/* Comments Modal */}
+      <Modal visible={showCommentsModal} animationType="slide" transparent={true} onRequestClose={() => setShowCommentsModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Foro de Discusión</Text>
+              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                <XCircle color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+            
+            {loadingComments ? (
+              <ActivityIndicator size="small" color={COLORS.accent} style={{marginVertical: 20}} />
+            ) : (
+              <FlatList
+                data={comments}
+                keyExtractor={(item) => item.id.toString()}
+                contentContainerStyle={{ padding: 20 }}
+                ListEmptyComponent={<Text style={{color: COLORS.textMuted, textAlign: 'center'}}>No hay comentarios aún. ¡Sé el primero!</Text>}
+                renderItem={({ item }) => (
+                  <View style={styles.commentCard}>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5}}>
+                      <Text style={{color: COLORS.accent, fontWeight: 'bold', fontSize: 12}}>
+                        Miembro #{item.author_id}
+                      </Text>
+                      <Text style={{color: COLORS.textMuted, fontSize: 10}}>
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <Text style={{color: COLORS.text, fontSize: 14}}>{item.content}</Text>
+                  </View>
+                )}
+              />
+            )}
+
+            <View style={styles.commentInputContainer}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Escribe un comentario..."
+                placeholderTextColor={COLORS.textMuted}
+                value={newComment}
+                onChangeText={setNewComment}
+                multiline
+              />
+              <TouchableOpacity style={styles.commentSendBtn} onPress={submitComment}>
+                <Send color={COLORS.background} size={18} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -311,6 +481,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 15,
   },
   headerTitle: {
@@ -526,5 +697,65 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.background,
+    height: '80%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  commentCard: {
+    backgroundColor: COLORS.card,
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    padding: 15,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    alignItems: 'flex-end',
+    backgroundColor: COLORS.card,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    color: COLORS.text,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  commentSendBtn: {
+    backgroundColor: COLORS.accent,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    marginBottom: 2,
   }
 });

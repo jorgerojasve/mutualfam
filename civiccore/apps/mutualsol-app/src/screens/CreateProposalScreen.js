@@ -12,6 +12,19 @@ export default function CreateProposalScreen({ navigation }) {
   const [variable, setVariable] = useState('');
   const [newValue, setNewValue] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [valueModalVisible, setValueModalVisible] = useState(false);
+  
+  const PREDEFINED_VALUES = {
+    'SISTEMA_GOBERNANZA': [
+      { id: 'DOS_FASES', label: 'Dos Fases (Debate + Referendo)' },
+      { id: 'UNA_FASE_TIEMPO', label: 'Una Fase (Con Límite de Tiempo)' },
+      { id: 'UNA_FASE_MANUAL', label: 'Una Fase (Cierre Manual)' }
+    ],
+    'COMENTARIOS_EN_REFERENDO': [
+      { id: 'true', label: 'Sí, permitir comentarios' },
+      { id: 'false', label: 'No, deshabilitar comentarios' }
+    ]
+  };
   
   const [configVariables, setConfigVariables] = useState([]);
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -175,14 +188,26 @@ export default function CreateProposalScreen({ navigation }) {
               <View style={{ width: 10 }} />
               <View style={[styles.flex1, { flex: 0.8 }]}>
                 <Text style={styles.inputLabel}>Nuevo Valor *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={variable === 'SISTEMA_GOBERNANZA' ? 'DOS_FASES...' : 'Ej. 3'}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={newValue}
-                  onChangeText={setNewValue}
-                  keyboardType={variable === 'SISTEMA_GOBERNANZA' ? 'default' : 'numeric'}
-                />
+                {PREDEFINED_VALUES[variable] ? (
+                  <TouchableOpacity 
+                    style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                    onPress={() => setValueModalVisible(true)}
+                  >
+                    <Text style={{ color: newValue ? COLORS.text : COLORS.textMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+                      {newValue ? PREDEFINED_VALUES[variable].find(v => v.id === newValue)?.label || newValue : "Seleccionar..."}
+                    </Text>
+                    <ChevronDown color={COLORS.textMuted} size={16} />
+                  </TouchableOpacity>
+                ) : (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej. 3"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newValue}
+                    onChangeText={setNewValue}
+                    keyboardType="numeric"
+                  />
+                )}
               </View>
             </View>
           )}
@@ -243,6 +268,38 @@ export default function CreateProposalScreen({ navigation }) {
                     </Text>
                   </View>
                   {variable === item.key && <Check color={COLORS.accent} size={18} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Value Selector Modal */}
+      <Modal
+        visible={valueModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setValueModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setValueModalVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Seleccionar Valor</Text>
+            <FlatList
+              data={PREDEFINED_VALUES[variable] || []}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalOption, newValue === item.id && styles.modalOptionSelected]}
+                  onPress={() => {
+                    setNewValue(item.id);
+                    setValueModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.modalOptionText, newValue === item.id && styles.modalOptionTextSelected]}>
+                    {item.label}
+                  </Text>
+                  {newValue === item.id && <Check color={COLORS.accent} size={18} />}
                 </TouchableOpacity>
               )}
             />

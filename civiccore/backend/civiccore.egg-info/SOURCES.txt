@@ -10,10 +10,15 @@ civiccore/core/auth.py
 civiccore/core/config.py
 civiccore/core/database.py
 civiccore/core/permissions.py
+civiccore/core/router.py
 civiccore/modules/authorship/models.py
 civiccore/modules/authorship/router.py
 civiccore/modules/authorship/schemas.py
 civiccore/modules/authorship/service.py
+civiccore/modules/config/models.py
+civiccore/modules/config/router.py
+civiccore/modules/config/schemas.py
+civiccore/modules/config/service.py
 civiccore/modules/governance/models.py
 civiccore/modules/governance/router.py
 civiccore/modules/governance/schemas.py

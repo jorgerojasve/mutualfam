@@ -35,18 +35,44 @@ class ProposalResponse(ProposalBase):
     class Config:
         from_attributes = True
 
-class VoteBase(BaseModel):
+class MemberVotingPointsResponse(BaseModel):
+    member_id: int
+    balance: int
+    last_renewed_at: datetime
+    total_ever_allocated: int
+
+    class Config:
+        from_attributes = True
+
+class VoteCreate(BaseModel):
     vote_value: float
     preference_order: Optional[int] = None
+    points_used: int = 0
 
-class VoteCreate(VoteBase):
-    pass
-
-class VoteResponse(VoteBase):
+class VoteResponse(BaseModel):
     id: int
     proposal_id: int
     member_id: int
+    vote_value: float
+    preference_order: Optional[int]
+    points_used: int
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CommentBase(BaseModel):
+    content: str
+    is_anonymous: Optional[bool] = False
+
+class CommentCreate(CommentBase):
+    pass
+
+class CommentResponse(CommentBase):
+    id: int
+    proposal_id: int
+    author_id: int
+    created_at: datetime
 
     class Config:
         from_attributes = True

@@ -72,6 +72,17 @@ class Comment(Base):
     proposal = relationship("Proposal", back_populates="comments")
     author = relationship("Member", foreign_keys=[author_id])
 
+class MemberVotingPoints(Base):
+    __tablename__ = "member_voting_points"
+
+    id = Column(Integer, primary_key=True, index=True)
+    member_id = Column(Integer, ForeignKey("members.id"), unique=True, nullable=False)
+    balance = Column(Integer, default=10, nullable=False)
+    last_renewed_at = Column(DateTime, default=utcnow)
+    total_ever_allocated = Column(Integer, default=0)
+
+    member = relationship("Member", foreign_keys=[member_id])
+
 class Vote(Base):
     __tablename__ = "votes"
 
@@ -80,9 +91,12 @@ class Vote(Base):
     member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
     
     # Simple voting: 1.0 (yes), 0.0 (abstain), -1.0 (no)
-    # Quadratic / Credits: actual value invested
+    # Quadratic / Points: actual value invested
     vote_value = Column(Float, nullable=False, default=1.0)
     preference_order = Column(Integer, nullable=True)
+    
+    # Points assigned to this vote to signal intensity
+    points_used = Column(Integer, default=0, nullable=False)
     
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

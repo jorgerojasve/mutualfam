@@ -106,10 +106,10 @@ export const gobernanzaApi = {
   crearPropuesta: (data) =>
     request('/governance/proposals', { method: 'POST', body: JSON.stringify(data) }),
 
-  votar: (propuestaId, vote_value) =>
+  votar: (propuestaId, vote_value, points_used = 0) =>
     request(`/governance/proposals/${propuestaId}/vote`, {
       method: 'POST',
-      body: JSON.stringify({ vote_value }),
+      body: JSON.stringify({ vote_value, points_used }),
     }),
     
   miVoto: (propuestaId) => request(`/governance/proposals/${propuestaId}/my-vote`),
@@ -125,7 +125,16 @@ export const gobernanzaApi = {
     
   iniciarReferendo: (id) => request(`/governance/proposals/${id}/start-referendum`, { method: 'POST' }),
   
-  calcularResultados: (id) => request(`/governance/proposals/${id}/results`, { method: 'POST' })
+  calcularResultados: (id) => request(`/governance/proposals/${id}/results`, { method: 'POST' }),
+
+  listarComentarios: (id) => request(`/governance/proposals/${id}/comments`),
+  
+  crearComentario: (id, content) => request(`/governance/proposals/${id}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content, is_anonymous: false })
+  }),
+
+  misPuntos: () => request('/governance/my-points')
 };
 
 // ─────────────────────────────────────────────

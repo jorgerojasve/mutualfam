@@ -3,18 +3,23 @@ Governance Module Router
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from datetime import timedelta
+from sqlalchemy import or_
 
 from ...core.database import get_db
 from ..membership.router import get_current_user
 from ..membership.models import Member
-from .models import Proposal, ProposalStatus, Vote
-from .schemas import ProposalCreate, ProposalResponse, VoteCreate, VoteResponse
-from typing import List, Optional
-from datetime import timedelta
-from sqlalchemy import or_
+from .models import Proposal, ProposalStatus, Vote, Comment, utcnow
+from .schemas import (
+    ProposalCreate, ProposalResponse, 
+    VoteCreate, VoteResponse, 
+    CommentCreate, CommentResponse,
+    MemberVotingPointsResponse
+)
 from .service import GovernanceService
-from .models import utcnow
+from .points_service import PointsService
+from ..config.service import ConfigService
 
 router = APIRouter()
 
@@ -70,6 +75,18 @@ def get_my_vote(
 ):
     vote = db.query(Vote).filter(Vote.proposal_id == proposal_id, Vote.member_id == current_user.id).first()
     return vote
+
+@router.get("/my-points", response_model=MemberVotingPointsResponse)
+def get_my_points(
+    db: Session = Depends(get_db), 
+    current_user: Member = Depends(get_current_user)
+):
+    period_days = int(ConfigService.get_value(db, "PERIODO_RENOVACION_PUNTOS", "30"))
+    default_points = int(ConfigService.get_value(db, "PUNTOS_POR_MIEMBRO", "10"))
+    
+    # We use renew_points_if_needed which guarantees it returns the up-to-date balance
+    record = PointsService.renew_points_if_needed(db, current_user.id, period_days, default_points)
+    return record
 
 @router.post("/proposals/{proposal_id}/vote", response_model=VoteResponse)
 def vote_on_proposal(
@@ -154,8 +171,39 @@ def start_referendum(
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposal not found")
         
+    from ..config.service import ConfigService
+    duracion = int(ConfigService.get_value(db, "DURACION_VOTACION", "7"))
+    
     proposal.status = ProposalStatus.VOTING
     proposal.voting_starts_at = utcnow()
-    proposal.voting_ends_at = utcnow() + timedelta(days=7) # Por defecto 1 semana
+    proposal.voting_ends_at = utcnow() + timedelta(days=duracion)
     db.commit()
     return {"status": "voting"}
+
+@router.get("/proposals/{proposal_id}/comments", response_model=List[CommentResponse])
+def get_comments(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    return GovernanceService.get_comments(db, proposal_id)
+
+@router.post("/proposals/{proposal_id}/comments", response_model=CommentResponse)
+def add_comment(
+    proposal_id: int,
+    request: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    proposal = GovernanceService.get_proposal(db, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    from ..config.service import ConfigService
+    # Revisar si se permiten comentarios en fase de referendo
+    if proposal.status == ProposalStatus.VOTING:
+        permitir = ConfigService.get_value(db, "COMENTARIOS_EN_REFERENDO", "false")
+        if permitir.lower() != "true":
+            raise HTTPException(status_code=400, detail="Los comentarios están deshabilitados durante la fase de referendo.")
+            
+    return GovernanceService.add_comment(db, proposal_id, current_user.id, request)
