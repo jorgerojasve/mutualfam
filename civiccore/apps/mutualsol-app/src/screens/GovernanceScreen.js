@@ -285,8 +285,13 @@ export default function GovernanceScreen({ navigation }) {
               <TouchableOpacity 
                 style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.accent }]}
                 onPress={async () => {
-                  await gobernanzaApi.iniciarReferendo(prop.id);
-                  loadData();
+                  try {
+                    await gobernanzaApi.iniciarReferendo(prop.id);
+                    Alert.alert('Éxito', 'Referendo general iniciado correctamente.');
+                    loadData();
+                  } catch (error) {
+                    Alert.alert('Error', error.message);
+                  }
                 }}
               >
                 <Play color={COLORS.accent} size={20} />
@@ -298,8 +303,13 @@ export default function GovernanceScreen({ navigation }) {
               <TouchableOpacity 
                 style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.success, backgroundColor: 'rgba(74, 222, 128, 0.1)' }]}
                 onPress={async () => {
-                  await gobernanzaApi.calcularResultados(prop.id);
-                  loadData();
+                  try {
+                    await gobernanzaApi.calcularResultados(prop.id);
+                    Alert.alert('Éxito', 'Resultados calculados exitosamente.');
+                    loadData();
+                  } catch (error) {
+                    Alert.alert('Error', error.message);
+                  }
                 }}
               >
                 <CheckSquare color={COLORS.success} size={20} />
