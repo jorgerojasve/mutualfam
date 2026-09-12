@@ -34,10 +34,10 @@ class Proposal(Base):
     
     # Generic category config
     category = Column(String(50), default="general")
-    status = Column(Enum(ProposalStatus), default=ProposalStatus.DRAFT)
+    status = Column(Enum(ProposalStatus, values_callable=lambda x: [e.value for e in x]), default=ProposalStatus.DRAFT)
     
     is_anonymous = Column(Boolean, default=False)
-    voting_mechanism = Column(Enum(VotingMechanism), default=VotingMechanism.SIMPLE)
+    voting_mechanism = Column(Enum(VotingMechanism, values_callable=lambda x: [e.value for e in x]), default=VotingMechanism.SIMPLE)
     
     # Domain specific extra data
     extra_fields = Column(JSON, default=dict)
