@@ -13,8 +13,18 @@ import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
-import { useAuthStore } from './src/store/authStore';
+import { initCivicCore, useAuthStore } from '@civiccore/sdk';
+import * as SecureStore from 'expo-secure-store';
 import { COLORS } from './src/theme/colors';
+
+// Inicializar el SDK de CivicCore con el adaptador de almacenamiento móvil
+initCivicCore({
+  storage: {
+    getItem: (key) => SecureStore.getItemAsync(key),
+    setItem: (key, val) => SecureStore.setItemAsync(key, val),
+    removeItem: (key) => SecureStore.deleteItemAsync(key)
+  }
+});
 
 function AppLoader() {
   const { loadUser, isLoading } = useAuthStore();

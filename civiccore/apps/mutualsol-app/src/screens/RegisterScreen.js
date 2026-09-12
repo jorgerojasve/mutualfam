@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, UserPlus } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore } from '@civiccore/sdk';
 
 export default function RegisterScreen({ navigation }) {
   const [nombre, setNombre] = useState('');

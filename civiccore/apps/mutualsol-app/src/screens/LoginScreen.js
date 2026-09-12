@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Fingerprint, LogIn, UserPlus } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { useAuthStore } from '../store/authStore';
-import { getBiometricToken } from '../services/api';
+import { useAuthStore } from '@civiccore/sdk';
+import { getConfig } from '@civiccore/sdk';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -21,7 +21,8 @@ export default function LoginScreen({ navigation }) {
       try {
         const compatible = await LocalAuthentication.hasHardwareAsync();
         const enrolled = await LocalAuthentication.isEnrolledAsync();
-        const token = await getBiometricToken();
+        const { storage } = getConfig();
+        const token = await storage.getItem('biometric_jwt_token');
         if (mounted) {
           setIsBiometricSupported(compatible && enrolled);
           setHasSavedSession(!!token);

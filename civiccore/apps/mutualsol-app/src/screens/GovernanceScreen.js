@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { gobernanzaApi, configApi } from '../services/api';
-import { useAuthStore } from '../store/authStore';
+import { gobernanzaApi, configApi } from '@civiccore/sdk';
+import { useAuthStore } from '@civiccore/sdk';
 import { useIsFocused } from '@react-navigation/native';
 
 // Habilitar animaciones en Android

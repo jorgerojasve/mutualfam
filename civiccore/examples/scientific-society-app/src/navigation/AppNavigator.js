@@ -12,7 +12,7 @@ import CreateProposalScreen from '../screens/CreateProposalScreen';
 import PublicationsScreen from '../screens/PublicationsScreen';
 import { COLORS } from '../theme/colors';
 import { Home, Users, BookOpen, Banknote, Shield } from 'lucide-react-native';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore } from '@civiccore/sdk';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogOut, Bell } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore } from '@civiccore/sdk';
 
 export default function HomeScreen({ navigation }) {
   const logout = useAuthStore(state => state.logout);

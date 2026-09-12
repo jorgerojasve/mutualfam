@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Send, Settings, Users, Info, ChevronDown, Check, AlertCircle } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { gobernanzaApi, configApi } from '../services/api';
+import { gobernanzaApi, configApi } from '@civiccore/sdk';
 
 export default function CreateProposalScreen({ navigation }) {
   const [type, setType] = useState('automatic'); // 'automatic' or 'human'

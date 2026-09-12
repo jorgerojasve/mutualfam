@@ -13,7 +13,7 @@ import MarketplaceScreen from '../screens/MarketplaceScreen';
 import CreateOfferScreen from '../screens/CreateOfferScreen';
 import { COLORS } from '../theme/colors';
 import { Home, Shield, Users, Store } from 'lucide-react-native';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore } from '@civiccore/sdk';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
