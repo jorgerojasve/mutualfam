@@ -173,6 +173,15 @@ def start_referendum(
         
     from ..config.service import ConfigService
     duracion = int(ConfigService.get_value(db, "DURACION_VOTACION", "7"))
+    max_active = int(ConfigService.get_value(db, "MAX_ACTIVE_REFERENDUMS", "2"))
+    
+    # Check current active referendums
+    active_count = db.query(Proposal).filter(Proposal.status == ProposalStatus.VOTING).count()
+    if active_count >= max_active:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"No se puede iniciar el referendo. El límite de referendos activos ({max_active}) ha sido alcanzado."
+        )
     
     proposal.status = ProposalStatus.VOTING
     proposal.voting_starts_at = utcnow()
