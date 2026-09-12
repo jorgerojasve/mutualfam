@@ -66,6 +66,11 @@ def create_app(
         from .modules.config.router import router as config_router
         app.include_router(config_router, prefix="/api/v1/config", tags=["System Config"])
         
+    import os
+    if os.getenv("CIVICCORE_ENV") == "sandbox":
+        from .testing.sandbox_router import router as sandbox_router
+        app.include_router(sandbox_router, prefix="/api/v1/sandbox", tags=["Sandbox"])
+        
     @app.get("/health", tags=["Health"])
     def health_check():
         return {"status": "ok", "framework": "CivicCore"}

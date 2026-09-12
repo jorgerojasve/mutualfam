@@ -17,13 +17,20 @@ class GovernanceService:
         sistema_gobernanza = ConfigService.get_value(db, "SISTEMA_GOBERNANZA", "DOS_FASES")
         initial_status = ProposalStatus.DEBATE if sistema_gobernanza == "DOS_FASES" else ProposalStatus.VOTING
         
+        from .models import VotingMechanism
+        
+        # Constitutional Lock: Configuration proposals must be SIMPLE
+        assigned_mechanism = proposal_in.voting_mechanism
+        if proposal_in.category == "configuracion":
+            assigned_mechanism = VotingMechanism.SIMPLE
+            
         proposal = Proposal(
             author_id=author_id,
             title=proposal_in.title,
             content=proposal_in.content,
             category=proposal_in.category,
             is_anonymous=proposal_in.is_anonymous,
-            voting_mechanism=proposal_in.voting_mechanism,
+            voting_mechanism=assigned_mechanism,
             extra_fields=proposal_in.extra_fields,
             status=initial_status
         )
@@ -66,7 +73,19 @@ class GovernanceService:
                     p.votes_abstain += 1.0 # Abstain always 1? Yes.
                     
             p.votes_delegated = 0.0
-            p.quorum_needed = 100
+            
+            # Dynamic quorum calculation
+            total_members = db.query(Member).count()
+            total_members = total_members if total_members > 0 else 1
+            quorum_percentage = float(ConfigService.get_value(db, "QUORUM_ASAMBLEA", "20"))
+            
+            # If the proposal is a constitutional change, enforce 50% minimum quorum
+            if p.category == "configuracion":
+                quorum_percentage = max(quorum_percentage, 50.0)
+                
+            p.quorum_needed = int(math.ceil(total_members * (quorum_percentage / 100.0)))
+            if p.quorum_needed < 1:
+                p.quorum_needed = 1
         return p
 
     @staticmethod
@@ -175,6 +194,11 @@ class GovernanceService:
                 
         results = {"yes": yes_votes, "no": no_votes, "total_casted": len(votes), "passed": yes_votes > no_votes}
         
+        # We need to know the required quorum to see if the proposal is valid
+        # We can leverage _enrich_proposal to calculate it dynamically
+        enriched_p = GovernanceService._enrich_proposal(db, proposal)
+        quorum_reached = len(votes) >= enriched_p.quorum_needed
+        
         # Meta-Governance rule checking
         sistema_gobernanza = ConfigService.get_value(db, "SISTEMA_GOBERNANZA", "DOS_FASES")
         
@@ -183,13 +207,22 @@ class GovernanceService:
         
         passed = False
         
-        if sistema_gobernanza == "DOS_FASES":
+        if not quorum_reached:
+            # Automatic failure if quorum not met
+            passed = False
+        elif sistema_gobernanza == "DOS_FASES":
             # Requiere > 50% de los miembros
             if yes_votes > (total_members / 2):
                 passed = True
         else:
             # UNA_FASE_TIEMPO o UNA_FASE_MANUAL usan mayoría simple y quórum estándar
-            if results.get("passed", False):
+            # Constitutional Lock (50% + 1): For "configuracion" category we need absolute majority
+            if proposal.category == "configuracion":
+                # For simple mechanism, weight is always 1.0 (points are disabled)
+                # Yes votes must be > 50% of the casted votes
+                if yes_votes > (len(votes) / 2.0):
+                    passed = True
+            elif results.get("passed", False):
                 passed = True
 
         if passed:
@@ -205,6 +238,7 @@ class GovernanceService:
             
         db.commit()
         
+        results["passed"] = passed
         return results
 
     @staticmethod

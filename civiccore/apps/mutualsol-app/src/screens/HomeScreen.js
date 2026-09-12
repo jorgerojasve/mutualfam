@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, Bell } from 'lucide-react-native';
+import { LogOut, Bell, Users } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { useAuthStore } from '@civiccore/sdk';
+import { useAuthStore, membershipApi } from '@civiccore/sdk';
 
 export default function HomeScreen({ navigation }) {
   const logout = useAuthStore(state => state.logout);
@@ -14,6 +14,14 @@ export default function HomeScreen({ navigation }) {
   const creditoMax = user?.credito_maximo_usd ?? 0;
   const creditoPct = creditoMax > 0 ? Math.min((saldo / creditoMax) * 100, 100) : 0;
 
+  const [totalMembers, setTotalMembers] = React.useState(null);
+
+  React.useEffect(() => {
+    membershipApi.stats()
+      .then(res => setTotalMembers(res.total_members))
+      .catch(err => console.error("Error fetching stats:", err));
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
@@ -23,6 +31,12 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.logo}>🤝 MutualSol</Text>
           <View style={styles.headerActions}>
+            {totalMembers !== null && (
+              <View style={styles.statsBadge}>
+                <Users color={COLORS.accent} size={14} />
+                <Text style={styles.statsText}>{totalMembers} M</Text>
+              </View>
+            )}
             <TouchableOpacity style={styles.notificationBtn}>
               <Bell color={COLORS.text} size={20} />
             </TouchableOpacity>
@@ -138,4 +152,6 @@ const styles = StyleSheet.create({
   statusActivo: { backgroundColor: 'rgba(74, 222, 128, 0.15)' },
   statusPendiente: { backgroundColor: 'rgba(245, 166, 35, 0.15)' },
   statusText: { fontWeight: 'bold', fontSize: 12, color: COLORS.text },
+  statsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(245, 166, 35, 0.3)', marginRight: 5 },
+  statsText: { color: COLORS.accent, fontSize: 13, fontWeight: 'bold', marginLeft: 5 },
 });

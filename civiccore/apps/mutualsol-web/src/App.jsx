@@ -1,36 +1,50 @@
 import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
+import MainLayout from './components/Layout/MainLayout';
+import Login from './pages/Auth/Login';
+import Register from './pages/Auth/Register';
+import Dashboard from './pages/Dashboard/Dashboard';
+import GovernanceList from './pages/Governance/GovernanceList';
+import ProposalDetail from './pages/Governance/ProposalDetail';
+import CreateProposal from './pages/Governance/CreateProposal';
+import Transparency from './pages/Transparency/Transparency';
+import { useConfigStore } from '@civiccore/sdk';
 
 function App() {
-  const { loadUser, isLoading, isAuthenticated, user, login, logout } = useAuthStore();
+  const { loadUser } = useAuthStore();
+  const { loadConfigs } = useConfigStore();
 
   useEffect(() => {
     loadUser();
+    loadConfigs();
   }, []);
 
-  if (isLoading) {
-    return <div>Cargando SDK...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div style={{ padding: '20px', maxWidth: '400px', margin: '0 auto', marginTop: '100px' }}>
-        <h2>Iniciar Sesión</h2>
-        <button onClick={() => login('admin@mutualsol.com', 'admin123')} style={{ padding: '10px' }}>
-          Login (admin@mutualsol.com)
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Dashboard Analítico - MutualSol</h1>
-      <p>Bienvenido, {user?.nombre} {user?.apellido}</p>
-      <button onClick={logout} style={{ padding: '10px' }}>Cerrar Sesión</button>
-      <hr />
-      <p>El SDK se ha inicializado correctamente. Aquí irá el Panel de Gobernanza Web.</p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        
+        {/* Protected Routes */}
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Dashboard />} />
+          
+          {/* Governance Routes */}
+          <Route path="governance" element={<GovernanceList />} />
+          <Route path="governance/create" element={<CreateProposal />} />
+          <Route path="governance/:id" element={<ProposalDetail />} />
+          
+          {/* Transparency Route */}
+          <Route path="transparency" element={<Transparency />} />
+          
+          <Route path="credits" element={<div className="p-8">Módulo de Créditos en construcción</div>} />
+          <Route path="members" element={<div className="p-8">Directorio de Miembros en construcción</div>} />
+        </Route>
+        
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

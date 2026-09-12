@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme/colors';
 import { Shield, Eye, Users, Landmark, Banknote, History } from 'lucide-react-native';
+import { useConfigStore } from '@civiccore/sdk';
 
 const MOCK_GLOBAL_TRANSACTIONS = [
   { id: 'tx-1', type: 'aporte', amount: 10.00, user: 'Miembro #402', date: 'Hace 2h', description: 'Aporte Mensual' },
@@ -13,6 +14,8 @@ const MOCK_GLOBAL_TRANSACTIONS = [
 ];
 
 export default function TransparencyScreen() {
+  const { terminology } = useConfigStore();
+
   const renderTransaction = ({ item }) => {
     const isPositive = item.type === 'aporte' || item.type === 'pago';
     const IconComponent = item.type === 'aporte' ? Users : (item.type === 'pago' ? Banknote : Landmark);
@@ -40,7 +43,7 @@ export default function TransparencyScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Shield color={COLORS.success} size={28} />
-          <Text style={styles.headerTitle}>Auditoría Pública</Text>
+          <Text style={styles.headerTitle}>{terminology.transparency} Pública</Text>
         </View>
 
         <Text style={styles.subtitle}>

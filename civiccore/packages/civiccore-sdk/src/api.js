@@ -30,6 +30,10 @@ const request = async (endpoint, options = {}) => {
     }
     return data;
   } catch (error) {
+    // If we already parsed the JSON and threw an Error with the detail, rethrow it
+    if (error.message && error.message !== 'Unexpected end of JSON input' && !error.message.startsWith('Unexpected token')) {
+        throw error;
+    }
     if (!response.ok) {
       throw new Error(`Error del servidor (${response.status}):\n${rawText.slice(0, 200)}`);
     }
@@ -70,11 +74,20 @@ export const authApi = {
 };
 
 // ─────────────────────────────────────────────
+// Módulo: Membresía
+// ─────────────────────────────────────────────
+
+export const membershipApi = {
+  stats: () => request('/membership/stats')
+};
+
+// ─────────────────────────────────────────────
 // Módulo: Gobernanza
 // ─────────────────────────────────────────────
 
 export const gobernanzaApi = {
   listarPropuestas: () => request('/governance/proposals'),
+  obtenerPropuesta: (id) => request(`/governance/proposals/${id}`),
   crearPropuesta: (data) => request('/governance/proposals', { method: 'POST', body: JSON.stringify(data) }),
   votar: (propuestaId, vote_value, points_used = 0) =>
     request(`/governance/proposals/${propuestaId}/vote`, {

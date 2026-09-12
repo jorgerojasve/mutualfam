@@ -1,0 +1,47 @@
+Traceback (most recent call last):
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/sql/sqltypes.py", line 1714, in _object_value_for_elem
+    return self._object_lookup[elem]  # type: ignore[return-value]
+           ~~~~~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'VOTING'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/civiccore/modules/governance/router.py", line 58, in get_proposals
+    return GovernanceService.get_all_proposals(db, skip, limit)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/civiccore/modules/governance/service.py", line 99, in get_all_proposals
+    proposals = db.query(Proposal).order_by(Proposal.status.desc(), Proposal.last_activity_at.desc()).offset(skip).limit(limit).all()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 1826, in all
+    return self._allrows()
+           ^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 587, in _allrows
+    rows = self._fetchall_impl()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 1733, in _fetchall_impl
+    return self._real_result._fetchall_impl()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 2337, in _fetchall_impl
+    return list(self.iterator)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/orm/loading.py", line 220, in chunks
+    fetch = cursor._raw_all_rows()
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 580, in _raw_all_rows
+    return [make_row(row) for row in rows]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/engine/result.py", line 580, in <listcomp>
+    return [make_row(row) for row in rows]
+            ^^^^^^^^^^^^^
+  File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 22, in sqlalchemy.cyextension.resultproxy.BaseRow.__init__
+  File "lib/sqlalchemy/cyextension/resultproxy.pyx", line 79, in sqlalchemy.cyextension.resultproxy._apply_processors
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/sql/sqltypes.py", line 1834, in process
+    value = self._object_value_for_elem(value)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/caracas2025/Documentos/mutual/civiccore/backend/venv/lib/python3.11/site-packages/sqlalchemy/sql/sqltypes.py", line 1716, in _object_value_for_elem
+    raise LookupError(
+LookupError: 'VOTING' is not among the defined enum values. Enum name: proposalstatus. Possible values: draft, debate, voting, ..., merged

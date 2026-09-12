@@ -10,7 +10,22 @@ from api import mercado, tasas
 @asynccontextmanager
 async def lifespan(app):
     Base.metadata.create_all(bind=engine)
-    # We can add mock seed data for MutualSol here if needed
+    
+    # Seed Terminology config for MutualSol
+    db = SessionLocal()
+    try:
+        from civiccore.modules.config.models import SystemConfig
+        terms = {
+            "TERM_GOVERNANCE": "Asamblea",
+            "TERM_TRANSPARENCY": "Transparencia"
+        }
+        for k, v in terms.items():
+            if not db.query(SystemConfig).filter_by(key=k).first():
+                db.add(SystemConfig(key=k, value=v, description="Terminología de la UI"))
+        db.commit()
+    finally:
+        db.close()
+        
     yield
 
 from fastapi import Request

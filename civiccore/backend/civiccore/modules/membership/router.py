@@ -45,6 +45,11 @@ def register(request: MemberCreate, db: Session = Depends(get_db)):
 def get_me(current_user: Member = Depends(get_current_user)):
     return current_user
 
+@router.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(Member).count()
+    return {"total_members": total}
+
 @router.patch("/me", response_model=MemberResponse)
 def update_me(
     update_data: MemberUpdate, 

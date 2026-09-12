@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { gobernanzaApi, configApi } from '@civiccore/sdk';
-import { useAuthStore } from '@civiccore/sdk';
+import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 import { useIsFocused } from '@react-navigation/native';
 
 // Habilitar animaciones en Android
@@ -24,6 +24,7 @@ export default function GovernanceScreen({ navigation }) {
   const [maxPuntosPorVoto, setMaxPuntosPorVoto] = useState(5);
   const [activeTab, setActiveTab] = useState('debate'); // 'debate' o 'referendos'
   const { user } = useAuthStore();
+  const { terminology } = useConfigStore();
   
   // Points state
   const [userPoints, setUserPoints] = useState(null);
@@ -366,7 +367,7 @@ export default function GovernanceScreen({ navigation }) {
         <View style={styles.header}>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
             <Users color={COLORS.accent} size={28} />
-            <Text style={styles.headerTitle}>Asamblea Comunitaria</Text>
+            <Text style={styles.headerTitle}>{terminology.governance} Comunitaria</Text>
           </View>
           {userPoints && (
             <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 6, borderRadius: 12}}>

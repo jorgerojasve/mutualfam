@@ -13,7 +13,7 @@ import MarketplaceScreen from '../screens/MarketplaceScreen';
 import CreateOfferScreen from '../screens/CreateOfferScreen';
 import { COLORS } from '../theme/colors';
 import { Home, Shield, Users, Store } from 'lucide-react-native';
-import { useAuthStore } from '@civiccore/sdk';
+import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -29,6 +29,7 @@ function AuthStack() {
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
+  const { terminology } = useConfigStore();
 
   return (
     <Tab.Navigator
@@ -63,6 +64,7 @@ function MainTabs() {
         name="Asamblea" 
         component={GovernanceScreen} 
         options={{
+          tabBarLabel: terminology.governance,
           tabBarIcon: ({ color }) => <Users color={color} size={24} />,
         }}
       />
@@ -70,6 +72,7 @@ function MainTabs() {
         name="Auditoría" 
         component={TransparencyScreen} 
         options={{
+          tabBarLabel: terminology.transparency,
           tabBarIcon: ({ color }) => <Shield color={color} size={24} />,
         }}
       />

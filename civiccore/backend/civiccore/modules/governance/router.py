@@ -54,7 +54,13 @@ def get_proposals(
     db: Session = Depends(get_db),
     current_user: Member = Depends(get_current_user)
 ):
-    return GovernanceService.get_all_proposals(db, skip=skip, limit=limit)
+    try:
+        return GovernanceService.get_all_proposals(db, skip, limit)
+    except Exception as e:
+        import traceback
+        with open("/home/caracas2025/Documentos/mutual/civiccore/error.log", "w") as f:
+            f.write(traceback.format_exc())
+        raise
 
 @router.get("/proposals/{proposal_id}", response_model=ProposalResponse)
 def get_proposal(
