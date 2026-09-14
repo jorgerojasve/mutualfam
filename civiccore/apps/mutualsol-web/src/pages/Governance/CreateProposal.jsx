@@ -9,6 +9,8 @@ const CreateProposal = () => {
     title: '',
     content: '',
     category: 'general',
+    proposal_type: 'standard',
+    target_member_id: '',
     voting_mechanism: 'simple',
     is_anonymous: false
   });
@@ -23,7 +25,11 @@ const CreateProposal = () => {
     
     try {
       setIsSubmitting(true);
-      const newProp = await gobernanzaApi.crearPropuesta(formData);
+      const payload = {
+        ...formData,
+        target_member_id: formData.proposal_type === 'expulsion' ? parseInt(formData.target_member_id) : null
+      };
+      const newProp = await gobernanzaApi.crearPropuesta(payload);
       alert("Propuesta creada exitosamente.");
       navigate(`/governance/${newProp.id}`);
     } catch (error) {
@@ -76,18 +82,76 @@ const CreateProposal = () => {
 
           <div className="flex gap-6 mb-8">
             <div className="form-group flex-1">
+              <label className="form-label">Tipo de Propuesta</label>
+              <select 
+                className="form-input"
+                value={formData.proposal_type}
+                onChange={(e) => setFormData({...formData, proposal_type: e.target.value})}
+              >
+                <option value="standard">Estándar</option>
+                <option value="expulsion">Expulsión de Miembro</option>
+                <option value="division">División Organizacional</option>
+                <option value="fusion">Fusión Organizacional</option>
+              </select>
+            </div>
+
+            <div className="form-group flex-1">
               <label className="form-label">Categoría</label>
               <select 
                 className="form-input"
                 value={formData.category}
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
+                disabled={formData.proposal_type !== 'standard'}
               >
                 <option value="general">Propuesta General</option>
                 <option value="configuracion">Cambio de Configuración del Sistema</option>
                 <option value="financiamiento">Solicitud de Financiamiento</option>
+                <option value="automatica">Implementación Automática (Smart Contract)</option>
+                <option value="humana">Acción Humana (Operativa)</option>
               </select>
             </div>
+          </div>
 
+          {formData.proposal_type === 'expulsion' && (
+            <div className="form-group mb-6 p-4 border border-red-500 bg-red-500/10 rounded-lg">
+              <label className="form-label text-red-500">ID del Miembro a Expulsar (Requerido)</label>
+              <input 
+                type="number" 
+                className="form-input" 
+                placeholder="Ej. 12"
+                value={formData.target_member_id}
+                onChange={(e) => setFormData({...formData, target_member_id: e.target.value})}
+                required
+              />
+              <p className="text-sm text-red-400 mt-2">
+                ⚠️ Umbral requerido: 75% a favor. Si se aprueba, se iniciará el período de apelación de 30 días.
+              </p>
+            </div>
+          )}
+
+          {formData.proposal_type === 'division' && (
+            <div className="mb-6 p-4 border border-blue-500 bg-blue-500/10 rounded-lg">
+              <p className="text-sm text-blue-400 font-bold">
+                🔵 División Organizacional
+              </p>
+              <p className="text-sm text-blue-400 mt-1">
+                ⚠️ Umbral requerido: 75% a favor. Esta propuesta debe contener el detalle de cómo se dividirán los fondos y qué miembros pasarán a la nueva organización.
+              </p>
+            </div>
+          )}
+
+          {formData.proposal_type === 'fusion' && (
+            <div className="mb-6 p-4 border border-yellow-500 bg-yellow-500/10 rounded-lg">
+              <p className="text-sm text-yellow-400 font-bold">
+                🟡 Fusión Organizacional
+              </p>
+              <p className="text-sm text-yellow-400 mt-1">
+                ⚠️ Umbral requerido: 66% a favor en ambas organizaciones. Detalla los términos del acuerdo de fusión.
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-6 mb-8">
             <div className="form-group flex-1">
               <label className="form-label">Mecanismo de Votación</label>
               <select 

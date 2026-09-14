@@ -9,6 +9,9 @@ import GovernanceList from './pages/Governance/GovernanceList';
 import ProposalDetail from './pages/Governance/ProposalDetail';
 import CreateProposal from './pages/Governance/CreateProposal';
 import Transparency from './pages/Transparency/Transparency';
+import WithdrawalPage from './pages/Membership/WithdrawalPage';
+import OrganizationEvents from './pages/Membership/OrganizationEvents';
+import Settings from './pages/Settings/Settings';
 import { useConfigStore } from '@civiccore/sdk';
 
 function App() {
@@ -40,6 +43,11 @@ function App() {
           
           <Route path="credits" element={<div className="p-8">Módulo de Créditos en construcción</div>} />
           <Route path="members" element={<div className="p-8">Directorio de Miembros en construcción</div>} />
+          
+          {/* Membership Routes */}
+          <Route path="membership/withdrawal" element={<WithdrawalPage />} />
+          <Route path="organization/events" element={<OrganizationEvents />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />

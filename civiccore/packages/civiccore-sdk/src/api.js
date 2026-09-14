@@ -78,7 +78,12 @@ export const authApi = {
 // ─────────────────────────────────────────────
 
 export const membershipApi = {
-  stats: () => request('/membership/stats')
+  stats: () => request('/membership/stats'),
+  solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
+  cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
+  estadoBaja: () => request('/membership/withdrawal/status'),
+  estadoExpulsion: (memberId) => request(`/membership/expulsion/${memberId}`),
+  obtenerEventosOrganizacion: () => request('/membership/organization/events')
 };
 
 // ─────────────────────────────────────────────
@@ -103,6 +108,8 @@ export const gobernanzaApi = {
     }),
   iniciarReferendo: (id) => request(`/governance/proposals/${id}/start-referendum`, { method: 'POST' }),
   calcularResultados: (id) => request(`/governance/proposals/${id}/results`, { method: 'POST' }),
+  editarPropuesta: (id, data) => request(`/governance/proposals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  obtenerVersiones: (id) => request(`/governance/proposals/${id}/versions`),
   listarComentarios: (id) => request(`/governance/proposals/${id}/comments`),
   crearComentario: (id, content) => request(`/governance/proposals/${id}/comments`, {
     method: 'POST',

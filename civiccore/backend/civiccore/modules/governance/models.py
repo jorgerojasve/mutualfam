@@ -24,6 +24,12 @@ class VotingMechanism(str, enum.Enum):
     PREFERENTIAL = "preferential"
     CREDITS = "credits"
 
+class ProposalType(str, enum.Enum):
+    STANDARD = "standard"
+    EXPULSION = "expulsion"
+    DIVISION = "division"
+    FUSION = "fusion"
+
 class Proposal(Base):
     __tablename__ = "proposals"
 
@@ -35,6 +41,10 @@ class Proposal(Base):
     # Generic category config
     category = Column(String(50), default="general")
     status = Column(Enum(ProposalStatus, values_callable=lambda x: [e.value for e in x]), default=ProposalStatus.DRAFT)
+    proposal_type = Column(Enum(ProposalType, values_callable=lambda x: [e.value for e in x]), default=ProposalType.STANDARD)
+    
+    # Used for EXPULSION proposals
+    target_member_id = Column(Integer, nullable=True)
     
     is_anonymous = Column(Boolean, default=False)
     voting_mechanism = Column(Enum(VotingMechanism, values_callable=lambda x: [e.value for e in x]), default=VotingMechanism.SIMPLE)
@@ -118,3 +128,23 @@ class Delegation(Base):
 
     delegator = relationship("Member", foreign_keys=[delegator_id])
     delegatee = relationship("Member", foreign_keys=[delegatee_id])
+
+class ProposalVersion(Base):
+    __tablename__ = "proposal_versions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    
+    # Snapshot fields
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    
+    # Meta fields
+    editor_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    edit_reason = Column(String(500), nullable=True)
+    is_substantial = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+    
+    proposal = relationship("Proposal")
+    editor = relationship("Member", foreign_keys=[editor_id])

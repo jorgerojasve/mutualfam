@@ -76,7 +76,12 @@ const Transparency = () => {
                       {config.value}
                     </td>
                     <td style={{ padding: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                      {new Date(config.updated_at).toLocaleString()}
+                      {config.updated_at 
+                        ? new Date(config.updated_at).toLocaleString() 
+                        : (config.created_at 
+                            ? new Date(config.created_at).toLocaleString() 
+                            : 'Implementación inicial')
+                      }
                     </td>
                   </tr>
                 ))}

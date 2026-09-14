@@ -30,6 +30,14 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     user = MembershipService.get_by_email(db, email=email)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+        
+    forbidden_states = [MemberStatus.WITHDRAWN, MemberStatus.EXPELLED, MemberStatus.MOROSO_BAJA]
+    if user.status in forbidden_states:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"User account is in restricted state: {user.status}"
+        )
+        
     return user
 
 @router.post("/register", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
@@ -87,3 +95,49 @@ def approve_member(
         raise HTTPException(status_code=400, detail=f"Member is not pending, status is {member.status}")
         
     return MembershipService.approve_member(db, member)
+
+# --- Withdrawal Endpoints ---
+from . import withdrawal_service
+from .schemas import MemberWithdrawalRequestResponse
+
+@router.post("/withdrawal/request", response_model=MemberWithdrawalRequestResponse)
+def request_withdrawal(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    return withdrawal_service.request_withdrawal(db, current_user.id)
+
+@router.post("/withdrawal/cancel", response_model=MemberWithdrawalRequestResponse)
+def cancel_withdrawal(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    return withdrawal_service.cancel_withdrawal(db, current_user.id)
+
+@router.get("/withdrawal/status", response_model=MemberWithdrawalRequestResponse)
+def get_withdrawal_status(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    status_record = withdrawal_service.get_withdrawal_status(db, current_user.id)
+    if not status_record:
+        raise HTTPException(status_code=404, detail="No withdrawal request found")
+    return status_record
+
+# --- Expulsion Endpoints ---
+from . import expulsion_service
+from .schemas import MemberExpulsionResponse
+
+@router.get("/expulsion/{member_id}", response_model=MemberExpulsionResponse)
+def get_expulsion_status(member_id: int, db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    from .models import MemberExpulsionProcess
+    process = db.query(MemberExpulsionProcess).filter(MemberExpulsionProcess.target_member_id == member_id).order_by(MemberExpulsionProcess.id.desc()).first()
+    if not process:
+        raise HTTPException(status_code=404, detail="No expulsion process found for member")
+    return process
+
+@router.post("/expulsion/{process_id}/finalize", response_model=MemberExpulsionResponse)
+def finalize_expulsion(process_id: int, db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    return expulsion_service.finalize_expulsion(db, process_id)
+
+# --- Organization Events ---
+from . import organization_service
+from .schemas import OrganizationEventResponse
+
+@router.get("/organization/events", response_model=List[OrganizationEventResponse])
+def get_organization_events(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    return organization_service.get_organization_events(db)
+

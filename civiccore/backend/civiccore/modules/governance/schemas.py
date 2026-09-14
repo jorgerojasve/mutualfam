@@ -10,6 +10,8 @@ class ProposalBase(BaseModel):
     title: str
     content: str
     category: Optional[str] = "general"
+    proposal_type: Optional[str] = "standard"
+    target_member_id: Optional[int] = None
     is_anonymous: Optional[bool] = False
     voting_mechanism: Optional[VotingMechanism] = VotingMechanism.SIMPLE
     extra_fields: Optional[Dict[str, Any]] = {}
@@ -17,10 +19,17 @@ class ProposalBase(BaseModel):
 class ProposalCreate(ProposalBase):
     pass
 
+class ProposalUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    edit_reason: Optional[str] = None
+
 class ProposalResponse(ProposalBase):
     id: int
     author_id: int
     status: ProposalStatus
+    proposal_type: str
+    target_member_id: Optional[int] = None
     merged_into_id: Optional[int] = None
     created_at: datetime
     voting_starts_at: Optional[datetime] = None
@@ -31,6 +40,20 @@ class ProposalResponse(ProposalBase):
     votes_abstain: Optional[float] = 0.0
     votes_delegated: Optional[float] = 0.0
     quorum_needed: Optional[int] = 100
+
+    class Config:
+        from_attributes = True
+
+class ProposalVersionResponse(BaseModel):
+    id: int
+    proposal_id: int
+    version_number: int
+    title: str
+    content: str
+    editor_id: int
+    edit_reason: Optional[str] = None
+    is_substantial: bool
+    created_at: datetime
 
     class Config:
         from_attributes = True

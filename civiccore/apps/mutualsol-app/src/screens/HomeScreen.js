@@ -63,9 +63,27 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          {user?.estado === 'pendiente' && (
+          {user?.status === 'pending' && (
             <View style={styles.pendingBanner}>
               <Text style={styles.pendingText}>⏳ Tu membresía está pendiente de aprobación por la asamblea.</Text>
+            </View>
+          )}
+
+          {user?.status === 'suspended' && (
+            <View style={[styles.pendingBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+              <Text style={[styles.pendingText, { color: '#ef4444' }]}>⛔ Tu cuenta está suspendida por mora.</Text>
+            </View>
+          )}
+
+          {user?.status === 'on_appeal' && (
+            <View style={[styles.pendingBanner, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+              <Text style={[styles.pendingText, { color: '#ef4444' }]}>⚖️ Tienes un proceso de expulsión en apelación.</Text>
+            </View>
+          )}
+
+          {user?.status === 'withdrawal_requested' && (
+            <View style={styles.pendingBanner}>
+              <Text style={styles.pendingText}>🚪 Has solicitado tu baja voluntaria. Estás en período de espera.</Text>
             </View>
           )}
         </View>
@@ -109,10 +127,16 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.profileLabel}>Reputación</Text>
             <Text style={styles.profileValue}>{'⭐'.repeat(Math.round(user?.reputacion ?? 0))} {user?.reputacion?.toFixed(1) ?? '0.0'}</Text>
           </View>
-          <View style={[styles.profileRow, { borderBottomWidth: 0 }]}>
+          <View style={styles.profileRow}>
             <Text style={styles.profileLabel}>Crédito Máximo</Text>
             <Text style={styles.profileValue}>$ {creditoMax.toFixed(2)} USD</Text>
           </View>
+          <TouchableOpacity 
+            style={[styles.profileRow, { borderBottomWidth: 0, marginTop: 10, justifyContent: 'center' }]}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={{ color: COLORS.accent, fontWeight: 'bold' }}>Configuración de Cuenta</Text>
+          </TouchableOpacity>
         </View>
 
       </ScrollView>

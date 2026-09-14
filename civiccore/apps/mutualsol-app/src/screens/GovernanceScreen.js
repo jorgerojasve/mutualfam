@@ -37,6 +37,15 @@ export default function GovernanceScreen({ navigation }) {
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   
+  // Versions and Edit state
+  const [proposalVersions, setProposalVersions] = useState({});
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showVersionsModal, setShowVersionsModal] = useState(false);
+  const [selectedProposalForEdit, setSelectedProposalForEdit] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editReason, setEditReason] = useState('');
+  
   const isFocused = useIsFocused();
 
   const loadData = async () => {
@@ -80,16 +89,28 @@ export default function GovernanceScreen({ navigation }) {
     setExpandedId(expandedId === id ? null : id);
     
     // Si expande y no sabemos si ha votado, lo buscamos
-    if (expandedId !== id && userVotes[id] === undefined) {
-      try {
-        const myVote = await gobernanzaApi.miVoto(id);
-        if (myVote) {
-          setUserVotes(prev => ({ ...prev, [id]: myVote.vote_value }));
-        } else {
-          setUserVotes(prev => ({ ...prev, [id]: null })); // null significa 'no ha votado'
+    if (expandedId !== id) {
+      if (userVotes[id] === undefined) {
+        try {
+          const myVote = await gobernanzaApi.miVoto(id);
+          if (myVote) {
+            setUserVotes(prev => ({ ...prev, [id]: myVote.vote_value }));
+          } else {
+            setUserVotes(prev => ({ ...prev, [id]: null })); // null significa 'no ha votado'
+          }
+        } catch (e) {
+          console.error("Error al cargar mi voto:", e);
         }
-      } catch (e) {
-        console.error("Error al cargar mi voto:", e);
+      }
+      
+      // Load versions
+      if (!proposalVersions[id]) {
+        try {
+          const versions = await gobernanzaApi.obtenerVersiones(id);
+          setProposalVersions(prev => ({ ...prev, [id]: versions }));
+        } catch (e) {
+          console.error("Error al cargar versiones:", e);
+        }
       }
     }
   };
@@ -145,6 +166,31 @@ export default function GovernanceScreen({ navigation }) {
           }
           return { ...prev, [id]: next };
       });
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      await gobernanzaApi.editarPropuesta(selectedProposalForEdit.id, {
+        title: editTitle,
+        content: editContent,
+        edit_reason: editReason
+      });
+      setShowEditModal(false);
+      
+      // Fetch versions to check if it was substantial
+      const updatedVersions = await gobernanzaApi.obtenerVersiones(selectedProposalForEdit.id);
+      setProposalVersions(prev => ({ ...prev, [selectedProposalForEdit.id]: updatedVersions }));
+      
+      if (updatedVersions.length > 0 && updatedVersions[0].is_substantial) {
+         Alert.alert('Edición Exitosa', 'Se ha guardado el cambio.\n\nNota: Al ser un cambio sustancial (>20%), se notificará a la asamblea y quedará registrado en el historial.', [{ text: 'Entendido' }]);
+      } else {
+         Alert.alert('Éxito', 'Propuesta actualizada exitosamente (Cambio menor)');
+      }
+      
+      loadData();
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.detail || error.message || 'Error al editar');
+    }
   };
 
   const renderProposal = (prop) => {
@@ -209,6 +255,20 @@ export default function GovernanceScreen({ navigation }) {
         {isExpanded && (
           <View style={styles.expandedContent}>
             <Text style={styles.propDescription}>{prop.content}</Text>
+            
+            {proposalVersions[prop.id] && proposalVersions[prop.id].length > 0 && (
+              <TouchableOpacity 
+                style={{ backgroundColor: COLORS.bgDark, padding: 8, borderRadius: 6, marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => {
+                  setSelectedProposalForEdit(prop);
+                  setShowVersionsModal(true);
+                }}
+              >
+                <Clock color={COLORS.textMuted} size={14} style={{ marginRight: 5 }} />
+                <Text style={{ color: COLORS.textMuted, fontSize: 12 }}>Historial: {proposalVersions[prop.id].length} ediciones previas</Text>
+              </TouchableOpacity>
+            )}
+
             {isAutomatic && (
                <View style={{backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 10, borderRadius: 8, marginBottom: 15}}>
                  <Text style={{color: COLORS.accent, fontWeight: 'bold'}}>Modificará: {prop.extra_fields.variable}</Text>
@@ -283,21 +343,37 @@ export default function GovernanceScreen({ navigation }) {
 
             {/* Author Actions */}
             {isAuthor && prop.status === 'debate' && (
-              <TouchableOpacity 
-                style={[styles.voteBtn, { width: '100%', marginTop: 15, borderColor: COLORS.accent }]}
-                onPress={async () => {
-                  try {
-                    await gobernanzaApi.iniciarReferendo(prop.id);
-                    Alert.alert('Éxito', 'Referendo general iniciado correctamente.');
-                    loadData();
-                  } catch (error) {
-                    Alert.alert('Error', error.message);
-                  }
-                }}
-              >
-                <Play color={COLORS.accent} size={20} />
-                <Text style={[styles.voteBtnTextNo, { marginLeft: 10 }]}>Llamar a Referendo General</Text>
-              </TouchableOpacity>
+              <View style={{ marginTop: 15, gap: 10 }}>
+                <TouchableOpacity 
+                  style={[styles.voteBtn, { width: '100%', borderColor: COLORS.textMuted }]}
+                  onPress={() => {
+                    setSelectedProposalForEdit(prop);
+                    setEditTitle(prop.title);
+                    setEditContent(prop.content);
+                    setEditReason('');
+                    setShowEditModal(true);
+                  }}
+                >
+                  <MessageSquare color={COLORS.textMuted} size={20} />
+                  <Text style={[styles.voteBtnTextNo, { marginLeft: 10, color: COLORS.textMuted }]}>Editar Propuesta</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.voteBtn, { width: '100%', borderColor: COLORS.accent }]}
+                  onPress={async () => {
+                    try {
+                      await gobernanzaApi.iniciarReferendo(prop.id);
+                      Alert.alert('Éxito', 'Referendo general iniciado correctamente.');
+                      loadData();
+                    } catch (error) {
+                      Alert.alert('Error', error.message);
+                    }
+                  }}
+                >
+                  <Play color={COLORS.accent} size={20} />
+                  <Text style={[styles.voteBtnTextNo, { marginLeft: 10 }]}>Llamar a Referendo General</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {isAuthor && prop.status === 'voting' && sistemaGobernanza === 'UNA_FASE_MANUAL' && (
@@ -476,6 +552,85 @@ export default function GovernanceScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Modal Editar Propuesta */}
+      <Modal visible={showEditModal} animationType="slide" transparent={true} onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Editar Propuesta</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <XCircle color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 15 }}>
+              <Text style={styles.inputLabelModal}>Título de la Propuesta</Text>
+              <TextInput
+                style={styles.inputModal}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholderTextColor={COLORS.textMuted}
+              />
+              
+              <Text style={styles.inputLabelModal}>Contenido Completo</Text>
+              <View style={styles.textAreaContainer}>
+                <TextInput
+                  style={[styles.inputModal, { height: 150, textAlignVertical: 'top', borderWidth: 0 }]}
+                  value={editContent}
+                  onChangeText={setEditContent}
+                  multiline
+                  placeholderTextColor={COLORS.textMuted}
+                />
+              </View>
+
+              <Text style={styles.inputLabelModal}>Motivo de la Modificación (Opcional)</Text>
+              <TextInput
+                style={styles.inputModal}
+                value={editReason}
+                onChangeText={setEditReason}
+                placeholder="Ej. Aclaración solicitada en el foro..."
+                placeholderTextColor={COLORS.textMuted}
+              />
+
+              <TouchableOpacity style={styles.submitBtnModal} onPress={handleEditSubmit}>
+                <CheckSquare color="#fff" size={20} style={{ marginRight: 8 }} />
+                <Text style={styles.submitBtnTextModal}>Guardar Cambios</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Historial de Versiones */}
+      <Modal visible={showVersionsModal} animationType="slide" transparent={true} onRequestClose={() => setShowVersionsModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Historial de Versiones</Text>
+              <TouchableOpacity onPress={() => setShowVersionsModal(false)}>
+                <XCircle color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={selectedProposalForEdit ? proposalVersions[selectedProposalForEdit.id] || [] : []}
+              keyExtractor={item => item.id.toString()}
+              renderItem={({ item }) => (
+                <View style={{ marginBottom: 15, padding: 15, backgroundColor: COLORS.bgDark, borderRadius: 8 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <Text style={{ color: COLORS.text, fontWeight: 'bold' }}>Versión {item.version_number}</Text>
+                    <Text style={{ color: COLORS.textMuted, fontSize: 12 }}>{new Date(item.created_at).toLocaleString()}</Text>
+                  </View>
+                  {item.is_substantial && <Text style={{ color: COLORS.accent, fontSize: 12, marginBottom: 5 }}>Cambio Sustancial</Text>}
+                  {item.edit_reason && <Text style={{ color: COLORS.textMuted, fontSize: 12, fontStyle: 'italic', marginBottom: 10 }}>Motivo: {item.edit_reason}</Text>}
+                  <Text style={{ color: COLORS.text, fontWeight: 'bold', marginBottom: 5 }}>{item.title}</Text>
+                  <Text style={{ color: COLORS.textMuted }}>{item.content}</Text>
+                </View>
+              )}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -518,6 +673,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
+  },
+  inputLabelModal: {
+    color: COLORS.text,
+    fontSize: 14,
+    marginBottom: 8,
+    marginTop: 15,
+    fontWeight: 'bold',
+  },
+  inputModal: {
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    padding: 12,
+    color: COLORS.text,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  textAreaContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    backgroundColor: COLORS.card,
+  },
+  submitBtnModal: {
+    backgroundColor: COLORS.accent,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 25,
+    marginBottom: 20,
+  },
+  submitBtnTextModal: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  submitBtn: {
+    display: 'none',
   },
   tab: {
     flex: 1,

@@ -15,7 +15,8 @@ from .schemas import (
     ProposalCreate, ProposalResponse, 
     VoteCreate, VoteResponse, 
     CommentCreate, CommentResponse,
-    MemberVotingPointsResponse
+    MemberVotingPointsResponse,
+    ProposalUpdate, ProposalVersionResponse
 )
 from .service import GovernanceService
 from .points_service import PointsService
@@ -93,6 +94,18 @@ def get_my_points(
     # We use renew_points_if_needed which guarantees it returns the up-to-date balance
     record = PointsService.renew_points_if_needed(db, current_user.id, period_days, default_points)
     return record
+
+@router.get("/proposals/{proposal_id}/versions", response_model=List[ProposalVersionResponse])
+def get_proposal_versions(proposal_id: int, db: Session = Depends(get_db)):
+    # No auth required to view history
+    return GovernanceService.get_proposal_versions(db, proposal_id)
+
+@router.put("/proposals/{proposal_id}", response_model=ProposalResponse)
+def update_proposal(proposal_id: int, update_data: ProposalUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    try:
+        return GovernanceService.update_proposal(db, proposal_id, current_user.id, update_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/proposals/{proposal_id}/vote", response_model=VoteResponse)
 def vote_on_proposal(

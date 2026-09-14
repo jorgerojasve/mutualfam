@@ -36,7 +36,10 @@ const GovernanceList = () => {
     }
   };
 
-  const getCategoryLabel = (category) => {
+  const getCategoryLabel = (category, type) => {
+    if (type === 'expulsion') return <span className="text-red-500 font-bold">🔴 Expulsión (75%)</span>;
+    if (type === 'division') return <span className="text-blue-500 font-bold">🔵 División (75%)</span>;
+    if (type === 'fusion') return <span className="text-yellow-500 font-bold">🟡 Fusión (66%)</span>;
     return category === 'configuracion' ? 'Regla de Sistema' : 'Propuesta General';
   };
 
@@ -120,7 +123,7 @@ const GovernanceList = () => {
                     {new Date(proposal.created_at).toLocaleDateString()}
                   </span>
                   <span className="text-muted font-medium" style={{ fontSize: '0.75rem' }}>
-                    {getCategoryLabel(proposal.category)}
+                    {getCategoryLabel(proposal.category, proposal.proposal_type)}
                   </span>
                 </div>
               </div>

@@ -139,10 +139,12 @@
 - [ ] Alerta de mora y gestión de reestructuración
 
 ### Módulo 4: Gobernanza Democrática
-- [ ] Asamblea virtual (votaciones en app)
-- [ ] Propuestas de modificación de estatutos
-- [ ] Elección de directiva
-- [ ] Libro de actas digital
+- [ ] Foro de Debate (Fase 1) con métrica de apoyo basada en "stake" (bloqueo de puntos)
+- [ ] Cola de Referendos (Fase 2) limitada a `MAX_ACTIVE_REFERENDUMS` (ej. 2 simultáneos)
+- [ ] Fast-Track (Vía Rápida) para emergencias con apoyo abrumador (>80% en debate)
+- [ ] **Enmiendas Constitucionales**: Toda propuesta que modifique las reglas del juego (puntos, quórum, % de aprobación) requerirá una votación lineal estricta (1 persona = 1 voto) y un >50% del total de miembros reales, desactivando los puntos cuadráticos para prevenir la captura oligárquica.
+- [ ] Variables configurables por Smart Contract: `MIN_DEBATE_TIME`, `AUTHOR_APPROVAL_WINDOW`, `QUORUM_PARTICIPATION_PCT`, `APPROVAL_THRESHOLD_PCT`
+- [ ] Libro de actas digital inmutable
 
 ### Módulo 5: Reportes y Transparencia
 - [ ] Dashboard financiero en tiempo real

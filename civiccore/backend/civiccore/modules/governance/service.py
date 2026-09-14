@@ -3,13 +3,14 @@ Governance Module Service Logic
 """
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from .models import Proposal, Vote, ProposalStatus, Comment, utcnow
-from .schemas import ProposalCreate, VoteCreate, CommentCreate
+from .models import Proposal, Vote, ProposalStatus, Comment, ProposalVersion, utcnow
+from .schemas import ProposalCreate, VoteCreate, CommentCreate, ProposalUpdate
 from .mechanisms import get_mechanism
 from .points_service import PointsService
 from ..config.service import ConfigService
 from ..membership.models import Member
 import math
+import difflib
 
 class GovernanceService:
     @staticmethod
@@ -29,6 +30,8 @@ class GovernanceService:
             title=proposal_in.title,
             content=proposal_in.content,
             category=proposal_in.category,
+            proposal_type=proposal_in.proposal_type,
+            target_member_id=proposal_in.target_member_id,
             is_anonymous=proposal_in.is_anonymous,
             voting_mechanism=assigned_mechanism,
             extra_fields=proposal_in.extra_fields,
@@ -101,6 +104,62 @@ class GovernanceService:
             GovernanceService._enrich_proposal(db, p)
         return proposals
         
+    @staticmethod
+    def get_proposal_versions(db: Session, proposal_id: int) -> List[ProposalVersion]:
+        return db.query(ProposalVersion).filter(ProposalVersion.proposal_id == proposal_id).order_by(ProposalVersion.version_number.desc()).all()
+
+    @staticmethod
+    def update_proposal(db: Session, proposal_id: int, user_id: int, update_data: ProposalUpdate) -> Proposal:
+        proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+        if not proposal:
+            raise ValueError("Proposal not found")
+            
+        if proposal.status != ProposalStatus.DEBATE:
+            raise ValueError("Solo se pueden modificar propuestas en fase de debate.")
+            
+        if proposal.author_id != user_id:
+            raise ValueError("Solo el autor puede editar la propuesta.")
+
+        # Determine current version number
+        current_version_count = db.query(ProposalVersion).filter(ProposalVersion.proposal_id == proposal_id).count()
+        next_version = current_version_count + 1
+
+        # Calculate heuristic for substantial change
+        new_title = update_data.title if update_data.title is not None else proposal.title
+        new_content = update_data.content if update_data.content is not None else proposal.content
+        
+        # We compare content for substantial changes. Ratio gives 1.0 for identical, 0.0 for completely different
+        similarity_ratio = difflib.SequenceMatcher(None, proposal.content, new_content).ratio()
+        
+        # Umbral 20% de cambio = ratio < 0.80
+        is_substantial = similarity_ratio < 0.80
+
+        # Snapshot current version before overwriting
+        snapshot = ProposalVersion(
+            proposal_id=proposal.id,
+            version_number=next_version,
+            title=proposal.title,
+            content=proposal.content,
+            editor_id=user_id,
+            edit_reason=update_data.edit_reason,
+            is_substantial=is_substantial
+        )
+        db.add(snapshot)
+        
+        # Apply updates
+        proposal.title = new_title
+        proposal.content = new_content
+        proposal.last_activity_at = utcnow()
+        
+        if is_substantial:
+            # Here we would emit an event or notification to previous voters
+            # For now we can print or log it
+            print(f"NOTIFICACIÓN INTELIGENTE: Cambio sustancial detectado (Similitud {similarity_ratio*100:.1f}%). Alertando a votantes de la propuesta {proposal.id}.")
+
+        db.commit()
+        db.refresh(proposal)
+        return GovernanceService._enrich_proposal(db, proposal)
+
     @staticmethod
     def cast_vote(db: Session, proposal: Proposal, member_id: int, vote_in: VoteCreate, available_credits: float = 0.0) -> Vote:
         mechanism = get_mechanism(proposal.voting_mechanism)
@@ -207,23 +266,30 @@ class GovernanceService:
         
         passed = False
         
+        # Calculate thresholds based on proposal type
+        from .models import ProposalType
+        threshold = 0.50 # Default 50%
+        if proposal.proposal_type == ProposalType.EXPULSION:
+            threshold = float(ConfigService.get_value(db, "EXPULSION_UMBRAL_APROBACION", "0.75"))
+        elif proposal.proposal_type == ProposalType.DIVISION:
+            threshold = float(ConfigService.get_value(db, "DIVISION_UMBRAL_APROBACION", "0.75"))
+        elif proposal.proposal_type == ProposalType.FUSION:
+            threshold = float(ConfigService.get_value(db, "FUSION_UMBRAL_APROBACION", "0.66"))
+
         if not quorum_reached:
             # Automatic failure if quorum not met
             passed = False
-        elif sistema_gobernanza == "DOS_FASES":
-            # Requiere > 50% de los miembros
+        elif sistema_gobernanza == "DOS_FASES" and proposal.proposal_type == ProposalType.STANDARD:
+            # DOS_FASES standard rule: requires > 50% of ALL members (not just voters) for standard proposals
             if yes_votes > (total_members / 2):
                 passed = True
         else:
-            # UNA_FASE_TIEMPO o UNA_FASE_MANUAL usan mayoría simple y quórum estándar
-            # Constitutional Lock (50% + 1): For "configuracion" category we need absolute majority
-            if proposal.category == "configuracion":
-                # For simple mechanism, weight is always 1.0 (points are disabled)
-                # Yes votes must be > 50% of the casted votes
-                if yes_votes > (len(votes) / 2.0):
+            # For special proposals (EXPULSION, DIVISION, FUSION) or UNA_FASE, threshold is based on casted votes
+            # But the quorum must be met, which we already verified.
+            total_yes_no = yes_votes + no_votes
+            if total_yes_no > 0:
+                if (yes_votes / total_yes_no) >= threshold:
                     passed = True
-            elif results.get("passed", False):
-                passed = True
 
         if passed:
             proposal.status = ProposalStatus.APPROVED
@@ -233,6 +299,16 @@ class GovernanceService:
                 var_val = proposal.extra_fields.get("new_value")
                 if var_key and var_val:
                     ConfigService.set_value(db, var_key, str(var_val))
+            
+            # Post-approval hooks for special proposals
+            from ..membership import expulsion_service, organization_service
+            if proposal.proposal_type == ProposalType.EXPULSION:
+                if proposal.target_member_id:
+                    expulsion_service.initiate_expulsion(db, proposal.id, proposal.target_member_id)
+            elif proposal.proposal_type == ProposalType.DIVISION:
+                organization_service.initiate_division(db, proposal.id, proposal.extra_fields)
+            elif proposal.proposal_type == ProposalType.FUSION:
+                organization_service.initiate_fusion(db, proposal.id, proposal.extra_fields)
         else:
             proposal.status = ProposalStatus.REJECTED
             

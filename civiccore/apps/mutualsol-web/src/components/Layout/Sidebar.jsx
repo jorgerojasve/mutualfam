@@ -13,6 +13,8 @@ const Sidebar = () => {
     { to: '/transparency', icon: Shield, label: terminology.transparency },
     { to: '/credits', icon: Wallet, label: 'Créditos' },
     { to: '/members', icon: Users, label: terminology.members },
+    { to: '/organization/events', icon: LayoutDashboard, label: 'Eventos Org.' },
+    { to: '/settings', icon: Settings, label: 'Configuración' },
   ];
 
   return (

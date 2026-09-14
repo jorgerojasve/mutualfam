@@ -11,6 +11,8 @@ import GovernanceScreen from '../screens/GovernanceScreen';
 import CreateProposalScreen from '../screens/CreateProposalScreen';
 import MarketplaceScreen from '../screens/MarketplaceScreen';
 import CreateOfferScreen from '../screens/CreateOfferScreen';
+import WithdrawalScreen from '../screens/WithdrawalScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { COLORS } from '../theme/colors';
 import { Home, Shield, Users, Store } from 'lucide-react-native';
 import { useAuthStore, useConfigStore } from '@civiccore/sdk';
@@ -102,6 +104,14 @@ export default function AppNavigator() {
           <Stack.Screen 
             name="CreateOffer" 
             component={CreateOfferScreen} 
+          />
+          <Stack.Screen 
+            name="Withdrawal" 
+            component={WithdrawalScreen} 
+          />
+          <Stack.Screen 
+            name="Settings" 
+            component={SettingsScreen} 
           />
         </Stack.Group>
       )}
