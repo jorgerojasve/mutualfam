@@ -139,3 +139,23 @@ export const mercadoApi = {
 export const configApi = {
   getVariables: () => request('/config/')
 };
+
+// ─────────────────────────────────────────────
+// Módulo: Gobernanza Representativa (Junta, Comités, Delegados)
+// ─────────────────────────────────────────────
+
+export const boardApi = {
+  getCurrentBoard: () => request('/governance/board'),
+  createElection: (data) => request('/governance/board/elections', { method: 'POST', body: JSON.stringify(data) })
+};
+
+export const committeesApi = {
+  list: () => request('/governance/committees'),
+  propose: (data) => request('/governance/committees', { method: 'POST', body: JSON.stringify(data) })
+};
+
+export const delegatesApi = {
+  assign: (data) => request('/governance/delegations', { method: 'POST', body: JSON.stringify(data) }),
+  myDelegations: () => request('/governance/delegations/mine'),
+  revoke: (id) => request(`/governance/delegations/${id}`, { method: 'DELETE' })
+};

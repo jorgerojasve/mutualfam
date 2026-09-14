@@ -251,6 +251,34 @@ class GovernanceService:
             elif v.vote_value < 0:
                 no_votes += final_weight
                 
+        # Liquid Democracy: Add delegated votes
+        from .models import Delegation
+        if str(ConfigService.get_value(db, "ENABLE_DELEGATES", "true")).lower() == "true":
+            allow_override = str(ConfigService.get_value(db, "ALLOW_LIQUID_DELEGATION_OVERRIDE", "true")).lower() == "true"
+            
+            # Find all active delegations valid for this category
+            active_delegations = db.query(Delegation).filter(
+                Delegation.is_active == True,
+                (Delegation.expires_at == None) | (Delegation.expires_at > utcnow()),
+                (Delegation.restricted_category == None) | (Delegation.restricted_category == proposal.category)
+            ).all()
+            
+            direct_voter_ids = {v.member_id for v in votes}
+            
+            for delegation in active_delegations:
+                # If delegator voted directly, and override is allowed, skip their delegated vote
+                if allow_override and delegation.delegator_id in direct_voter_ids:
+                    continue
+                    
+                # Did the delegatee vote?
+                delegatee_vote = next((v for v in votes if v.member_id == delegation.delegatee_id), None)
+                if delegatee_vote:
+                    # Delegatee voted, add 1.0 to their choice (ignoring points for delegated votes for simplicity/fairness)
+                    if delegatee_vote.vote_value > 0:
+                        yes_votes += 1.0
+                    elif delegatee_vote.vote_value < 0:
+                        no_votes += 1.0
+                        
         results = {"yes": yes_votes, "no": no_votes, "total_casted": len(votes), "passed": yes_votes > no_votes}
         
         # We need to know the required quorum to see if the proposal is valid
@@ -309,6 +337,13 @@ class GovernanceService:
                 organization_service.initiate_division(db, proposal.id, proposal.extra_fields)
             elif proposal.proposal_type == ProposalType.FUSION:
                 organization_service.initiate_fusion(db, proposal.id, proposal.extra_fields)
+                
+            # Representative Governance hooks
+            from .representative_service import RepresentativeService
+            if proposal.proposal_type == ProposalType.BOARD_ELECTION:
+                RepresentativeService.proclaim_winners(db, proposal.id)
+            elif proposal.proposal_type == ProposalType.COMMITTEE_CREATE:
+                RepresentativeService.activate_committee(db, proposal.id)
         else:
             proposal.status = ProposalStatus.REJECTED
             

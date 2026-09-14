@@ -43,7 +43,27 @@ async def lifespan(app):
             "DIVISION_DISTRIBUCION_FONDOS": "proporcional_miembros",
             # Fusión
             "FUSION_UMBRAL_APROBACION": "0.66",
-            "FUSION_PERIODO_INTEGRACION_DIAS": "90"
+            "FUSION_PERIODO_INTEGRACION_DIAS": "90",
+            
+            # Junta Directiva
+            "ENABLE_BOARD": "true",
+            "BOARD_TERM_YEARS": "2",
+            "BOARD_REELECTION_ALLOWED": "true",
+            "BOARD_MAX_REELECTIONS": "1",
+            "BOARD_SPENDING_LIMIT_USD": "500",
+            "BOARD_VOTE_NOMINAL": "true",
+            "BOARD_POSITIONS": '["Presidente","Secretario","Tesorero","Vocal 1","Vocal 2"]',
+            
+            # Delegados
+            "ENABLE_DELEGATES": "true",
+            "DELEGATE_MODE": "liquid",
+            "DELEGATE_TERM_MONTHS": "12",
+            "DELEGATE_RECALL_THRESHOLD": "0.25",
+            "ALLOW_LIQUID_DELEGATION_OVERRIDE": "true",
+            
+            # Comités
+            "ENABLE_COMMITTEES": "true",
+            "COMMITTEE_RATIFICATION": "simple_majority"
         }
         for k, v in terms.items():
             if not db.query(SystemConfig).filter_by(key=k).first():

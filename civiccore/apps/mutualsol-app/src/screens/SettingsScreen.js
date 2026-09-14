@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Settings, Shield, Bell, Key, AlertTriangle, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Settings, Shield, Bell, Key, AlertTriangle, ChevronRight, Users, Briefcase } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
 import { useAuthStore } from '@civiccore/sdk';
 
@@ -54,6 +54,20 @@ export default function SettingsScreen({ navigation }) {
               <ChevronRight color={COLORS.border} size={20} />
             </TouchableOpacity>
           ))}
+        </View>
+
+        <Text style={styles.sectionTitle}>Organización</Text>
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={[styles.menuItem, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('Board')}
+          >
+            <View style={styles.menuItemLeft}>
+              <Briefcase color={COLORS.accent} size={20} />
+              <Text style={styles.menuItemText}>Junta Directiva</Text>
+            </View>
+            <ChevronRight color={COLORS.border} size={20} />
+          </TouchableOpacity>
         </View>
 
         <Text style={[styles.sectionTitle, { color: '#ef4444', marginTop: 10 }]}>Zona de Peligro</Text>

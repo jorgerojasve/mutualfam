@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { gobernanzaApi, useConfigStore } from '@civiccore/sdk';
-import { Filter, CheckCircle, XCircle, Clock, Plus } from 'lucide-react';
+import { Filter, CheckCircle, XCircle, Clock, Plus, Building, Users } from 'lucide-react';
+import BoardPage from './BoardPage';
+import CommitteesPage from './CommitteesPage';
 
 const GovernanceList = () => {
   const { terminology } = useConfigStore();
@@ -78,7 +80,7 @@ const GovernanceList = () => {
         <button 
           onClick={() => setActiveTab('referendos')}
           style={{ 
-            padding: '1rem 2rem', 
+            padding: '1rem 1.5rem', 
             background: 'transparent', 
             border: 'none', 
             color: activeTab === 'referendos' ? 'var(--accent-primary)' : 'var(--text-muted)',
@@ -87,11 +89,45 @@ const GovernanceList = () => {
             cursor: 'pointer'
           }}
         >
-          Referendos Oficiales
+          Referendos
+        </button>
+        <button 
+          onClick={() => setActiveTab('junta')}
+          style={{ 
+            padding: '1rem 1.5rem', 
+            background: 'transparent', 
+            border: 'none', 
+            color: activeTab === 'junta' ? 'var(--accent-primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'junta' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+            fontWeight: activeTab === 'junta' ? 'bold' : 'normal',
+            cursor: 'pointer'
+          }}
+        >
+          <Building size={16} className="inline mr-2" />
+          Junta Directiva
+        </button>
+        <button 
+          onClick={() => setActiveTab('comites')}
+          style={{ 
+            padding: '1rem 1.5rem', 
+            background: 'transparent', 
+            border: 'none', 
+            color: activeTab === 'comites' ? 'var(--accent-primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'comites' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+            fontWeight: activeTab === 'comites' ? 'bold' : 'normal',
+            cursor: 'pointer'
+          }}
+        >
+          <Users size={16} className="inline mr-2" />
+          Comités
         </button>
       </div>
 
-      {isLoading ? (
+      {activeTab === 'junta' ? (
+        <BoardPage />
+      ) : activeTab === 'comites' ? (
+        <CommitteesPage />
+      ) : isLoading ? (
         <div className="flex justify-center mt-8">
           <div className="loader">Cargando...</div>
         </div>

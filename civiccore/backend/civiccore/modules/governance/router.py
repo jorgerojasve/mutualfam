@@ -235,3 +235,80 @@ def add_comment(
             raise HTTPException(status_code=400, detail="Los comentarios están deshabilitados durante la fase de referendo.")
             
     return GovernanceService.add_comment(db, proposal_id, current_user.id, request)
+
+# ==========================================
+# REPRESENTATIVE GOVERNANCE ENDPOINTS
+# ==========================================
+
+from .representative_service import RepresentativeService
+from .schemas import (
+    BoardSlateCreate, BoardPositionStateResponse, 
+    CommitteeCreate, CommitteeResponse,
+    DelegationCreate, DelegationResponse
+)
+
+# --- Board ---
+
+@router.get("/board", response_model=List[BoardPositionStateResponse])
+def get_current_board(db: Session = Depends(get_db)):
+    return RepresentativeService.get_current_board(db)
+
+@router.post("/board/elections", response_model=ProposalResponse)
+def create_board_election(
+    request: BoardSlateCreate,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden convocar elecciones")
+    return RepresentativeService.create_board_slate(db, current_user.id, request)
+
+# --- Committees ---
+
+@router.get("/committees", response_model=List[CommitteeResponse])
+def get_committees(db: Session = Depends(get_db)):
+    return RepresentativeService.get_active_committees(db)
+
+@router.post("/committees", response_model=ProposalResponse)
+def propose_committee(
+    request: CommitteeCreate,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    return RepresentativeService.propose_committee(db, current_user.id, request)
+
+# --- Delegations ---
+
+@router.post("/delegations", response_model=DelegationResponse)
+def assign_delegation(
+    request: DelegationCreate,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    try:
+        return RepresentativeService.assign_delegation(db, current_user.id, request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/delegations/mine", response_model=List[DelegationResponse])
+def get_my_delegations(
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    from .models import Delegation
+    return db.query(Delegation).filter(Delegation.delegator_id == current_user.id, Delegation.is_active == True).all()
+
+@router.delete("/delegations/{delegation_id}")
+def revoke_delegation(
+    delegation_id: int,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(get_current_user)
+):
+    from .models import Delegation
+    delegation = db.query(Delegation).filter(Delegation.id == delegation_id, Delegation.delegator_id == current_user.id).first()
+    if not delegation:
+        raise HTTPException(status_code=404, detail="Delegation not found")
+    delegation.is_active = False
+    db.commit()
+    return {"status": "revoked"}
+

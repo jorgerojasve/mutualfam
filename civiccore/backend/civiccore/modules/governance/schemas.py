@@ -99,3 +99,89 @@ class CommentResponse(CommentBase):
 
     class Config:
         from_attributes = True
+
+# --- Representative Governance Schemas ---
+
+class BoardCandidateBase(BaseModel):
+    position: str
+    bio: Optional[str] = None
+
+class BoardCandidateCreate(BoardCandidateBase):
+    member_id: int
+
+class BoardCandidateResponse(BoardCandidateBase):
+    id: int
+    slate_id: int
+    member_id: int
+    
+    class Config:
+        from_attributes = True
+
+class BoardSlateCreate(BaseModel):
+    name: str
+    candidates: List[BoardCandidateCreate]
+
+class BoardSlateResponse(BaseModel):
+    id: int
+    name: str
+    proposal_id: int
+    created_at: datetime
+    candidates: List[BoardCandidateResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class BoardPositionStateResponse(BaseModel):
+    id: int
+    position: str
+    member_id: int
+    elected_at: datetime
+    expires_at: Optional[datetime]
+    active: bool
+
+    class Config:
+        from_attributes = True
+
+class CommitteeMemberResponse(BaseModel):
+    id: int
+    committee_id: int
+    member_id: int
+    role: str
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CommitteeBase(BaseModel):
+    name: str
+    area: Optional[str] = None
+
+class CommitteeCreate(CommitteeBase):
+    lead_member_id: int
+
+class CommitteeResponse(CommitteeBase):
+    id: int
+    proposal_id: int
+    is_active: bool
+    created_at: datetime
+    members: List[CommitteeMemberResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class DelegationBase(BaseModel):
+    delegatee_id: int
+    restricted_category: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+class DelegationCreate(DelegationBase):
+    pass
+
+class DelegationResponse(DelegationBase):
+    id: int
+    delegator_id: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

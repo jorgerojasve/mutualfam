@@ -29,6 +29,8 @@ class ProposalType(str, enum.Enum):
     EXPULSION = "expulsion"
     DIVISION = "division"
     FUSION = "fusion"
+    BOARD_ELECTION = "board_election"
+    COMMITTEE_CREATE = "committee_create"
 
 class Proposal(Base):
     __tablename__ = "proposals"
@@ -124,6 +126,7 @@ class Delegation(Base):
     restricted_category = Column(String(50), nullable=True)
     
     is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
     delegator = relationship("Member", foreign_keys=[delegator_id])
@@ -148,3 +151,60 @@ class ProposalVersion(Base):
     
     proposal = relationship("Proposal")
     editor = relationship("Member", foreign_keys=[editor_id])
+
+class BoardSlate(Base):
+    __tablename__ = "board_slates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    
+    proposal = relationship("Proposal")
+    candidates = relationship("BoardCandidate", back_populates="slate")
+
+class BoardCandidate(Base):
+    __tablename__ = "board_candidates"
+    id = Column(Integer, primary_key=True, index=True)
+    slate_id = Column(Integer, ForeignKey("board_slates.id"), nullable=False)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    position = Column(String(100), nullable=False)
+    bio = Column(Text, nullable=True)
+    
+    slate = relationship("BoardSlate", back_populates="candidates")
+    member = relationship("Member")
+
+class BoardPositionState(Base):
+    """Tracks currently active board members (the actual winners)"""
+    __tablename__ = "board_position_states"
+    id = Column(Integer, primary_key=True, index=True)
+    position = Column(String(100), nullable=False)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    elected_at = Column(DateTime, default=utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=True)
+    
+    member = relationship("Member")
+
+class Committee(Base):
+    __tablename__ = "committees"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    area = Column(String(100), nullable=True)
+    proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=False) # Proposal that created it
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    proposal = relationship("Proposal")
+    members = relationship("CommitteeMember", back_populates="committee")
+
+class CommitteeMember(Base):
+    __tablename__ = "committee_members"
+    id = Column(Integer, primary_key=True, index=True)
+    committee_id = Column(Integer, ForeignKey("committees.id"), nullable=False)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    role = Column(String(50), default="member") # leader, member, secretary
+    joined_at = Column(DateTime, default=utcnow)
+    
+    committee = relationship("Committee", back_populates="members")
+    member = relationship("Member")
+
