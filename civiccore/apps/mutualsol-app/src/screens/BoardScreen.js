@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { boardApi } from '@civiccore/sdk';
-import { Users, Clock } from 'lucide-react-native';
+import { Users, Clock, ArrowLeft } from 'lucide-react-native';
 
-const BoardScreen = () => {
+const BoardScreen = ({ navigation }) => {
   const [boardPositions, setBoardPositions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,7 +47,12 @@ const BoardScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Junta Directiva</Text>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 5 }}>
+          <ArrowLeft color="#fff" size={24} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Junta Directiva</Text>
+      </View>
       <Text style={styles.headerSubtitle}>Miembros electos para la coordinación de la mutual.</Text>
       
       {isLoading ? (
@@ -57,6 +62,13 @@ const BoardScreen = () => {
           <Users size={48} color="#4b5563" />
           <Text style={styles.emptyTitle}>No hay una junta activa</Text>
           <Text style={styles.emptySubtitle}>La asamblea debe convocar elecciones.</Text>
+          
+          <TouchableOpacity 
+            style={styles.convokeBtn}
+            onPress={() => navigation.navigate('CreateProposal', { type: 'election' })}
+          >
+            <Text style={styles.convokeBtnText}>Convocar Elecciones</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -155,6 +167,24 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     color: '#9ca3af',
     textAlign: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    marginBottom: 4,
+  },
+  convokeBtn: {
+    marginTop: 20,
+    backgroundColor: '#3b82f6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  convokeBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   }
 });
 

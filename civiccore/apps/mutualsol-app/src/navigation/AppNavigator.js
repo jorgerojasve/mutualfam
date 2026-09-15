@@ -14,8 +14,10 @@ import CreateOfferScreen from '../screens/CreateOfferScreen';
 import WithdrawalScreen from '../screens/WithdrawalScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import BoardScreen from '../screens/BoardScreen';
+import CommitteesScreen from '../screens/CommitteesScreen';
+import CreditsScreen from '../screens/CreditsScreen';
 import { COLORS } from '../theme/colors';
-import { Home, Shield, Users, Store } from 'lucide-react-native';
+import { Home, Shield, Users, Store, Wallet } from 'lucide-react-native';
 import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 
 const Tab = createBottomTabNavigator();
@@ -72,6 +74,13 @@ function MainTabs() {
         }}
       />
       <Tab.Screen 
+        name="Créditos" 
+        component={CreditsScreen} 
+        options={{
+          tabBarIcon: ({ color }) => <Wallet color={color} size={24} />,
+        }}
+      />
+      <Tab.Screen 
         name="Auditoría" 
         component={TransparencyScreen} 
         options={{
@@ -117,6 +126,10 @@ export default function AppNavigator() {
           <Stack.Screen 
             name="Board" 
             component={BoardScreen} 
+          />
+          <Stack.Screen 
+            name="Committees" 
+            component={CommitteesScreen} 
           />
         </Stack.Group>
       )}

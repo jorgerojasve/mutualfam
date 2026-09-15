@@ -8,7 +8,7 @@ const Settings = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="animate-fade-in max-w-4xl mx-auto mt-8">
+    <div className="animate-fade-in max-w-4xl mx-auto p-8 space-y-8">
       <div className="page-header mb-8">
         <h1 className="page-title text-2xl font-bold">Configuración de Cuenta</h1>
         <p className="text-secondary">Administra tus preferencias y seguridad.</p>
@@ -35,15 +35,15 @@ const Settings = () => {
         {/* Panel Principal */}
         <div className="col-span-1 md:col-span-2 space-y-6">
           
-          <div className="glass-card p-6">
-            <h2 className="text-xl font-bold mb-4">Información Personal</h2>
-            <div className="space-y-4">
+          <div className="glass-card p-6 md:p-8">
+            <h2 className="text-xl font-bold mb-6">Información Personal</h2>
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm text-secondary mb-1">Nombre Completo</label>
+                <label className="form-label">Nombre Completo</label>
                 <input type="text" className="form-input" disabled value={`${user?.nombre} ${user?.apellido}`} />
               </div>
               <div>
-                <label className="block text-sm text-secondary mb-1">Correo Electrónico</label>
+                <label className="form-label">Correo Electrónico</label>
                 <input type="email" className="form-input" disabled value={user?.email} />
               </div>
             </div>

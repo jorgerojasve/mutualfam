@@ -12,6 +12,7 @@ import Transparency from './pages/Transparency/Transparency';
 import WithdrawalPage from './pages/Membership/WithdrawalPage';
 import OrganizationEvents from './pages/Membership/OrganizationEvents';
 import Settings from './pages/Settings/Settings';
+import CreditsPage from './pages/Finance/CreditsPage';
 import { useConfigStore } from '@civiccore/sdk';
 
 function App() {
@@ -41,7 +42,8 @@ function App() {
           {/* Transparency Route */}
           <Route path="transparency" element={<Transparency />} />
           
-          <Route path="credits" element={<div className="p-8">Módulo de Créditos en construcción</div>} />
+          <Route path="credits" element={<CreditsPage />} />
+          <Route path="mercado" element={<div className="p-8">Mercado Solidario en construcción</div>} />
           <Route path="members" element={<div className="p-8">Directorio de Miembros en construcción</div>} />
           
           {/* Membership Routes */}

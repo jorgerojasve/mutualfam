@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme/colors';
 import { X, AlertCircle } from 'lucide-react-native';
+import { useAuthStore, creditosApi } from '@civiccore/sdk';
 
 export default function CreditRequestScreen({ navigation }) {
+  const { user } = useAuthStore();
   const [amount, setAmount] = useState('');
   const [term, setTerm] = useState('3'); // meses
   const [isSpecial, setIsSpecial] = useState(false);
   const [reason, setReason] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Simulación de cuota con 5% de interés mensual
   const interestRate = 0.05;
@@ -17,9 +20,24 @@ export default function CreditRequestScreen({ navigation }) {
   const totalAmount = parsedAmount + (parsedAmount * interestRate * parsedTerm);
   const monthlyPayment = totalAmount / parsedTerm;
 
-  const handleRequest = () => {
-    // Aquí iría la lógica para procesar la solicitud
-    navigation.goBack();
+  const handleRequest = async () => {
+    if (parsedAmount <= 0) return;
+    setIsSubmitting(true);
+    try {
+      await creditosApi.solicitar(user.id, {
+        amount_requested: parsedAmount,
+        currency: 'USD',
+        term_months: parsedTerm,
+        purpose: isSpecial ? reason : 'Crédito estándar',
+        evaluation_data: { isSpecial }
+      });
+      Alert.alert('Éxito', 'Tu solicitud de crédito ha sido enviada para su revisión.');
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo enviar la solicitud de crédito.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -122,11 +140,11 @@ export default function CreditRequestScreen({ navigation }) {
 
       <View style={styles.footer}>
         <TouchableOpacity 
-          style={[styles.submitBtn, (parsedAmount <= 0) && styles.submitBtnDisabled]}
-          disabled={parsedAmount <= 0}
+          style={[styles.submitBtn, (parsedAmount <= 0 || isSubmitting) && styles.submitBtnDisabled]}
+          disabled={parsedAmount <= 0 || isSubmitting}
           onPress={handleRequest}
         >
-          <Text style={styles.submitBtnText}>Enviar Solicitud</Text>
+          <Text style={styles.submitBtnText}>{isSubmitting ? 'Enviando...' : 'Enviar Solicitud'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

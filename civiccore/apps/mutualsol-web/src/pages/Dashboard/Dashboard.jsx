@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore, membershipApi } from '@civiccore/sdk';
 import { Users, TrendingUp, AlertTriangle } from 'lucide-react';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [stats, setStats] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -25,9 +27,22 @@ const Dashboard = () => {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Bienvenido de vuelta, {user?.nombre}</h1>
-        <p className="text-secondary">Aquí tienes el resumen actual de la mutual.</p>
+      <div className="page-header flex justify-between items-center flex-wrap gap-4">
+        <div>
+          <h1 className="page-title">Bienvenido de vuelta, {user?.nombre}</h1>
+          <p className="text-secondary">Aquí tienes el resumen actual de la mutual.</p>
+        </div>
+        <div className="flex gap-4">
+          <button className="btn btn-outline">
+            + Aportar
+          </button>
+          <button 
+            className="btn btn-primary bg-accent hover:bg-orange-500"
+            onClick={() => navigate('/credits', { state: { openForm: true } })}
+          >
+            ↗️ Solicitar Crédito
+          </button>
+        </div>
       </div>
 
       <div className="dashboard-grid">

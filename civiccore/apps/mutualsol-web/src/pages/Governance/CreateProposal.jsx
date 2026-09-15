@@ -103,6 +103,9 @@ const CreateProposal = () => {
 
       <div className="glass-panel" style={{ padding: '2.5rem' }}>
         <form onSubmit={handleSubmit}>
+          <div className="flex gap-6 mb-8">
+            <div className="form-group flex-1">
+              <label className="form-label">Tipo de Propuesta</label>
               <select 
                 className="form-input"
                 value={formData.proposal_type}

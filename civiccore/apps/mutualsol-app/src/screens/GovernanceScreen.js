@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform, ActivityIndicator, Alert, Modal, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send } from 'lucide-react-native';
+import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send, Link2, Unlink } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { gobernanzaApi, configApi } from '@civiccore/sdk';
+import { gobernanzaApi, configApi, delegatesApi } from '@civiccore/sdk';
 import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -46,6 +46,12 @@ export default function GovernanceScreen({ navigation }) {
   const [editContent, setEditContent] = useState('');
   const [editReason, setEditReason] = useState('');
   
+  // Delegation State
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [delegateId, setDelegateId] = useState('');
+  const [currentDelegate, setCurrentDelegate] = useState(null);
+  const [isSubmittingDelegate, setIsSubmittingDelegate] = useState(false);
+  
   const isFocused = useIsFocused();
 
   const loadData = async () => {
@@ -60,7 +66,12 @@ export default function GovernanceScreen({ navigation }) {
       if (pointsData) setUserPoints(pointsData);
       
       const sysGov = config.find(c => c.key === 'SISTEMA_GOBERNANZA');
-      if (sysGov) setSistemaGobernanza(sysGov.value);
+      if (sysGov) {
+        setSistemaGobernanza(sysGov.value);
+        if (sysGov.value !== 'DOS_FASES') {
+          setActiveTab('referendos');
+        }
+      }
       const comRef = config.find(c => c.key === 'COMENTARIOS_EN_REFERENDO');
       if (comRef) setComentariosReferendo(comRef.value);
       const ptRef = config.find(c => c.key === 'PUNTOS_HABILITADOS_REFERENDO');
@@ -78,11 +89,52 @@ export default function GovernanceScreen({ navigation }) {
     }
   };
 
+  const loadDelegation = async () => {
+    try {
+      const data = await delegatesApi.myDelegations();
+      if (data && data.length > 0) {
+        setCurrentDelegate(data[0]);
+      }
+    } catch (e) {
+      console.warn("No delegation found or error", e);
+    }
+  };
+
   useEffect(() => {
     if (isFocused) {
       loadData();
+      loadDelegation();
     }
   }, [isFocused]);
+
+  const handleAssignDelegate = async () => {
+    if (!delegateId) return Alert.alert('Error', 'Ingresa el ID del miembro.');
+    try {
+      setIsSubmittingDelegate(true);
+      await delegatesApi.assign({ delegate_id: parseInt(delegateId) });
+      Alert.alert('Éxito', 'Delegado asignado exitosamente.');
+      setShowDelegateModal(false);
+      loadDelegation();
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Error al asignar delegado');
+    } finally {
+      setIsSubmittingDelegate(false);
+    }
+  };
+
+  const handleRevokeDelegate = async () => {
+    if (!currentDelegate) return;
+    try {
+      setIsSubmittingDelegate(true);
+      await delegatesApi.revoke(currentDelegate.id);
+      Alert.alert('Éxito', 'Delegación revocada.');
+      setCurrentDelegate(null);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Error al revocar');
+    } finally {
+      setIsSubmittingDelegate(false);
+    }
+  };
 
   const toggleExpand = async (id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -445,33 +497,54 @@ export default function GovernanceScreen({ navigation }) {
             <Users color={COLORS.accent} size={28} />
             <Text style={styles.headerTitle}>{terminology.governance} Comunitaria</Text>
           </View>
-          {userPoints && (
-            <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 6, borderRadius: 12}}>
-              <Text style={{color: COLORS.accent, fontWeight: 'bold'}}>⭐ {userPoints.balance} pts</Text>
-            </View>
-          )}
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <TouchableOpacity 
+              style={{flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.1)', padding: 8, borderRadius: 12, marginRight: 10}}
+              onPress={() => setShowDelegateModal(true)}
+            >
+              <Users color="#fff" size={16} />
+              <Text style={{color: '#fff', marginLeft: 4, fontWeight: 'bold'}}>Delegar</Text>
+            </TouchableOpacity>
+            {userPoints && (
+              <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: 6, borderRadius: 12}}>
+                <Text style={{color: COLORS.accent, fontWeight: 'bold'}}>⭐ {userPoints.balance} pts</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <Text style={styles.subtitle}>
           MutualSol es una economía verdaderamente democrática. Un miembro representa un voto, independientemente del capital aportado. Revisa las propuestas y ejerce tu decisión soberana o delega tu voto a alguien de confianza.
         </Text>
 
-        {sistemaGobernanza === 'DOS_FASES' && (
-          <View style={styles.tabsContainer}>
+        <View style={styles.tabsContainer}>
+          {sistemaGobernanza === 'DOS_FASES' && (
             <TouchableOpacity 
               style={[styles.tab, activeTab === 'debate' && styles.activeTab]}
               onPress={() => setActiveTab('debate')}
             >
-              <Text style={[styles.tabText, activeTab === 'debate' && styles.activeTabText]}>Foro de Debate</Text>
+              <Text style={[styles.tabText, activeTab === 'debate' && styles.activeTabText]}>Debate</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'referendos' && styles.activeTab]}
-              onPress={() => setActiveTab('referendos')}
-            >
-              <Text style={[styles.tabText, activeTab === 'referendos' && styles.activeTabText]}>Referendos Oficiales</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'referendos' && styles.activeTab]}
+            onPress={() => setActiveTab('referendos')}
+          >
+            <Text style={[styles.tabText, activeTab === 'referendos' && styles.activeTabText]}>Votar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab]}
+            onPress={() => navigation.navigate('Board')}
+          >
+            <Text style={styles.tabText}>Junta</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab]}
+            onPress={() => navigation.navigate('Committees')}
+          >
+            <Text style={styles.tabText}>Comités</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.proposalsContainer}>
           {loading ? (
@@ -631,6 +704,60 @@ export default function GovernanceScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Delegation Modal */}
+      <Modal visible={showDelegateModal} transparent={true} animationType="slide" onRequestClose={() => setShowDelegateModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
+              <Text style={styles.modalTitle}>Delegación Líquida</Text>
+              <TouchableOpacity onPress={() => setShowDelegateModal(false)}>
+                <XCircle color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={{color: COLORS.textMuted, fontSize: 13, marginBottom: 20}}>
+              Delega tu poder de voto en alguien de confianza. Tu voto sumará automáticamente en el mismo sentido, a menos que votes directamente, lo cual anula la delegación para esa propuesta.
+            </Text>
+
+            {currentDelegate ? (
+              <View style={{backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: 15, borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#3b82f6', marginBottom: 20}}>
+                <Text style={{color: '#3b82f6', fontWeight: 'bold', fontSize: 16, marginBottom: 5}}>Delegación Activa</Text>
+                <Text style={{color: COLORS.text, marginBottom: 10}}>Has delegado tu voto al Miembro #{currentDelegate.delegate_id}</Text>
+                <TouchableOpacity 
+                  style={[styles.voteBtn, {backgroundColor: 'rgba(239, 68, 68, 0.2)', borderColor: 'rgba(239, 68, 68, 0.5)'}]}
+                  onPress={handleRevokeDelegate}
+                  disabled={isSubmittingDelegate}
+                >
+                  <Unlink color="#ef4444" size={20} />
+                  <Text style={[styles.voteBtnTextYes, {color: '#ef4444'}]}>Revocar Delegación</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.inputLabelModal}>ID del Miembro Delegado</Text>
+                <TextInput
+                  style={[styles.input, {marginBottom: 20}]}
+                  placeholder="Ej. 42"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={delegateId}
+                  onChangeText={setDelegateId}
+                  keyboardType="numeric"
+                />
+                
+                <TouchableOpacity 
+                  style={[styles.submitBtn, {backgroundColor: COLORS.accent}]}
+                  onPress={handleAssignDelegate}
+                  disabled={isSubmittingDelegate}
+                >
+                  <Link2 color={COLORS.background} size={20} />
+                  <Text style={styles.submitBtnText}>{isSubmittingDelegate ? 'Asignando...' : 'Asignar Delegado'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -672,7 +799,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
+    paddingHorizontal: 5,
+    alignItems: 'center'
   },
   inputLabelModal: {
     color: COLORS.text,
@@ -717,7 +845,11 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 5,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   activeTab: {
     backgroundColor: 'rgba(245, 166, 35, 0.1)',

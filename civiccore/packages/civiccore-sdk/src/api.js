@@ -123,9 +123,10 @@ export const gobernanzaApi = {
 // ─────────────────────────────────────────────
 
 export const creditosApi = {
-  solicitar: (data) => request('/payments/credits', { method: 'POST', body: JSON.stringify(data) }),
+  solicitar: (memberId, data) => request(`/payments/credits?member_id=${memberId}`, { method: 'POST', body: JSON.stringify(data) }),
   mios: (memberId) => request(`/payments/credits/${memberId}`),
-  pagar: (creditoId) => request(`/payments/credits/${creditoId}/status`, { method: 'PATCH', body: JSON.stringify("paid") }),
+  listarTodas: () => request('/payments/credits'),
+  cambiarEstado: (creditoId, status) => request(`/payments/credits/${creditoId}/status?status=${status}`, { method: 'PATCH' }),
 };
 
 export const mercadoApi = {

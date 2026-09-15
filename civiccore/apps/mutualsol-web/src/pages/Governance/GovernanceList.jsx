@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { gobernanzaApi, useConfigStore } from '@civiccore/sdk';
-import { Filter, CheckCircle, XCircle, Clock, Plus, Building, Users } from 'lucide-react';
+import { gobernanzaApi, useConfigStore, delegatesApi } from '@civiccore/sdk';
+import { Filter, CheckCircle, XCircle, Clock, Plus, Building, Users, Link as LinkIcon, Unlink } from 'lucide-react';
 import BoardPage from './BoardPage';
 import CommitteesPage from './CommitteesPage';
 
@@ -10,11 +10,62 @@ const GovernanceList = () => {
   const [proposals, setProposals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('debate');
+  
+  // Delegation State
+  const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [delegateId, setDelegateId] = useState('');
+  const [currentDelegate, setCurrentDelegate] = useState(null);
+  const [isSubmittingDelegate, setIsSubmittingDelegate] = useState(false);
+  
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchProposals();
+    fetchMyDelegation();
   }, []);
+
+  const fetchMyDelegation = async () => {
+    try {
+      const data = await delegatesApi.myDelegations();
+      if (data && data.length > 0) {
+        // Find if I have assigned a delegate to someone
+        // Since myDelegations might return both directions, we usually just assign one delegate.
+        // Assuming the API returns the delegate object directly if assigned:
+        setCurrentDelegate(data[0]); 
+      }
+    } catch (e) {
+      console.warn("Could not fetch delegation", e);
+    }
+  };
+
+  const handleAssignDelegate = async () => {
+    if (!delegateId) return alert('Ingresa el ID del miembro.');
+    try {
+      setIsSubmittingDelegate(true);
+      await delegatesApi.assign({ delegate_id: parseInt(delegateId) });
+      alert('Delegado asignado exitosamente.');
+      setShowDelegateModal(false);
+      fetchMyDelegation();
+    } catch (error) {
+      alert(error.message || 'Error al asignar delegado');
+    } finally {
+      setIsSubmittingDelegate(false);
+    }
+  };
+
+  const handleRevokeDelegate = async () => {
+    if (!currentDelegate) return;
+    try {
+      setIsSubmittingDelegate(true);
+      await delegatesApi.revoke(currentDelegate.id);
+      alert('Delegación revocada.');
+      setCurrentDelegate(null);
+    } catch (error) {
+      alert(error.message || 'Error al revocar');
+    } finally {
+      setIsSubmittingDelegate(false);
+    }
+  };
 
   const fetchProposals = async () => {
     try {
@@ -56,10 +107,16 @@ const GovernanceList = () => {
           <h1 className="page-title">{terminology.governance}</h1>
           <p className="text-secondary">Decide el futuro del fondo mutual.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/governance/create')}>
-          <Plus size={18} />
-          Nueva Propuesta
-        </button>
+        <div className="flex gap-4">
+          <button className="btn btn-outline" onClick={() => setShowDelegateModal(true)}>
+            <Users size={18} />
+            Delegar Mi Voto
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/governance/create')}>
+            <Plus size={18} />
+            Nueva Propuesta
+          </button>
+        </div>
       </div>
 
       <div className="flex" style={{ borderBottom: '1px solid var(--border-light)', marginBottom: '2rem' }}>
@@ -165,6 +222,62 @@ const GovernanceList = () => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Delegation Modal */}
+      {showDelegateModal && (
+        <div className="modal-overlay" onClick={() => setShowDelegateModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Delegación Líquida de Voto</h2>
+              <button className="text-muted hover:text-white" onClick={() => setShowDelegateModal(false)}>
+                <XCircle size={24} />
+              </button>
+            </div>
+            
+            <p className="text-secondary mb-6 text-sm">
+              En MutualSol puedes delegar tu poder de voto en otra persona de confianza. 
+              Si esa persona vota, tu voto sumará automáticamente en el mismo sentido, a menos que tú votes directamente, en cuyo caso tu voto directo anulará la delegación.
+            </p>
+
+            {currentDelegate ? (
+              <div className="glass-card p-6 border-l-4 border-l-accent mb-4">
+                <h3 className="font-bold text-lg text-accent mb-2">Delegación Activa</h3>
+                <p className="text-white mb-1">Has delegado tu voto al Miembro #{currentDelegate.delegate_id}</p>
+                <p className="text-muted text-xs mb-4">La delegación estará activa hasta que decidas revocarla o votes manualmente.</p>
+                
+                <button 
+                  className="btn bg-red-500/20 text-red-400 hover:bg-red-500/40 w-full justify-center"
+                  onClick={handleRevokeDelegate}
+                  disabled={isSubmittingDelegate}
+                >
+                  <Unlink size={18} className="mr-2" />
+                  Revocar Delegación
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="form-label">ID del Miembro Delegado</label>
+                <input 
+                  type="number" 
+                  className="form-input mb-6" 
+                  placeholder="Ej. 42"
+                  value={delegateId}
+                  onChange={e => setDelegateId(e.target.value)}
+                />
+                
+                <button 
+                  className="btn btn-primary w-full justify-center"
+                  onClick={handleAssignDelegate}
+                  disabled={isSubmittingDelegate}
+                >
+                  <LinkIcon size={18} className="mr-2" />
+                  {isSubmittingDelegate ? 'Asignando...' : 'Asignar Delegado'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

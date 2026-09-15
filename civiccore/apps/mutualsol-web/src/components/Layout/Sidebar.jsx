@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings } from 'lucide-react';
+import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store } from 'lucide-react';
 import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 
 const Sidebar = () => {
@@ -12,6 +12,7 @@ const Sidebar = () => {
     { to: '/governance', icon: Gavel, label: terminology.governance },
     { to: '/transparency', icon: Shield, label: terminology.transparency },
     { to: '/credits', icon: Wallet, label: 'Créditos' },
+    { to: '/mercado', icon: Store, label: 'Mercado' },
     { to: '/members', icon: Users, label: terminology.members },
     { to: '/organization/events', icon: LayoutDashboard, label: 'Eventos Org.' },
     { to: '/settings', icon: Settings, label: 'Configuración' },

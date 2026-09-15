@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogOut, Bell, Users } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { useAuthStore, membershipApi } from '@civiccore/sdk';
+import { useAuthStore, membershipApi, creditosApi } from '@civiccore/sdk';
 
 export default function HomeScreen({ navigation }) {
   const logout = useAuthStore(state => state.logout);
@@ -14,13 +14,24 @@ export default function HomeScreen({ navigation }) {
   const creditoMax = user?.credito_maximo_usd ?? 0;
   const creditoPct = creditoMax > 0 ? Math.min((saldo / creditoMax) * 100, 100) : 0;
 
-  const [totalMembers, setTotalMembers] = React.useState(null);
+  const [totalMembers, setTotalMembers] = useState(null);
+  const [activeCredit, setActiveCredit] = useState(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     membershipApi.stats()
       .then(res => setTotalMembers(res.total_members))
       .catch(err => console.error("Error fetching stats:", err));
-  }, []);
+      
+    if (user?.id) {
+      creditosApi.mios(user.id)
+        .then(res => {
+          const pending = res.find(c => c.status === 'pending');
+          const active = res.find(c => c.status === 'active');
+          setActiveCredit(active || pending || null);
+        })
+        .catch(console.error);
+    }
+  }, [user]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -84,6 +95,16 @@ export default function HomeScreen({ navigation }) {
           {user?.status === 'withdrawal_requested' && (
             <View style={styles.pendingBanner}>
               <Text style={styles.pendingText}>🚪 Has solicitado tu baja voluntaria. Estás en período de espera.</Text>
+            </View>
+          )}
+
+          {activeCredit && (
+            <View style={[styles.pendingBanner, activeCredit.status === 'active' ? { backgroundColor: 'rgba(74, 222, 128, 0.1)', borderColor: 'rgba(74, 222, 128, 0.3)' } : {}]}>
+              <Text style={[styles.pendingText, activeCredit.status === 'active' ? { color: COLORS.success } : {}]}>
+                {activeCredit.status === 'pending' 
+                  ? `⏳ Tu solicitud de crédito por $${activeCredit.amount_requested} USD está en revisión.`
+                  : `✅ Tienes un crédito activo de $${activeCredit.amount_requested} USD.`}
+              </Text>
             </View>
           )}
         </View>

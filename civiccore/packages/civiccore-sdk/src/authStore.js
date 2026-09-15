@@ -33,7 +33,8 @@ export const useAuthStore = create((set) => ({
     const tokenResponse = await authApi.login(email, password);
     const { storage } = getConfig();
     await storage.setItem('jwt_token', tokenResponse.access_token);
-    await storage.setItem('biometric_jwt_token', tokenResponse.access_token);
+    await storage.setItem('biometric_email', email);
+    await storage.setItem('biometric_password', password);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -41,9 +42,11 @@ export const useAuthStore = create((set) => ({
 
   loginBiometric: async () => {
     const { storage } = getConfig();
-    const token = await storage.getItem('biometric_jwt_token');
-    if (!token) throw new Error("No hay token biométrico");
-    await storage.setItem('jwt_token', token);
+    const email = await storage.getItem('biometric_email');
+    const password = await storage.getItem('biometric_password');
+    if (!email || !password) throw new Error("No hay credenciales biométricas guardadas");
+    const tokenResponse = await authApi.login(email, password);
+    await storage.setItem('jwt_token', tokenResponse.access_token);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -54,7 +57,8 @@ export const useAuthStore = create((set) => ({
     const tokenResponse = await authApi.login(userData.email, userData.password);
     const { storage } = getConfig();
     await storage.setItem('jwt_token', tokenResponse.access_token);
-    await storage.setItem('biometric_jwt_token', tokenResponse.access_token);
+    await storage.setItem('biometric_email', userData.email);
+    await storage.setItem('biometric_password', userData.password);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
@@ -63,6 +67,8 @@ export const useAuthStore = create((set) => ({
   logout: async () => {
     const { storage } = getConfig();
     await storage.removeItem('jwt_token');
+    await storage.removeItem('biometric_email');
+    await storage.removeItem('biometric_password');
     set({ isAuthenticated: false, user: null });
   },
 }));

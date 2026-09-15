@@ -6,13 +6,36 @@ import { COLORS } from '../theme/colors';
 import { gobernanzaApi, configApi } from '@civiccore/sdk';
 
 export default function CreateProposalScreen({ navigation }) {
-  const [type, setType] = useState('automatic'); // 'automatic' or 'human'
+  const [proposalType, setProposalType] = useState('standard');
+  const [category, setCategory] = useState('general');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [variable, setVariable] = useState('');
   const [newValue, setNewValue] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
+  
+  // Modals
+  const [typeModalVisible, setTypeModalVisible] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false); // For variables
   const [valueModalVisible, setValueModalVisible] = useState(false);
+  
+  const PROPOSAL_TYPES = [
+    { id: 'standard', label: 'Estándar', desc: 'Propuesta que requiere acción humana o debate.' },
+    { id: 'automatic', label: 'Implementación Automática', desc: 'Modifica parámetros del sistema al aprobarse.' },
+    { id: 'expulsion', label: 'Expulsión de Miembro', desc: 'Propone remover a un miembro por faltas graves.' },
+    { id: 'division', label: 'División Organizacional', desc: 'Propone dividir la mutual en múltiples fondos.' },
+    { id: 'fusion', label: 'Fusión Organizacional', desc: 'Propone fusionarse con otra organización.' },
+    { id: 'board_election', label: 'Elección de Junta (Plancha)', desc: 'Postular una plancha directiva.' },
+    { id: 'committee_create', label: 'Creación de Comité', desc: 'Proponer un nuevo comité especializado.' }
+  ];
+  
+  const CATEGORIES = [
+    { id: 'general', label: 'Propuesta General' },
+    { id: 'configuracion', label: 'Cambio de Configuración' },
+    { id: 'financiamiento', label: 'Solicitud de Financiamiento' },
+    { id: 'automatica', label: 'Implementación Automática' },
+    { id: 'humana', label: 'Acción Humana Operativa' }
+  ];
   
   const PREDEFINED_VALUES = {
     'SISTEMA_GOBERNANZA': [
@@ -55,11 +78,11 @@ export default function CreateProposalScreen({ navigation }) {
       Alert.alert('Error', 'Por favor llena los campos obligatorios (Título y Exposición de motivos).');
       return;
     }
-    if (type === 'automatic' && (!variable || !newValue)) {
+    if (proposalType === 'automatic' && (!variable || !newValue)) {
       Alert.alert('Error', 'Para propuestas automáticas debes indicar la variable y el nuevo valor.');
       return;
     }
-    if (type === 'automatic' && variable === 'QUORUM_ASAMBLEA' && parseFloat(newValue) > 100) {
+    if (proposalType === 'automatic' && variable === 'QUORUM_ASAMBLEA' && parseFloat(newValue) > 100) {
       Alert.alert('Valor Inválido', 'El porcentaje de quórum no puede ser mayor a 100.');
       return;
     }
@@ -89,8 +112,9 @@ export default function CreateProposalScreen({ navigation }) {
       const data = {
         title,
         content: description,
-        category: type === 'automatic' ? 'configuracion' : 'general',
-        extra_fields: type === 'automatic' ? { variable, new_value: newValue } : {}
+        proposal_type: proposalType,
+        category: proposalType === 'automatic' ? 'configuracion' : category,
+        extra_fields: proposalType === 'automatic' ? { variable, new_value: newValue } : {}
       };
       
       const newProposal = await gobernanzaApi.crearPropuesta(data);
@@ -127,48 +151,52 @@ export default function CreateProposalScreen({ navigation }) {
 
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           
-          <Text style={styles.sectionTitle}>Tipo de Propuesta</Text>
-          <View style={styles.typeSelector}>
-            <TouchableOpacity 
-              style={[styles.typeOption, type === 'automatic' && styles.typeOptionActive]} 
-              onPress={() => setType('automatic')}
-            >
-              <Settings color={type === 'automatic' ? COLORS.accent : COLORS.textMuted} size={24} />
-              <Text style={[styles.typeText, type === 'automatic' && styles.typeTextActive]}>
-                Implementación{'\n'}Automática
-              </Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputLabel}>Tipo de Propuesta *</Text>
+              <TouchableOpacity 
+                style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                onPress={() => setTypeModalVisible(true)}
+              >
+                <Text style={{ color: COLORS.text, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+                  {PROPOSAL_TYPES.find(t => t.id === proposalType)?.label || 'Seleccionar...'}
+                </Text>
+                <ChevronDown color={COLORS.textMuted} size={16} />
+              </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity 
-              style={[styles.typeOption, type === 'human' && styles.typeOptionActive]} 
-              onPress={() => setType('human')}
-            >
-              <Users color={type === 'human' ? COLORS.accent : COLORS.textMuted} size={24} />
-              <Text style={[styles.typeText, type === 'human' && styles.typeTextActive]}>
-                Acción{'\n'}Humana
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.inputLabel, proposalType !== 'standard' && { opacity: 0.5 }]}>Categoría *</Text>
+              <TouchableOpacity 
+                style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, proposalType !== 'standard' && { opacity: 0.5 }]}
+                onPress={() => proposalType === 'standard' && setCategoryModalVisible(true)}
+                disabled={proposalType !== 'standard'}
+              >
+                <Text style={{ color: COLORS.text, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+                  {CATEGORIES.find(c => c.id === category)?.label || 'Seleccionar...'}
+                </Text>
+                <ChevronDown color={COLORS.textMuted} size={16} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.infoBox}>
             <Info color={COLORS.accent} size={16} />
             <Text style={styles.infoText}>
-              {type === 'automatic' 
-                ? "Estas propuestas modifican parámetros del sistema y se ejecutan solas tras ser aprobadas por la asamblea (Smart Contracts)."
-                : "Estas propuestas requieren de intervención humana para ejecutarse, como crear comités, realizar eventos o desarrollar nuevos módulos."}
+              {PROPOSAL_TYPES.find(t => t.id === proposalType)?.desc}
             </Text>
           </View>
 
           <Text style={styles.inputLabel}>Título de la Propuesta *</Text>
           <TextInput
             style={styles.input}
-            placeholder={type === 'automatic' ? "Ej. Reducción de tasa solidaria" : "Ej. Fiesta de fin de año de la mutual"}
+            placeholder="Ej. Título de la propuesta..."
             placeholderTextColor={COLORS.textMuted}
             value={title}
             onChangeText={setTitle}
           />
 
-          {type === 'automatic' && (
+          {proposalType === 'automatic' && (
             <View style={styles.automaticFieldsRow}>
               <View style={[styles.flex1, { flex: 1.2 }]}>
                 <Text style={styles.inputLabel}>Variable *</Text>
@@ -179,7 +207,7 @@ export default function CreateProposalScreen({ navigation }) {
                 >
                   {loadingConfig ? <ActivityIndicator size="small" color={COLORS.accent} /> : (
                     <Text style={{ color: variable ? COLORS.text : COLORS.textMuted, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
-                      {variable ? configVariables.find(v => v.key === variable)?.description || variable : "Seleccionar..."}
+                      {variable ? `${variable} - ${configVariables.find(v => v.key === variable)?.description || 'Sin descripción'}` : "Seleccionar..."}
                     </Text>
                   )}
                   <ChevronDown color={COLORS.textMuted} size={16} />
@@ -212,7 +240,7 @@ export default function CreateProposalScreen({ navigation }) {
             </View>
           )}
 
-          {type === 'automatic' && variable && (
+          {proposalType === 'automatic' && variable && (
             <Text style={{ color: COLORS.textMuted, fontSize: 13, marginBottom: 20, marginTop: -10 }}>
               Valor actual del sistema: <Text style={{ color: COLORS.text, fontWeight: 'bold' }}>{configVariables.find(v => v.key === variable)?.value}</Text>
             </Text>
@@ -238,7 +266,48 @@ export default function CreateProposalScreen({ navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Selector Modal */}
+      {/* Modals for Type and Category */}
+      <Modal visible={typeModalVisible} transparent={true} animationType="slide" onRequestClose={() => setTypeModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTypeModalVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Tipo de Propuesta</Text>
+            <FlatList
+              data={PROPOSAL_TYPES}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalOption, proposalType === item.id && styles.modalOptionSelected]}
+                  onPress={() => { setProposalType(item.id); setTypeModalVisible(false); }}
+                >
+                  <Text style={[styles.modalOptionText, proposalType === item.id && styles.modalOptionTextSelected]}>{item.label}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={categoryModalVisible} transparent={true} animationType="slide" onRequestClose={() => setCategoryModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCategoryModalVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Categoría</Text>
+            <FlatList
+              data={CATEGORIES}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={[styles.modalOption, category === item.id && styles.modalOptionSelected]}
+                  onPress={() => { setCategory(item.id); setCategoryModalVisible(false); }}
+                >
+                  <Text style={[styles.modalOptionText, category === item.id && styles.modalOptionTextSelected]}>{item.label}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Selector Modal (Variables) */}
       <Modal
         visible={modalVisible}
         transparent={true}
@@ -261,7 +330,7 @@ export default function CreateProposalScreen({ navigation }) {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.modalOptionText, variable === item.key && styles.modalOptionTextSelected]}>
-                      {item.description || item.key}
+                      {item.key} - {item.description || 'Sin descripción'}
                     </Text>
                     <Text style={{ color: COLORS.textMuted, fontSize: 11, marginTop: 2 }}>
                       Actual: {item.value}

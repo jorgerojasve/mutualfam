@@ -51,6 +51,10 @@ def create_credit_request(request_in: CreditRequestCreate, member_id: int, db: S
 def get_member_credits(member_id: int, db: Session = Depends(get_db)):
     return CreditService.list_member_credits(db, member_id)
 
+@router.get("/credits", response_model=List[CreditRequestResponse])
+def get_all_credits(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return CreditService.list_all_credits(db, skip, limit)
+
 @router.patch("/credits/{credit_id}/status", response_model=CreditRequestResponse)
 def update_credit_status(credit_id: int, status: CreditStatus, db: Session = Depends(get_db)):
     try:
