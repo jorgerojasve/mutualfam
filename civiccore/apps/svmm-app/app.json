@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Scientific Society",
+    "slug": "scientific-society-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.mutualsol.app"
+    },
+    "web": {}
+  }
+}

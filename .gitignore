@@ -6,3 +6,8 @@
 .npm-cache/
 .npm/
 expo-debug.log
+node_modules/
+venv/
+__pycache__/
+venv/
+__pycache__/
