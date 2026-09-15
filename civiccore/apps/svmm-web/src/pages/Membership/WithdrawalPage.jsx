@@ -53,8 +53,8 @@ const WithdrawalPage = () => {
   return (
     <div className="animate-fade-in max-w-2xl mx-auto mt-8">
       <div className="page-header mb-8">
-        <h1 className="page-title text-2xl font-bold">Salida de la Mutual</h1>
-        <p className="text-secondary">Gestión de baja voluntaria.</p>
+        <h1 className="page-title text-2xl font-bold">Salida de la Sociedad (SVMM)</h1>
+        <p className="text-secondary">Gestión de baja voluntaria y liquidación de haberes.</p>
       </div>
 
       {error && (
@@ -70,7 +70,7 @@ const WithdrawalPage = () => {
             <h2 className="text-xl font-bold">Solicitud en proceso</h2>
           </div>
           <p className="mb-4 text-secondary">
-            Has solicitado tu baja de la mutual. Tu solicitud se hará efectiva el:
+            Has solicitado tu baja de la SVMM. Tu solicitud de retiro y cálculo de liquidación se hará efectiva el:
             <br />
             <strong className="text-primary">{new Date(statusRecord.effective_at).toLocaleString()}</strong>
           </p>
@@ -89,7 +89,7 @@ const WithdrawalPage = () => {
             <h2 className="text-xl font-bold">Solicitar Baja Voluntaria</h2>
           </div>
           <p className="mb-4 text-secondary">
-            Al solicitar tu baja, iniciarás un período de espera de 90 días. Durante este tiempo, tus derechos políticos (voto, asamblea) serán suspendidos.
+            Al solicitar tu baja, iniciarás un período de cierre contable (máximo 6 meses según estatutos). Durante este tiempo, tus derechos políticos en la sociedad científica serán suspendidos y se calculará tu haber a liquidar.
           </p>
           
           <ul className="mb-6 space-y-2 text-sm text-secondary">

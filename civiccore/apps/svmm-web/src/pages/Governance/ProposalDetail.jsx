@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { gobernanzaApi, useAuthStore, useConfigStore } from '@civiccore/sdk';
+import { gobernanzaApi, membershipApi, useAuthStore, useConfigStore } from '@civiccore/sdk';
 import { ArrowLeft, ThumbsUp, ThumbsDown, MessageSquare, Clock, ShieldAlert } from 'lucide-react';
 
 const ProposalDetail = () => {
@@ -13,10 +13,14 @@ const ProposalDetail = () => {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [isVoting, setIsVoting] = useState(false);
+  const [optInExit, setOptInExit] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editReason, setEditReason] = useState('');
+  
+  const [isEditingDefense, setIsEditingDefense] = useState(false);
+  const [editDefenseText, setEditDefenseText] = useState('');
   const [showVersions, setShowVersions] = useState(false);
 
   useEffect(() => {
@@ -44,6 +48,16 @@ const ProposalDetail = () => {
     try {
       setIsVoting(true);
       await gobernanzaApi.votar(id, value, 0);
+      
+      // Manejar el Voto Vinculante de Salida
+      if (optInExit && value === -1) {
+        try {
+          await membershipApi.solicitarBaja();
+        } catch (exitError) {
+          console.error("Error solicitando salida:", exitError);
+        }
+      }
+
       alert('Voto registrado exitosamente');
       fetchProposalData(); // refresh
     } catch (error) {
@@ -72,18 +86,29 @@ const ProposalDetail = () => {
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
-    
     try {
       await gobernanzaApi.crearComentario(id, newComment);
       setNewComment('');
       fetchProposalData();
     } catch (error) {
-      alert('Error al publicar comentario');
+      console.error('Error adding comment:', error);
+      alert('No se pudo añadir el comentario');
     }
   };
 
-  if (!proposal) return <div className="loader mt-8">Cargando...</div>;
+  const handleDefenseSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await gobernanzaApi.editarDefensa(id, editDefenseText);
+      setIsEditingDefense(false);
+      fetchProposalData();
+    } catch (error) {
+      console.error('Error updating defense:', error);
+      alert('Error al actualizar el derecho a réplica');
+    }
+  };
+
+  if (!proposal) return <div className="p-8 text-center"><div className="loader"></div></div>;
 
   const totalVotes = (proposal.votes_yes || 0) + (proposal.votes_no || 0) + (proposal.votes_abstain || 0);
   const quorumProgress = Math.min(100, Math.round((totalVotes / proposal.quorum_needed) * 100));
@@ -205,6 +230,52 @@ const ProposalDetail = () => {
           </div>
         )}
 
+        {/* Defense Section for EXPULSION */}
+        {proposal.proposal_type === 'expulsion' && (
+          <div className="mb-8 p-6" style={{ background: 'var(--bg-primary)', borderRadius: '0.5rem', border: '1px solid var(--border-light)', borderLeft: '4px solid var(--warning-color, #f59e0b)' }}>
+            <h3 className="mb-4 text-warning">Derecho a Réplica (Defensa)</h3>
+            
+            {proposal.defense_text ? (
+              <div className="prose text-secondary mb-4" style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
+                {proposal.defense_text}
+              </div>
+            ) : (
+              <p className="text-muted mb-4 italic">El miembro acusado aún no ha presentado su defensa.</p>
+            )}
+            
+            {user?.id === proposal.target_member_id && (proposal.status === 'draft' || proposal.status === 'debate') && !isEditingDefense && (
+              <button 
+                className="btn btn-secondary btn-sm" 
+                onClick={() => {
+                  setEditDefenseText(proposal.defense_text || '');
+                  setIsEditingDefense(true);
+                }}
+              >
+                {proposal.defense_text ? 'Editar Defensa' : 'Añadir Defensa'}
+              </button>
+            )}
+            
+            {isEditingDefense && (
+              <form onSubmit={handleDefenseSubmit} className="mt-4">
+                <div className="form-group mb-4">
+                  <textarea 
+                    className="form-input" 
+                    rows="6" 
+                    value={editDefenseText} 
+                    onChange={(e) => setEditDefenseText(e.target.value)} 
+                    placeholder="Escribe aquí tu defensa frente a la asamblea..."
+                    required 
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button type="button" className="btn btn-secondary" onClick={() => setIsEditingDefense(false)}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary">Guardar Defensa</button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
         {/* Voting Section */}
         {proposal.status === 'voting' && (
           <div style={{ borderTop: '1px solid var(--border-strong)', paddingTop: '2rem', marginTop: '2rem' }}>
@@ -227,6 +298,22 @@ const ProposalDetail = () => {
                 <ThumbsDown size={20} /> En Contra
               </button>
             </div>
+            
+            {proposal.category === 'CRITICAL' && (
+              <div className="mt-4 p-4 rounded bg-red-50 text-red-800 flex gap-2 items-start" style={{ border: '1px solid #fecaca' }}>
+                <input 
+                  type="checkbox" 
+                  id="optInExit" 
+                  checked={optInExit}
+                  onChange={(e) => setOptInExit(e.target.checked)}
+                  style={{ marginTop: '0.25rem' }}
+                />
+                <label htmlFor="optInExit" className="text-sm cursor-pointer">
+                  <strong>Voto Vinculante de Salida (Opt-in):</strong> Si esta propuesta se aprueba, solicito formalmente mi retiro y liquidación de haberes de la SVMM.
+                </label>
+              </div>
+            )}
+            
             <p className="text-muted mt-4 text-center" style={{ fontSize: '0.875rem' }}>
               Mecanismo: {proposal.voting_mechanism} | Quórum Actual: {totalVotes} / {proposal.quorum_needed} ({quorumProgress}%)
             </p>

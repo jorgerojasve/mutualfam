@@ -52,6 +52,16 @@ def request_withdrawal(db: Session, member_id: int) -> MemberWithdrawalRequest:
     
     return request_record
 
+def create_withdrawal_request(db: Session, member_id: int) -> MemberWithdrawalRequest:
+    """Creates a withdrawal request for forced exits (e.g. expulsion) with a 6 month max deadline"""
+    request_record = MemberWithdrawalRequest(
+        member_id=member_id,
+        effective_at=utcnow() + timedelta(days=180), # 6 meses plazo máximo de liquidación según LEAC
+        status="pending"
+    )
+    db.add(request_record)
+    return request_record
+
 def cancel_withdrawal(db: Session, member_id: int) -> MemberWithdrawalRequest:
     member = db.query(Member).filter(Member.id == member_id).first()
     if not member or member.status != MemberStatus.WITHDRAWAL_REQUESTED:

@@ -24,12 +24,16 @@ class ProposalUpdate(BaseModel):
     content: Optional[str] = None
     edit_reason: Optional[str] = None
 
+class ProposalDefenseUpdate(BaseModel):
+    defense_text: str
+
 class ProposalResponse(ProposalBase):
     id: int
     author_id: int
     status: ProposalStatus
     proposal_type: str
     target_member_id: Optional[int] = None
+    defense_text: Optional[str] = None
     merged_into_id: Optional[int] = None
     created_at: datetime
     voting_starts_at: Optional[datetime] = None

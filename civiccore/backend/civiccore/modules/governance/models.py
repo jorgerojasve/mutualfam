@@ -47,6 +47,7 @@ class Proposal(Base):
     
     # Used for EXPULSION proposals
     target_member_id = Column(Integer, nullable=True)
+    defense_text = Column(Text, nullable=True)
     
     is_anonymous = Column(Boolean, default=False)
     voting_mechanism = Column(Enum(VotingMechanism, values_callable=lambda x: [e.value for e in x]), default=VotingMechanism.SIMPLE)

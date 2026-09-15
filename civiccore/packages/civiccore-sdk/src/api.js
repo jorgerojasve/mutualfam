@@ -109,6 +109,7 @@ export const gobernanzaApi = {
   iniciarReferendo: (id) => request(`/governance/proposals/${id}/start-referendum`, { method: 'POST' }),
   calcularResultados: (id) => request(`/governance/proposals/${id}/results`, { method: 'POST' }),
   editarPropuesta: (id, data) => request(`/governance/proposals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  editarDefensa: (id, defense_text) => request(`/governance/proposals/${id}/defense`, { method: 'PUT', body: JSON.stringify({ defense_text }) }),
   obtenerVersiones: (id) => request(`/governance/proposals/${id}/versions`),
   listarComentarios: (id) => request(`/governance/proposals/${id}/comments`),
   crearComentario: (id, content) => request(`/governance/proposals/${id}/comments`, {

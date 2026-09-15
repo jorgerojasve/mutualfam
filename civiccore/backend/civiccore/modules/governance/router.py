@@ -16,7 +16,7 @@ from .schemas import (
     VoteCreate, VoteResponse, 
     CommentCreate, CommentResponse,
     MemberVotingPointsResponse,
-    ProposalUpdate, ProposalVersionResponse
+    ProposalUpdate, ProposalVersionResponse, ProposalDefenseUpdate
 )
 from .service import GovernanceService
 from .points_service import PointsService
@@ -106,6 +106,26 @@ def update_proposal(proposal_id: int, update_data: ProposalUpdate, db: Session =
         return GovernanceService.update_proposal(db, proposal_id, current_user.id, update_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/proposals/{proposal_id}/defense", response_model=ProposalResponse)
+def update_proposal_defense(
+    proposal_id: int, 
+    update_data: ProposalDefenseUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: Member = Depends(get_current_user)
+):
+    proposal = GovernanceService.get_proposal(db, proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if proposal.target_member_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the target member can add a defense")
+    if proposal.status != ProposalStatus.DEBATE and proposal.status != ProposalStatus.DRAFT:
+        raise HTTPException(status_code=400, detail="Cannot add defense at this stage")
+        
+    proposal.defense_text = update_data.defense_text
+    db.commit()
+    GovernanceService._enrich_proposal(db, proposal)
+    return proposal
 
 @router.post("/proposals/{proposal_id}/vote", response_model=VoteResponse)
 def vote_on_proposal(

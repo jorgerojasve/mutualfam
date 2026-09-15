@@ -13,11 +13,28 @@ def utcnow():
 def initiate_division(db: Session, proposal_id: int, metadata: Dict[str, Any] = None) -> OrganizationEvent:
     """
     Initiates a division process after a DIVISION proposal is approved.
+    Generates a snapshot of the departing members and creates a withdrawal request for their funds.
     """
+    from .mitosis_export import generate_mitosis_snapshot
+    from .withdrawal_service import create_withdrawal_request
+    
+    metadata = metadata or {}
+    leaving_members = metadata.get("leaving_member_ids", [])
+    
+    # Generate the snapshot
+    snapshot_path = generate_mitosis_snapshot(db, leaving_members)
+    metadata["snapshot_path"] = snapshot_path
+    
+    # Auto-withdraw leaving members
+    for m_id in leaving_members:
+        # In a real mitosis, they are marked as WITHDRAWN or similar
+        create_withdrawal_request(db, m_id)
+        
     event = OrganizationEvent(
         event_type="division",
         proposal_id=proposal_id,
-        metadata_=metadata or {}
+        metadata_=metadata,
+        status="completed"
     )
     db.add(event)
     db.commit()

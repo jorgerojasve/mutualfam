@@ -13,24 +13,27 @@ def utcnow():
 def initiate_expulsion(db: Session, proposal_id: int, target_member_id: int) -> MemberExpulsionProcess:
     """
     Called when an EXPULSION proposal is approved.
-    Changes member status to ON_APPEAL.
+    Changes member status to EXPELLED immediately and creates a withdrawal request.
     """
     member = db.query(Member).filter(Member.id == target_member_id).first()
     if not member:
         raise ValueError("Target member not found")
         
-    member.status = MemberStatus.ON_APPEAL
+    member.status = MemberStatus.EXPELLED
     
-    appeal_days = int(settings.get_value("EXPULSION_PERIODO_APELACION_DIAS", "30"))
-    deadline = utcnow() + timedelta(days=appeal_days)
-    
+    # Create the process record for history
     process = MemberExpulsionProcess(
         target_member_id=target_member_id,
         proposal_id=proposal_id,
-        appeal_deadline=deadline,
-        final_status="on_appeal"
+        appeal_deadline=utcnow(),
+        final_status="expelled"
     )
     db.add(process)
+    
+    # Generate automatic withdrawal request (Liquidation)
+    from .withdrawal_service import create_withdrawal_request
+    create_withdrawal_request(db, target_member_id)
+    
     db.commit()
     db.refresh(process)
     
