@@ -80,11 +80,14 @@ const GovernanceList = () => {
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'VOTING': return <span className="badge badge-blue">Votación Activa</span>;
-      case 'DEBATE': return <span className="badge badge-orange">En Debate</span>;
-      case 'APPROVED': return <span className="badge badge-green">Aprobado</span>;
-      case 'REJECTED': return <span className="badge badge-orange">Rechazado</span>;
+    const s = (status || '').toLowerCase();
+    switch (s) {
+      case 'voting': return <span className="badge badge-blue">Votación Activa</span>;
+      case 'debate': return <span className="badge badge-orange">En Debate</span>;
+      case 'approved': return <span className="badge badge-green">Aprobada</span>;
+      case 'rejected': return <span className="badge badge-red" style={{ backgroundColor: 'var(--danger-color, #ef4444)', color: 'white' }}>Rechazada</span>;
+      case 'merged': return <span className="badge badge-purple" style={{ backgroundColor: 'var(--accent-primary, #8b5cf6)', color: 'white' }}>Fusionada</span>;
+      case 'draft': return <span className="badge badge-gray">Borrador</span>;
       default: return <span className="badge">{status}</span>;
     }
   };
@@ -96,9 +99,12 @@ const GovernanceList = () => {
     return category === 'configuracion' ? 'Regla de Sistema' : 'Propuesta General';
   };
 
-  const filteredProposals = proposals.filter(p => 
-    activeTab === 'debate' ? p.status === 'debate' : p.status !== 'debate'
-  );
+  const filteredProposals = proposals.filter(p => {
+    if (activeTab === 'debate') return p.status === 'debate' || p.status === 'draft';
+    if (activeTab === 'referendos') return p.status === 'voting';
+    if (activeTab === 'historial') return ['approved', 'rejected', 'merged'].includes(p.status);
+    return false;
+  });
 
   return (
     <div className="animate-fade-in">
@@ -146,7 +152,21 @@ const GovernanceList = () => {
             cursor: 'pointer'
           }}
         >
-          Referendos
+          Referendos Activos
+        </button>
+        <button 
+          onClick={() => setActiveTab('historial')}
+          style={{ 
+            padding: '1rem 1.5rem', 
+            background: 'transparent', 
+            border: 'none', 
+            color: activeTab === 'historial' ? 'var(--accent-primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'historial' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+            fontWeight: activeTab === 'historial' ? 'bold' : 'normal',
+            cursor: 'pointer'
+          }}
+        >
+          Historial
         </button>
         <button 
           onClick={() => setActiveTab('junta')}

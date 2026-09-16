@@ -176,6 +176,7 @@ class CommitteeResponse(CommitteeBase):
 class DelegationBase(BaseModel):
     delegatee_id: int
     restricted_category: Optional[str] = None
+    restricted_proposal_id: Optional[int] = None
     expires_at: Optional[datetime] = None
 
 class DelegationCreate(DelegationBase):

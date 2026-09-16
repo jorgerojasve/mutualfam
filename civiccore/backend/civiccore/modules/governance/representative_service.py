@@ -162,10 +162,11 @@ class RepresentativeService:
         if delegator_id == delegation_in.delegatee_id:
             raise ValueError("No puedes delegar el voto en ti mismo.")
             
-        # Revoke existing active delegations of the same category
+        # Revoke existing active delegations of the same category or proposal
         existing = db.query(Delegation).filter(
             Delegation.delegator_id == delegator_id,
             Delegation.restricted_category == delegation_in.restricted_category,
+            Delegation.restricted_proposal_id == delegation_in.restricted_proposal_id,
             Delegation.is_active == True
         ).all()
         for e in existing:
@@ -175,6 +176,7 @@ class RepresentativeService:
             delegator_id=delegator_id,
             delegatee_id=delegation_in.delegatee_id,
             restricted_category=delegation_in.restricted_category,
+            restricted_proposal_id=delegation_in.restricted_proposal_id,
             expires_at=delegation_in.expires_at,
             is_active=True
         )

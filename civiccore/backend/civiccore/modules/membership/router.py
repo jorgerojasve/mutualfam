@@ -1,9 +1,10 @@
 """
 Membership Module Router
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
+import json
 
 from ...core.database import get_db
 from ...core.auth import oauth2_scheme, decode_access_token
@@ -140,4 +141,82 @@ from .schemas import OrganizationEventResponse
 @router.get("/organization/events", response_model=List[OrganizationEventResponse])
 def get_organization_events(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
     return organization_service.get_organization_events(db)
+
+# --- Progressive Fusion Routes ---
+from .schemas import FusionProcessResponse, FusionProcessAdvanceRequest, FusionProcessDataUpdate
+
+@router.get("/organization/fusion-processes", response_model=List[FusionProcessResponse])
+def get_fusion_processes(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    return organization_service.get_fusion_processes(db)
+
+@router.get("/organization/fusion-processes/{process_id}", response_model=FusionProcessResponse)
+def get_fusion_process(process_id: int, db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    process = organization_service.get_fusion_process(db, process_id)
+    if not process:
+        raise HTTPException(status_code=404, detail="Fusion process not found")
+    return process
+
+@router.post("/organization/fusion-processes/{process_id}/advance", response_model=FusionProcessResponse)
+def advance_fusion(
+    process_id: int, 
+    request: FusionProcessAdvanceRequest,
+    db: Session = Depends(get_db), 
+    current_user: Member = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can advance fusion stages")
+    from .models import FusionStage
+    try:
+        stage_enum = FusionStage(request.stage)
+        return organization_service.advance_fusion_stage(db, process_id, stage_enum)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/organization/fusion-processes/{process_id}/data", response_model=FusionProcessResponse)
+def update_fusion_data(
+    process_id: int, 
+    request: FusionProcessDataUpdate,
+    db: Session = Depends(get_db), 
+    current_user: Member = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can update fusion data")
+    try:
+        return organization_service.update_fusion_data(
+            db, 
+            process_id, 
+            external_data=request.external_data,
+            internal_data=request.internal_data,
+            conflict_points=request.conflict_points
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/organization/fusion-processes/{process_id}/upload")
+async def upload_fusion_snapshot(
+    process_id: int,
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db), 
+    current_user: Member = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can perform fusion")
+        
+    try:
+        contents = await file.read()
+        snapshot_dict = json.loads(contents)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid JSON file")
+        
+    try:
+        # Execute the fusion (integration) and also mark process as COMPLETED
+        result = organization_service.execute_fusion(db, snapshot_dict)
+        from .models import FusionStage
+        organization_service.advance_fusion_stage(db, process_id, FusionStage.COMPLETED)
+        # Store result in external_data for record
+        organization_service.update_fusion_data(db, process_id, external_data={"integration_result": result})
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 

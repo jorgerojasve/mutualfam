@@ -11,6 +11,7 @@ import CreateProposal from './pages/Governance/CreateProposal';
 import Transparency from './pages/Transparency/Transparency';
 import WithdrawalPage from './pages/Membership/WithdrawalPage';
 import OrganizationEvents from './pages/Membership/OrganizationEvents';
+import FusionProcessDetail from './pages/Membership/FusionProcessDetail';
 import Settings from './pages/Settings/Settings';
 import CreditsPage from './pages/Finance/CreditsPage';
 import { useConfigStore } from '@civiccore/sdk';
@@ -49,6 +50,8 @@ function App() {
           {/* Membership Routes */}
           <Route path="membership/withdrawal" element={<WithdrawalPage />} />
           <Route path="organization/events" element={<OrganizationEvents />} />
+          <Route path="membership/events" element={<Navigate to="/organization/events" />} />
+          <Route path="membership/fusion/:id" element={<FusionProcessDetail />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         

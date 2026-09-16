@@ -83,7 +83,45 @@ export const membershipApi = {
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
   estadoBaja: () => request('/membership/withdrawal/status'),
   estadoExpulsion: (memberId) => request(`/membership/expulsion/${memberId}`),
-  obtenerEventosOrganizacion: () => request('/membership/organization/events')
+  obtenerEventosOrganizacion: () => request('/membership/organization/events'),
+  
+  // Fusion Processes
+  getFusionProcesses: () => request('/membership/organization/fusion-processes'),
+  getFusionProcess: (id) => request(`/membership/organization/fusion-processes/${id}`),
+  advanceFusionProcess: (id, stage) => request(`/membership/organization/fusion-processes/${id}/advance`, {
+    method: 'POST',
+    body: JSON.stringify({ stage })
+  }),
+  updateFusionData: (id, data) => request(`/membership/organization/fusion-processes/${id}/data`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+  uploadFusionSnapshot: async (id, file) => {
+    const { baseURL, storage } = getConfig();
+    const token = await storage.getItem('jwt_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${baseURL}/membership/organization/fusion-processes/${id}/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: formData
+    });
+    
+    let rawText = '';
+    try {
+      rawText = await response.text();
+      const data = JSON.parse(rawText);
+      if (!response.ok) throw new Error(data?.detail || 'Error al subir snapshot.');
+      return data;
+    } catch (error) {
+      if (error.message && error.message !== 'Unexpected end of JSON input') throw error;
+      if (!response.ok) throw new Error(`Error del servidor (${response.status})`);
+      throw error;
+    }
+  }
 };
 
 // ─────────────────────────────────────────────

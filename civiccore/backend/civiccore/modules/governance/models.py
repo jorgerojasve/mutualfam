@@ -29,6 +29,7 @@ class ProposalType(str, enum.Enum):
     EXPULSION = "expulsion"
     DIVISION = "division"
     FUSION = "fusion"
+    FUSION_CONTACT = "fusion_contact"
     BOARD_ELECTION = "board_election"
     COMMITTEE_CREATE = "committee_create"
 
@@ -125,6 +126,7 @@ class Delegation(Base):
     
     # If null, it's a global delegation
     restricted_category = Column(String(50), nullable=True)
+    restricted_proposal_id = Column(Integer, ForeignKey("proposals.id"), nullable=True)
     
     is_active = Column(Boolean, default=True)
     expires_at = Column(DateTime, nullable=True)

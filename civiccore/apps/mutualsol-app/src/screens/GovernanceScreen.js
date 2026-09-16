@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, CheckCircle, XCircle, AlertCircle, Share2, Clock, Plus, Play, CheckSquare, MessageSquare, Send, Link2, Unlink } from 'lucide-react-native';
 import { COLORS } from '../theme/colors';
-import { gobernanzaApi, configApi, delegatesApi } from '@civiccore/sdk';
+import { gobernanzaApi, configApi, delegatesApi, membershipApi } from '@civiccore/sdk';
 import { useAuthStore, useConfigStore } from '@civiccore/sdk';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -46,11 +46,21 @@ export default function GovernanceScreen({ navigation }) {
   const [editContent, setEditContent] = useState('');
   const [editReason, setEditReason] = useState('');
   
-  // Delegation State
+  // Phase 3 Features
+  const [votoVinculante, setVotoVinculante] = useState({});
+  const [editDefenseText, setEditDefenseText] = useState('');
+  const [isEditingDefense, setIsEditingDefense] = useState(false);
+  
   const [showDelegateModal, setShowDelegateModal] = useState(false);
   const [delegateId, setDelegateId] = useState('');
   const [currentDelegate, setCurrentDelegate] = useState(null);
   const [isSubmittingDelegate, setIsSubmittingDelegate] = useState(false);
+  
+  // Per-proposal Delegation State
+  const [showProposalDelegateModal, setShowProposalDelegateModal] = useState(false);
+  const [selectedProposalForDelegation, setSelectedProposalForDelegation] = useState(null);
+  const [proposalDelegateType, setProposalDelegateType] = useState(null); // 'global' | 'specific'
+  const [proposalDelegateId, setProposalDelegateId] = useState('');
   
   const isFocused = useIsFocused();
 
@@ -136,6 +146,26 @@ export default function GovernanceScreen({ navigation }) {
     }
   };
 
+  const handleProposalDelegateSubmit = async () => {
+    if (proposalDelegateType === 'specific') {
+      if (!proposalDelegateId) return Alert.alert('Error', 'Debes ingresar un ID válido');
+      try {
+        setIsSubmittingDelegate(true);
+        await delegatesApi.assign({ 
+          delegatee_id: parseInt(proposalDelegateId),
+          restricted_proposal_id: selectedProposalForDelegation.id
+        });
+      } catch (err) {
+        setIsSubmittingDelegate(false);
+        return Alert.alert('Error', err.message || 'Error al asignar delegado experto');
+      }
+    }
+    
+    setIsSubmittingDelegate(false);
+    setShowProposalDelegateModal(false);
+    handleVote(selectedProposalForDelegation.id, 'abstain');
+  };
+
   const toggleExpand = async (id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId(expandedId === id ? null : id);
@@ -179,6 +209,19 @@ export default function GovernanceScreen({ navigation }) {
 
     try {
       await gobernanzaApi.votar(proposalId, voteValue, points);
+      
+      // Phase 3: Withdrawal request if Vinculante is true and voted 'no' on CRITICAL
+      if (voteType === 'no' && votoVinculante[proposalId]) {
+         try {
+            await membershipApi.solicitarBaja();
+            Alert.alert('Voto y Retiro Registrado', 'Tu decisión ha sido guardada. Se ha iniciado el proceso de liquidación por voto vinculante.');
+         } catch (err) {
+            Alert.alert('Voto Registrado', 'Tu voto fue guardado, pero falló la solicitud de baja: ' + err.message);
+         }
+      } else {
+         Alert.alert('Voto Registrado', 'Tu decisión ha sido guardada exitosamente en la asamblea.');
+      }
+
       // Optimistic update
       setProposals(current => 
         current.map(prop => {
@@ -197,7 +240,6 @@ export default function GovernanceScreen({ navigation }) {
       if (points > 0 && userPoints) {
           setUserPoints(prev => ({ ...prev, balance: prev.balance - points }));
       }
-      Alert.alert('Voto Registrado', 'Tu decisión ha sido guardada exitosamente en la asamblea.');
     } catch (e) {
       Alert.alert('Error', e.message);
       if (e.message.includes('already resolved')) {
@@ -242,6 +284,17 @@ export default function GovernanceScreen({ navigation }) {
       loadData();
     } catch (error) {
       Alert.alert('Error', error.response?.data?.detail || error.message || 'Error al editar');
+    }
+  };
+
+  const handleDefenseSubmit = async (propId) => {
+    try {
+      await gobernanzaApi.editarDefensa(propId, { defense_text: editDefenseText });
+      setIsEditingDefense(false);
+      Alert.alert('Éxito', 'Defensa guardada exitosamente.');
+      loadData();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Error al guardar la defensa');
     }
   };
 
@@ -328,6 +381,46 @@ export default function GovernanceScreen({ navigation }) {
                </View>
             )}
             
+            {/* Phase 3 Defense Section */}
+            {prop.proposal_type === 'expulsion' && (
+              <View style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: 15, borderRadius: 8, borderWidth: 1, borderColor: '#f59e0b', marginBottom: 15 }}>
+                <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 16, marginBottom: 10 }}>Derecho a Réplica (Defensa)</Text>
+                
+                {prop.defense_text ? (
+                  <Text style={{ color: COLORS.text, fontStyle: 'italic', marginBottom: 10 }}>{prop.defense_text}</Text>
+                ) : (
+                  <Text style={{ color: COLORS.textMuted, fontStyle: 'italic', marginBottom: 10 }}>El miembro acusado aún no ha presentado su defensa.</Text>
+                )}
+                
+                {user?.id === prop.target_member_id && (prop.status === 'draft' || prop.status === 'debate') && !isEditingDefense && (
+                  <TouchableOpacity style={[styles.voteBtn, { borderColor: '#f59e0b' }]} onPress={() => { setEditDefenseText(prop.defense_text || ''); setIsEditingDefense(true); }}>
+                    <Text style={{ color: '#f59e0b' }}>{prop.defense_text ? 'Editar Defensa' : 'Añadir Defensa'}</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {isEditingDefense && user?.id === prop.target_member_id && (
+                  <View style={{ marginTop: 10 }}>
+                    <TextInput
+                      style={[styles.inputModal, { height: 100, textAlignVertical: 'top' }]}
+                      value={editDefenseText}
+                      onChangeText={setEditDefenseText}
+                      placeholder="Escribe aquí tu defensa..."
+                      placeholderTextColor={COLORS.textMuted}
+                      multiline
+                    />
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                      <TouchableOpacity style={[styles.voteBtn, { flex: 1, borderColor: COLORS.textMuted }]} onPress={() => setIsEditingDefense(false)}>
+                        <Text style={{ color: COLORS.textMuted }}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.voteBtn, { flex: 1, backgroundColor: '#f59e0b', borderColor: '#f59e0b' }]} onPress={() => handleDefenseSubmit(prop.id)}>
+                        <Text style={{ color: COLORS.background, fontWeight: 'bold' }}>Guardar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
             {userVotes[prop.id] === null || userVotes[prop.id] === undefined ? (
               <View style={styles.votingArea}>
                 {arePointsEnabled && (
@@ -378,11 +471,31 @@ export default function GovernanceScreen({ navigation }) {
                         <Text style={styles.voteBtnTextAbstain}>Abstenerse</Text>
                       </TouchableOpacity>
     
-                      <TouchableOpacity style={[styles.voteBtn, styles.voteDelegate]} onPress={() => handleVote(prop.id, 'delegated')}>
+                      <TouchableOpacity style={[styles.voteBtn, styles.voteDelegate]} onPress={() => {
+                        setSelectedProposalForDelegation(prop);
+                        setProposalDelegateType(null);
+                        setProposalDelegateId('');
+                        setShowProposalDelegateModal(true);
+                      }}>
                         <Share2 color={COLORS.text} size={20} />
                         <Text style={styles.voteBtnTextDelegate}>Delegar</Text>
                       </TouchableOpacity>
                     </View>
+                    
+                    {/* Phase 3 Voto Vinculante Opt-in */}
+                    {prop.category === 'CRITICAL' && (
+                      <TouchableOpacity 
+                        style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15, padding: 10, backgroundColor: 'rgba(239, 68, 68, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: votoVinculante[prop.id] ? COLORS.accent : 'transparent' }}
+                        onPress={() => setVotoVinculante(prev => ({ ...prev, [prop.id]: !prev[prop.id] }))}
+                      >
+                        <View style={{ width: 24, height: 24, borderRadius: 4, borderWidth: 2, borderColor: COLORS.accent, marginRight: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: votoVinculante[prop.id] ? COLORS.accent : 'transparent' }}>
+                          {votoVinculante[prop.id] && <CheckCircle color="#fff" size={16} />}
+                        </View>
+                        <Text style={{ color: COLORS.text, flex: 1, fontSize: 12 }}>
+                          <Text style={{ fontWeight: 'bold' }}>Voto Vinculante de Salida (Opt-in):</Text> Si voto en contra y esta propuesta se aprueba, solicito formalmente mi retiro y liquidación de haberes.
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </>
                 )}
               </View>
@@ -533,6 +646,12 @@ export default function GovernanceScreen({ navigation }) {
             <Text style={[styles.tabText, activeTab === 'referendos' && styles.activeTabText]}>Votar</Text>
           </TouchableOpacity>
           <TouchableOpacity 
+            style={[styles.tab, activeTab === 'historial' && styles.activeTab]}
+            onPress={() => setActiveTab('historial')}
+          >
+            <Text style={[styles.tabText, activeTab === 'historial' && styles.activeTabText]}>Historial</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
             style={[styles.tab]}
             onPress={() => navigation.navigate('Board')}
           >
@@ -549,18 +668,20 @@ export default function GovernanceScreen({ navigation }) {
         <View style={styles.proposalsContainer}>
           {loading ? (
              <ActivityIndicator size="large" color={COLORS.accent} style={{marginTop: 50}} />
-          ) : proposals.filter(p => 
-              sistemaGobernanza === 'DOS_FASES' 
-                ? (activeTab === 'debate' ? p.status === 'debate' : p.status !== 'debate')
-                : true
-            ).length === 0 ? (
+          ) : proposals.filter(p => {
+              const status = (p.status || '').toLowerCase();
+              if (activeTab === 'debate') return status === 'debate' || status === 'draft';
+              if (activeTab === 'historial') return ['approved', 'rejected', 'merged'].includes(status);
+              return status === 'voting';
+            }).length === 0 ? (
              <Text style={{color: COLORS.textMuted, textAlign: 'center', marginTop: 50}}>No hay asambleas activas en esta sección.</Text>
           ) : (
-             proposals.filter(p => 
-              sistemaGobernanza === 'DOS_FASES' 
-                ? (activeTab === 'debate' ? p.status === 'debate' : p.status !== 'debate')
-                : true
-             ).map(renderProposal)
+             proposals.filter(p => {
+              const status = (p.status || '').toLowerCase();
+              if (activeTab === 'debate') return status === 'debate' || status === 'draft';
+              if (activeTab === 'historial') return ['approved', 'rejected', 'merged'].includes(status);
+              return status === 'voting';
+             }).map(renderProposal)
           )}
         </View>
 
@@ -754,6 +875,63 @@ export default function GovernanceScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Proposal Delegation Modal */}
+      <Modal visible={showProposalDelegateModal} transparent={true} animationType="slide" onRequestClose={() => setShowProposalDelegateModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
+              <Text style={styles.modalTitle}>Delegar Voto</Text>
+              <TouchableOpacity onPress={() => setShowProposalDelegateModal(false)}>
+                <XCircle color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+            <Text style={{color: COLORS.textMuted, marginBottom: 15}}>¿A quién deseas delegar tu voto para esta asamblea?</Text>
+            
+            <View style={{gap: 10, marginBottom: 20}}>
+              <TouchableOpacity 
+                style={[styles.voteBtn, { width: '100%', borderColor: proposalDelegateType === 'global' ? COLORS.primary : COLORS.border, backgroundColor: proposalDelegateType === 'global' ? 'rgba(59, 130, 246, 0.1)' : 'transparent' }]}
+                onPress={() => setProposalDelegateType('global')}
+              >
+                <Text style={{color: proposalDelegateType === 'global' ? COLORS.primary : COLORS.text, fontWeight: 'bold'}}>Mi Delegado Global (Abstención)</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.voteBtn, { width: '100%', borderColor: proposalDelegateType === 'specific' ? COLORS.primary : COLORS.border, backgroundColor: proposalDelegateType === 'specific' ? 'rgba(59, 130, 246, 0.1)' : 'transparent' }]}
+                onPress={() => setProposalDelegateType('specific')}
+              >
+                <Text style={{color: proposalDelegateType === 'specific' ? COLORS.primary : COLORS.text, fontWeight: 'bold'}}>Miembro Experto (Solo esta propuesta)</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {proposalDelegateType === 'specific' && (
+              <View style={{marginBottom: 20}}>
+                <Text style={styles.inputLabelModal}>ID del Miembro Experto</Text>
+                <TextInput
+                  style={styles.inputModal}
+                  keyboardType="numeric"
+                  placeholder="Ej: 3"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={proposalDelegateId}
+                  onChangeText={setProposalDelegateId}
+                />
+              </View>
+            )}
+            
+            <TouchableOpacity 
+              style={[styles.submitBtnModal, { opacity: (!proposalDelegateType || isSubmittingDelegate) ? 0.5 : 1 }]}
+              disabled={!proposalDelegateType || isSubmittingDelegate}
+              onPress={handleProposalDelegateSubmit}
+            >
+              {isSubmittingDelegate ? (
+                 <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                 <Text style={styles.submitBtnTextModal}>Confirmar Delegación</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

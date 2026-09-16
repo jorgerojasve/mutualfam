@@ -256,12 +256,34 @@ class GovernanceService:
         if str(ConfigService.get_value(db, "ENABLE_DELEGATES", "true")).lower() == "true":
             allow_override = str(ConfigService.get_value(db, "ALLOW_LIQUID_DELEGATION_OVERRIDE", "true")).lower() == "true"
             
-            # Find all active delegations valid for this category
-            active_delegations = db.query(Delegation).filter(
+            # Find all active delegations that could apply
+            active_delegations_raw = db.query(Delegation).filter(
                 Delegation.is_active == True,
-                (Delegation.expires_at == None) | (Delegation.expires_at > utcnow()),
-                (Delegation.restricted_category == None) | (Delegation.restricted_category == proposal.category)
+                (Delegation.expires_at == None) | (Delegation.expires_at > utcnow())
             ).all()
+            
+            # Resolve delegations per delegator: 
+            # Priority 1: restricted_proposal_id == proposal.id
+            # Priority 2: restricted_category == proposal.category
+            # Priority 3: global (both null)
+            active_delegations = []
+            delegator_map = {}
+            for d in active_delegations_raw:
+                if d.restricted_proposal_id is not None and d.restricted_proposal_id != proposal.id:
+                    continue
+                if d.restricted_proposal_id is None and d.restricted_category is not None and d.restricted_category != proposal.category:
+                    continue
+                
+                score = 0
+                if d.restricted_proposal_id == proposal.id: score = 3
+                elif d.restricted_category == proposal.category: score = 2
+                else: score = 1
+                
+                existing_score = delegator_map.get(d.delegator_id, (None, 0))[1]
+                if score > existing_score:
+                    delegator_map[d.delegator_id] = (d, score)
+                    
+            active_delegations = [item[0] for item in delegator_map.values()]
             
             direct_voter_ids = {v.member_id for v in votes}
             
@@ -303,6 +325,8 @@ class GovernanceService:
             threshold = float(ConfigService.get_value(db, "DIVISION_UMBRAL_APROBACION", "0.75"))
         elif proposal.proposal_type == ProposalType.FUSION:
             threshold = float(ConfigService.get_value(db, "FUSION_UMBRAL_APROBACION", "0.66"))
+        elif proposal.proposal_type == ProposalType.FUSION_CONTACT:
+            threshold = 0.50 # Contacto inicial con 50% es suficiente
 
         if not quorum_reached:
             # Automatic failure if quorum not met
@@ -337,6 +361,9 @@ class GovernanceService:
                 organization_service.initiate_division(db, proposal.id, proposal.extra_fields)
             elif proposal.proposal_type == ProposalType.FUSION:
                 organization_service.initiate_fusion(db, proposal.id, proposal.extra_fields)
+            elif proposal.proposal_type == ProposalType.FUSION_CONTACT:
+                external_org_name = proposal.extra_fields.get("external_org_name", "Organización Desconocida") if proposal.extra_fields else "Organización Desconocida"
+                organization_service.create_fusion_contact(db, proposal.id, external_org_name, proposal.extra_fields)
                 
             # Representative Governance hooks
             from .representative_service import RepresentativeService

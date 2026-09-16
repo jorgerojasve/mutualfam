@@ -66,3 +66,25 @@ class OrganizationEventResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class FusionProcessResponse(BaseModel):
+    id: int
+    initiator_proposal_id: int
+    external_org_name: str
+    stage: str
+    external_data: Dict[str, Any]
+    internal_data: Dict[str, Any]
+    conflict_points: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class FusionProcessAdvanceRequest(BaseModel):
+    stage: str
+
+class FusionProcessDataUpdate(BaseModel):
+    external_data: Optional[Dict[str, Any]] = None
+    internal_data: Optional[Dict[str, Any]] = None
+    conflict_points: Optional[Dict[str, Any]] = None

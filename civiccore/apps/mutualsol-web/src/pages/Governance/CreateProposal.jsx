@@ -15,6 +15,9 @@ const CreateProposal = () => {
     voting_mechanism: 'simple',
     is_anonymous: false,
     
+    // Fusion Contact fields
+    external_org_name: '',
+    
     // Board Election fields
     slate_name: '',
     candidates: [
@@ -72,7 +75,8 @@ const CreateProposal = () => {
       } else {
         const payload = {
           ...formData,
-          target_member_id: formData.proposal_type === 'expulsion' ? parseInt(formData.target_member_id) : null
+          target_member_id: formData.proposal_type === 'expulsion' ? parseInt(formData.target_member_id) : null,
+          extra_fields: formData.proposal_type === 'fusion_contact' ? { external_org_name: formData.external_org_name } : undefined
         };
         newProp = await gobernanzaApi.crearPropuesta(payload);
       }
@@ -114,7 +118,8 @@ const CreateProposal = () => {
                 <option value="standard">Estándar</option>
                 <option value="expulsion">Expulsión de Miembro</option>
                 <option value="division">División Organizacional</option>
-                <option value="fusion">Fusión Organizacional</option>
+                <option value="fusion">Fusión Organizacional (Legado)</option>
+                <option value="fusion_contact">Contacto de Fusión (Progresiva)</option>
                 <option value="board_election">Elección de Junta (Plancha)</option>
                 <option value="committee_create">Creación de Comité</option>
               </select>
@@ -137,7 +142,7 @@ const CreateProposal = () => {
             </div>
           </div>
 
-          {['standard', 'expulsion', 'division', 'fusion'].includes(formData.proposal_type) && (
+          {['standard', 'expulsion', 'division', 'fusion', 'fusion_contact'].includes(formData.proposal_type) && (
             <>
               <div className="form-group mb-6">
                 <label className="form-label">Título de la Propuesta</label>
@@ -196,10 +201,32 @@ const CreateProposal = () => {
           {formData.proposal_type === 'fusion' && (
             <div className="mb-6 p-4 border border-yellow-500 bg-yellow-500/10 rounded-lg">
               <p className="text-sm text-yellow-400 font-bold">
-                🟡 Fusión Organizacional
+                🟡 Fusión Organizacional (Directa)
               </p>
               <p className="text-sm text-yellow-400 mt-1">
                 ⚠️ Umbral requerido: 66% a favor en ambas organizaciones. Detalla los términos del acuerdo de fusión.
+              </p>
+            </div>
+          )}
+
+          {formData.proposal_type === 'fusion_contact' && (
+            <div className="mb-6 p-4 border border-purple-500 bg-purple-500/10 rounded-lg">
+              <h3 className="text-lg font-bold mb-4 text-purple-400">Proponer Contacto de Fusión</h3>
+              
+              <div className="form-group mb-4">
+                <label className="form-label text-purple-300">Nombre de la organización contactada</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Ej. Mutual Metropolitana"
+                  value={formData.external_org_name}
+                  onChange={(e) => setFormData({...formData, external_org_name: e.target.value})}
+                  required
+                />
+              </div>
+              <p className="text-sm text-purple-400 mt-1">
+                ℹ️ Esta propuesta iniciará el <strong>Flujo Progresivo de Fusión</strong>. 
+                Requiere 50% de aprobación para establecer el primer contacto formal.
               </p>
             </div>
           )}
