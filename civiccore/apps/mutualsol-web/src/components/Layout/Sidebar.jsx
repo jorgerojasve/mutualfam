@@ -1,29 +1,42 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store } from 'lucide-react';
-import { useAuthStore, useConfigStore } from '@civiccore/sdk';
+import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store, Database, Handshake } from 'lucide-react';
+import { useAuthStore, useConfigStore, useManifest } from '@civiccore/sdk';
 
 const Sidebar = () => {
   const { user } = useAuthStore();
   const { terminology } = useConfigStore();
+  const manifest = useManifest();
+  const m = manifest?.modules || {};
 
   const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/governance', icon: Gavel, label: terminology.governance },
-    { to: '/transparency', icon: Shield, label: terminology.transparency },
-    { to: '/credits', icon: Wallet, label: 'Créditos' },
-    { to: '/mercado', icon: Store, label: 'Mercado' },
-    { to: '/members', icon: Users, label: terminology.members },
-    { to: '/organization/events', icon: LayoutDashboard, label: 'Eventos Org.' },
-    { to: '/settings', icon: Settings, label: 'Configuración' },
-  ];
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard', show: true },
+    { to: '/governance', icon: Gavel, label: terminology.governance, show: m.governance !== false },
+    { to: '/transparency', icon: Shield, label: terminology.transparency, show: m.transparency !== false },
+    { to: '/credits', icon: Wallet, label: 'Créditos', show: m.credits !== false },
+    { to: '/mercado', icon: Store, label: 'Mercado', show: m.mercado !== false },
+    { to: '/members', icon: Users, label: terminology.members, show: m.members !== false },
+    { to: '/organization/events', icon: Handshake, label: 'Fusión de Mutuales', show: m.fusion !== false },
+    { to: '/settings', icon: Settings, label: 'Configuración', show: true },
+  ].filter(item => item.show);
+  
+  // En dev mode, mostrar el DB Manager
+  if (import.meta.env.DEV) {
+    navItems.push({ to: '/dev/db-manager', icon: Database, label: 'DB Manager (Dev)' });
+  }
 
   return (
     <aside className="sidebar glass-panel">
       <div className="sidebar-header">
         <div className="logo-container">
-          <div className="logo-icon"></div>
-          <h2 className="logo-text text-gradient">MutualSol</h2>
+          {manifest?.logo ? (
+            <img src={manifest.logo} alt={manifest.shortName} className="sidebar-logo-img" />
+          ) : (
+            <>
+              <div className="logo-icon"></div>
+              <h2 className="logo-text text-gradient">{manifest?.shortName || 'CivicCore'}</h2>
+            </>
+          )}
         </div>
       </div>
       

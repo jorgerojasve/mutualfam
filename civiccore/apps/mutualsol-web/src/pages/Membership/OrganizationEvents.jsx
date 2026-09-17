@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { membershipApi } from '@civiccore/sdk';
+import { membershipApi, fusionApi } from '@civiccore/sdk';
 import { GitBranch, GitMerge, Clock, CheckCircle, Handshake } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const OrganizationEvents = () => {
   const [fusionProcesses, setFusionProcesses] = useState([]);
+  const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -16,7 +17,7 @@ const OrganizationEvents = () => {
       setIsLoading(true);
       const [eventsData, fusionData] = await Promise.all([
         membershipApi.obtenerEventosOrganizacion(),
-        membershipApi.getFusionProcesses()
+        fusionApi.listProcesses()
       ]);
       setEvents(eventsData);
       setFusionProcesses(fusionData);
@@ -43,14 +44,11 @@ const OrganizationEvents = () => {
 
   const getStageLabel = (stage) => {
     const labels = {
-      'intention': 'Intención',
       'exploration': 'Exploración',
-      'evaluation': 'Evaluación',
-      'negotiation': 'Negociación',
-      'referendum': 'Referendo',
-      'integration': 'Integración',
-      'completed': 'Completado',
-      'rejected': 'Rechazado'
+      'due_diligence': 'Due Diligence',
+      'voting': 'Votación',
+      'completed': 'Completada',
+      'cancelled': 'Cancelada'
     };
     return labels[stage] || stage;
   };
@@ -80,23 +78,23 @@ const OrganizationEvents = () => {
                   <div 
                     key={`fusion-${process.id}`} 
                     className="glass-card p-6 flex items-start gap-4 cursor-pointer hover:border-purple-500/50 transition-colors"
-                    onClick={() => navigate(`/membership/fusion/${process.id}`)}
+                    onClick={() => navigate(`/membership/fusion/${process.proposal_id}`)}
                   >
                     <div className="p-3 bg-purple-500/10 rounded-full">
                       <Handshake className="text-purple-400" size={24} />
                     </div>
                     <div className="flex-1">
                       <div className="flex justify-between items-start">
-                        <h3 className="text-xl font-bold mb-1">Fusión con {process.external_org_name}</h3>
-                        <span className={`badge ${process.stage === 'completed' ? 'badge-green' : process.stage === 'rejected' ? 'badge-red' : 'badge-purple'}`}>
-                          {getStageLabel(process.stage)}
+                        <h3 className="text-xl font-bold mb-1">Fusión con {process.target_organization_name}</h3>
+                        <span className={`badge ${process.current_stage === 'completed' ? 'badge-green' : process.current_stage === 'cancelled' ? 'badge-red' : 'badge-purple'}`}>
+                          {getStageLabel(process.current_stage)}
                         </span>
                       </div>
                       <p className="text-secondary text-sm mb-3">
                         Iniciado: {new Date(process.created_at).toLocaleDateString()}
                       </p>
                       <div className="text-sm bg-black/20 p-3 rounded text-secondary font-mono">
-                        Propuesta Origen: #{process.initiator_proposal_id}
+                        Propuesta Origen: #{process.proposal_id}
                       </div>
                     </div>
                   </div>

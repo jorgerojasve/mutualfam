@@ -14,6 +14,7 @@ import OrganizationEvents from './pages/Membership/OrganizationEvents';
 import FusionProcessDetail from './pages/Membership/FusionProcessDetail';
 import Settings from './pages/Settings/Settings';
 import CreditsPage from './pages/Finance/CreditsPage';
+import DbManager from './pages/Dev/DbManager';
 import { useConfigStore } from '@civiccore/sdk';
 
 function App() {
@@ -53,6 +54,9 @@ function App() {
           <Route path="membership/events" element={<Navigate to="/organization/events" />} />
           <Route path="membership/fusion/:id" element={<FusionProcessDetail />} />
           <Route path="settings" element={<Settings />} />
+          
+          {/* Dev Routes */}
+          <Route path="dev/db-manager" element={<DbManager />} />
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />

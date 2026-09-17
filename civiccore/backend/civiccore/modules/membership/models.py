@@ -21,15 +21,7 @@ class MemberStatus(str, enum.Enum):
     DECEASED = "deceased"
     MOROSO_BAJA = "moroso_baja"
 
-class FusionStage(str, enum.Enum):
-    INTENTION = "intention"
-    EXPLORATION = "exploration"
-    EVALUATION = "evaluation"
-    NEGOTIATION = "negotiation"
-    REFERENDUM = "referendum"
-    INTEGRATION = "integration"
-    COMPLETED = "completed"
-    REJECTED = "rejected"
+
 
 class Member(Base):
     __tablename__ = "members"
@@ -93,18 +85,5 @@ class OrganizationEvent(Base):
     status = Column(String(50), default="in_progress")  # in_progress, completed, failed
     metadata_ = Column("metadata", JSON, default=dict)
 
-class FusionProcess(Base):
-    __tablename__ = "fusion_processes"
 
-    id = Column(Integer, primary_key=True, index=True)
-    initiator_proposal_id = Column(Integer, nullable=False)
-    external_org_name = Column(String(200), nullable=False)
-    stage = Column(Enum(FusionStage), default=FusionStage.INTENTION)
-    
-    external_data = Column(JSON, default=dict)
-    internal_data = Column(JSON, default=dict)
-    conflict_points = Column(JSON, default=dict)
-    
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

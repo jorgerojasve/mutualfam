@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
-import { Settings as SettingsIcon, AlertTriangle, Shield, Bell, Key } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Shield, Bell, Key, Activity } from 'lucide-react';
+import ModuleStatusCard from '../../components/ModuleStatusCard';
 
 const Settings = () => {
   const { user } = useAuthStore();
@@ -29,6 +30,9 @@ const Settings = () => {
           </button>
           <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3">
             <Key size={18} /> Seguridad
+          </button>
+          <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3 mt-4 border-t border-white/5 pt-4">
+            <Activity size={18} /> Estado del Sistema
           </button>
         </div>
 
@@ -74,6 +78,11 @@ const Settings = () => {
             </div>
           </div>
 
+        </div>
+
+        {/* Estado del Sistema */}
+        <div className="col-span-1 md:col-span-3 mt-8">
+          <ModuleStatusCard />
         </div>
       </div>
     </div>

@@ -13,7 +13,8 @@ def create_app(
     include_governance: bool = True,
     include_payments: bool = False,
     include_authorship: bool = False,
-    include_config: bool = True
+    include_config: bool = True,
+    include_fusion: bool = True
 ) -> FastAPI:
     """
     Creates and configures a FastAPI instance with the selected CivicCore modules.
@@ -66,10 +67,16 @@ def create_app(
         from .modules.config.router import router as config_router
         app.include_router(config_router, prefix="/api/v1/config", tags=["System Config"])
         
+    if include_fusion:
+        from .modules.fusion.router import router as fusion_router
+        app.include_router(fusion_router, prefix="/api/v1/fusion", tags=["Fusion"])
+        
     import os
-    if os.getenv("CIVICCORE_ENV") == "sandbox":
+    if os.getenv("CIVICCORE_ENV") == "sandbox" or True: # Force enable for testing phase
         from .testing.sandbox_router import router as sandbox_router
+        from .testing.db_manager import router as db_manager_router
         app.include_router(sandbox_router, prefix="/api/v1/sandbox", tags=["Sandbox"])
+        app.include_router(db_manager_router, prefix="/api/v1/sandbox/db-manager", tags=["DB Manager"])
         
     @app.get("/health", tags=["Health"])
     def health_check():

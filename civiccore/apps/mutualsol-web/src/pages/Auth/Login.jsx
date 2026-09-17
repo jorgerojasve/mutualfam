@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '@civiccore/sdk';
+import { useAuthStore, useManifest } from '@civiccore/sdk';
 import { LogIn, Mail, Lock } from 'lucide-react';
 
 const Login = () => {
   const { login, isAuthenticated } = useAuthStore();
+  const manifest = useManifest();
   const navigate = useNavigate();
   const [email, setEmail] = useState('admin@mutualsol.com');
   const [password, setPassword] = useState('admin123');
@@ -33,13 +34,17 @@ const Login = () => {
 
   return (
     <div className="auth-container">
-      <div className="glass-card auth-card animate-slide-up">
+      <div className="glass-card auth-card animate-slide-up" style={manifest.coverImage ? { backgroundImage: `url(${manifest.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
         <div className="auth-logo">
-          <div className="auth-logo-icon flex items-center justify-center">
-            <LogIn color="white" size={28} />
-          </div>
-          <h2 className="text-gradient">MutualSol</h2>
-          <p className="text-muted">Acceso a la Gobernanza Central</p>
+          {manifest.logo ? (
+            <img src={manifest.logo} alt={manifest.shortName} className="auth-logo-img mb-4 mx-auto" style={{ maxHeight: '80px' }} />
+          ) : (
+            <div className="auth-logo-icon flex items-center justify-center">
+              <LogIn color="white" size={28} />
+            </div>
+          )}
+          <h2 className="text-gradient">{manifest.name || 'CivicCore'}</h2>
+          <p className="text-muted">{manifest.tagline || 'Acceso a la Plataforma'}</p>
         </div>
 
         {error && (

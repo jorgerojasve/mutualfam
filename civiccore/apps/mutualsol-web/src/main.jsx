@@ -4,9 +4,11 @@ import App from './App.jsx';
 import './index.css';
 
 import { initCivicCore } from '@civiccore/sdk';
+import manifest from './manifest.js';
 
 // Adaptador de LocalStorage para la Web
 initCivicCore({
+  manifest,
   storage: {
     getItem: async (key) => localStorage.getItem(key),
     setItem: async (key, val) => localStorage.setItem(key, val),

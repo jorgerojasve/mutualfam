@@ -3,6 +3,10 @@ from civiccore.factory import create_app
 from civiccore.core.database import Base, engine, SessionLocal
 import uvicorn
 from contextlib import asynccontextmanager
+from civiccore.core.config import settings
+
+from manifest import MANIFEST
+settings.manifest = MANIFEST
 
 # Import mutual-specific routers
 from api import mercado, tasas
