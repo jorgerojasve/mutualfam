@@ -1,5 +1,5 @@
 import React from 'react';
-import { useManifest, FRAMEWORK_MATURITY, MODULE_MATURITY } from '@civiccore/sdk';
+import { useManifest, useConfigStore, FRAMEWORK_MATURITY, MODULE_MATURITY } from '@civiccore/sdk';
 import { ShieldCheck, TestTube, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
 
 const LEVEL_COLORS = {
@@ -33,11 +33,17 @@ const MODULE_NAMES = {
 
 const ModuleStatusCard = () => {
   const manifest = useManifest();
+  const { maturity } = useConfigStore();
   const m = manifest?.modules || {};
   const appMaturity = manifest?.appMaturity;
   
+  const apiFrameworkMaturity = maturity?.framework || FRAMEWORK_MATURITY;
+  const apiModuleMaturity = (maturity?.modules && Object.keys(maturity.modules).length > 0) 
+    ? maturity.modules 
+    : MODULE_MATURITY;
+
   // Filtrar los modulos activos para esta instancia
-  const activeModules = Object.entries(MODULE_MATURITY)
+  const activeModules = Object.entries(apiModuleMaturity)
     .filter(([key]) => m[key] !== false)
     .reduce((acc, [key, value]) => {
       acc[key] = value;
@@ -70,9 +76,9 @@ const ModuleStatusCard = () => {
             </div>
           )}
           <div className="flex justify-between items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-lg">
-            <span className="text-sm font-bold">CivicCore v{FRAMEWORK_MATURITY.version}:</span>
-            <span className={`px-2 py-1 rounded-full text-xs font-bold border ${LEVEL_COLORS[FRAMEWORK_MATURITY.level]}`}>
-              {FRAMEWORK_MATURITY.label} (MRL {FRAMEWORK_MATURITY.level})
+            <span className="text-sm font-bold">CivicCore v{apiFrameworkMaturity.version}:</span>
+            <span className={`px-2 py-1 rounded-full text-xs font-bold border ${LEVEL_COLORS[apiFrameworkMaturity.level]}`}>
+              {apiFrameworkMaturity.label} (MRL {apiFrameworkMaturity.level})
             </span>
           </div>
         </div>

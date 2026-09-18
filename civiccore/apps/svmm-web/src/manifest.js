@@ -19,10 +19,11 @@ const manifest = {
   modules: {
     governance:    true,
     transparency:  true,
+    payments:      true,
     credits:       false,
     mercado:       false,
     members:       true,
-    fusion:        false,
+    fusion:        true,
     board:         true,
     delegates:     false,
   },

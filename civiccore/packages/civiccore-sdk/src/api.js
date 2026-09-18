@@ -167,7 +167,8 @@ export const mercadoApi = {
 // CONFIG API
 // ─────────────────────────────────────────────
 export const configApi = {
-  getVariables: () => request('/config/')
+  getVariables: () => request('/config/'),
+  getMaturity: () => request('/config/maturity')
 };
 
 // ─────────────────────────────────────────────
