@@ -1,28 +1,45 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore, membershipApi } from '@civiccore/sdk';
+import { useAuthStore, membershipApi, gobernanzaApi } from '@civiccore/sdk';
 import { Users, TrendingUp, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const mockChartData = [
+  { name: 'Ene', aportes: 4000, creditos: 2400 },
+  { name: 'Feb', aportes: 3000, creditos: 1398 },
+  { name: 'Mar', aportes: 2000, creditos: 9800 },
+  { name: 'Abr', aportes: 2780, creditos: 3908 },
+  { name: 'May', aportes: 1890, creditos: 4800 },
+  { name: 'Jun', aportes: 2390, creditos: 3800 },
+];
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [stats, setStats] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const [stats, setStats] = useState(null);
+  const [activeProposals, setActiveProposals] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
         setIsLoading(true);
-        const data = await membershipApi.stats();
-        setStats(data);
+        const [statsData, proposalsData] = await Promise.all([
+          membershipApi.stats(),
+          gobernanzaApi.listarPropuestas()
+        ]);
+        setStats(statsData);
+        // Filter voting proposals
+        const votingCount = proposalsData.filter(p => p.status === 'VOTING').length;
+        setActiveProposals(votingCount);
       } catch (error) {
-        console.error("Failed to load membership stats", error);
+        console.error("Failed to load dashboard data", error);
       } finally {
         setIsLoading(false);
       }
     };
     
-    fetchStats();
+    fetchData();
   }, []);
 
   return (
@@ -33,7 +50,10 @@ const Dashboard = () => {
           <p className="text-secondary">Aquí tienes el resumen actual de la mutual.</p>
         </div>
         <div className="flex gap-4">
-          <button className="btn btn-outline">
+          <button 
+            className="btn btn-outline border-green-500/50 text-green-400 hover:bg-green-500/10"
+            onClick={() => navigate('/payments')}
+          >
             + Aportar
           </button>
           <button 
@@ -84,16 +104,31 @@ const Dashboard = () => {
               <TrendingUp size={20} className="text-green" />
             </div>
           </div>
-          <div className="stat-value">3</div>
+          <div className="stat-value">{isLoading ? '...' : activeProposals}</div>
           <p className="stat-footer text-muted">Requieren tu atención</p>
         </div>
       </div>
 
-      <div className="dashboard-charts mt-8">
-        <div className="glass-panel" style={{ padding: '2rem', minHeight: '300px' }}>
-          <h3>Actividad Reciente</h3>
-          <div className="flex items-center justify-center h-full text-muted mt-8">
-            Aquí integraremos un gráfico interactivo con Recharts para visualizar las finanzas y la actividad de referendos.
+      <div className="dashboard-charts mt-8 grid grid-cols-1 gap-8">
+        <div className="glass-panel p-6 min-h-[300px]">
+          <h3 className="font-bold text-white mb-6">Balance Financiero (Mock)</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={mockChartData}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                <XAxis dataKey="name" stroke="#ffffff50" />
+                <YAxis stroke="#ffffff50" />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#000000f0', borderColor: '#ffffff20' }}
+                  itemStyle={{ color: '#fff' }}
+                />
+                <Bar dataKey="aportes" fill="#4ade80" name="Aportes" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="creditos" fill="#f97316" name="Créditos Otorgados" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>

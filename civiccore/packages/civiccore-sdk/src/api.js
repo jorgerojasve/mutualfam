@@ -79,6 +79,7 @@ export const authApi = {
 
 export const membershipApi = {
   stats: () => request('/membership/stats'),
+  getMembers: () => request('/membership/'),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
   estadoBaja: () => request('/membership/withdrawal/status'),
@@ -156,6 +157,14 @@ export const creditosApi = {
   mios: (memberId) => request(`/payments/credits/${memberId}`),
   listarTodas: () => request('/payments/credits'),
   cambiarEstado: (creditoId, status) => request(`/payments/credits/${creditoId}/status?status=${status}`, { method: 'PATCH' }),
+};
+
+export const paymentsApi = {
+  listarPlanes: () => request('/payments/plans'),
+  crearPlan: (data) => request('/payments/plans', { method: 'POST', body: JSON.stringify(data) }),
+  misTransacciones: (memberId) => request(`/payments/transactions/${memberId}`),
+  registrarTransaccion: (data) => request('/payments/transactions', { method: 'POST', body: JSON.stringify(data) }),
+  cambiarEstadoTransaccion: (txId, status) => request(`/payments/transactions/${txId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
 
 export const mercadoApi = {

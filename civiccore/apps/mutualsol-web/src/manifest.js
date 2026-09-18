@@ -21,7 +21,7 @@ const manifest = {
     transparency:  true,
     payments:      true,
     credits:       true,
-    mercado:       true,
+    mercado:       false,
     members:       true,
     fusion:        true,
     board:         true,

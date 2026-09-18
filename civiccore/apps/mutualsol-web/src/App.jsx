@@ -13,8 +13,10 @@ import WithdrawalPage from './pages/Membership/WithdrawalPage';
 import OrganizationEvents from './pages/Membership/OrganizationEvents';
 import FusionProcessDetail from './pages/Membership/FusionProcessDetail';
 import MitosisPage from './pages/Membership/MitosisPage';
+import MembersList from './pages/Membership/MembersList';
 import Settings from './pages/Settings/Settings';
 import CreditsPage from './pages/Finance/CreditsPage';
+import PaymentsPage from './pages/Finance/PaymentsPage';
 import DbManager from './pages/Dev/DbManager';
 import { useConfigStore } from '@civiccore/sdk';
 
@@ -44,10 +46,11 @@ function App() {
           
           {/* Transparency Route */}
           <Route path="transparency" element={<Transparency />} />
-          
+          {/* Finance & Modules */}
+          <Route path="payments" element={<PaymentsPage />} />
           <Route path="credits" element={<CreditsPage />} />
           <Route path="mercado" element={<div className="p-8">Mercado Solidario en construcción</div>} />
-          <Route path="members" element={<div className="p-8">Directorio de Miembros en construcción</div>} />
+          <Route path="members" element={<MembersList />} />
           
           {/* Membership Routes */}
           <Route path="membership/withdrawal" element={<WithdrawalPage />} />
