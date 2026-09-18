@@ -50,6 +50,7 @@ class GovernanceService:
             
             p.votes_yes = 0.0
             p.votes_no = 0.0
+            p.votes_null = 0.0
             p.votes_abstain = 0.0
             
             sistema_ponderacion = ConfigService.get_value(db, "SISTEMA_PONDERACION_PUNTOS", "lineal")
@@ -68,10 +69,12 @@ class GovernanceService:
                 # Como aquí solo sumamos, la implementación real del welfare bonus es mejor hacerla en el cálculo oficial o al guardar el voto.
                 # Por ahora dejemos el cálculo enriquecido idéntico al calculate oficial.
                 
-                if v.vote_value > 0:
+                if v.vote_value == 1:
                     p.votes_yes += weight
-                elif v.vote_value < 0:
+                elif v.vote_value == -1:
                     p.votes_no += weight
+                elif v.vote_value == 2:
+                    p.votes_null += weight
                 else:
                     p.votes_abstain += 1.0 # Abstain always 1? Yes.
                     
@@ -226,6 +229,7 @@ class GovernanceService:
         # We override standard mechanism results to include Points intensity
         yes_votes = 0.0
         no_votes = 0.0
+        null_votes = 0.0
         
         for v in votes:
             weight = 1.0
@@ -246,10 +250,12 @@ class GovernanceService:
                 
             final_weight = weight * welfare_multiplier
             
-            if v.vote_value > 0:
+            if v.vote_value == 1:
                 yes_votes += final_weight
-            elif v.vote_value < 0:
+            elif v.vote_value == -1:
                 no_votes += final_weight
+            elif v.vote_value == 2:
+                null_votes += final_weight
                 
         # Liquid Democracy: Add delegated votes
         from .models import Delegation
@@ -296,12 +302,14 @@ class GovernanceService:
                 delegatee_vote = next((v for v in votes if v.member_id == delegation.delegatee_id), None)
                 if delegatee_vote:
                     # Delegatee voted, add 1.0 to their choice (ignoring points for delegated votes for simplicity/fairness)
-                    if delegatee_vote.vote_value > 0:
+                    if delegatee_vote.vote_value == 1:
                         yes_votes += 1.0
-                    elif delegatee_vote.vote_value < 0:
+                    elif delegatee_vote.vote_value == -1:
                         no_votes += 1.0
+                    elif delegatee_vote.vote_value == 2:
+                        null_votes += 1.0
                         
-        results = {"yes": yes_votes, "no": no_votes, "total_casted": len(votes), "passed": yes_votes > no_votes}
+        results = {"yes": yes_votes, "no": no_votes, "null": null_votes, "total_casted": len(votes), "passed": yes_votes > no_votes}
         
         # We need to know the required quorum to see if the proposal is valid
         # We can leverage _enrich_proposal to calculate it dynamically

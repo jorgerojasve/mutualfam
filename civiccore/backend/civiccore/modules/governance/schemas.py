@@ -41,6 +41,7 @@ class ProposalResponse(ProposalBase):
     
     votes_yes: Optional[float] = 0.0
     votes_no: Optional[float] = 0.0
+    votes_null: Optional[float] = 0.0
     votes_abstain: Optional[float] = 0.0
     votes_delegated: Optional[float] = 0.0
     quorum_needed: Optional[int] = 100

@@ -48,7 +48,7 @@ const ProposalDetail = () => {
   };
 
   const handleVote = async (value) => {
-    const voteLabel = value === 1 ? 'A Favor' : value === -1 ? 'En Contra' : 'Abstención/Delegar';
+    const voteLabel = value === 1 ? 'Aprobado' : value === -1 ? 'Rechazado' : value === 2 ? 'Nulo' : 'Abstención/Delegar';
     if (!window.confirm(`¿Estás seguro de registrar tu voto como: ${voteLabel}?`)) return;
     
     try {
@@ -139,7 +139,7 @@ const ProposalDetail = () => {
 
   if (!proposal) return <div className="p-8 text-center"><div className="loader"></div></div>;
 
-  const totalVotes = (proposal.votes_yes || 0) + (proposal.votes_no || 0) + (proposal.votes_abstain || 0);
+  const totalVotes = (proposal.votes_yes || 0) + (proposal.votes_no || 0) + (proposal.votes_null || 0) + (proposal.votes_abstain || 0);
   const quorumProgress = Math.min(100, Math.round((totalVotes / proposal.quorum_needed) * 100));
 
   const pStatus = (proposal.status || '').toLowerCase();
@@ -251,6 +251,21 @@ const ProposalDetail = () => {
             <div className="prose text-secondary mb-8" style={{ fontSize: '1.125rem', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
               {proposal.content}
             </div>
+            
+            {proposal.proposal_type === 'division' && (
+              <div className="bg-orange-500/10 p-4 rounded-xl border border-orange-500/20 mb-8 flex justify-between items-center">
+                <div>
+                  <h4 className="text-orange-400 font-bold">Proceso de Escisión (Mitosis)</h4>
+                  <p className="text-sm text-secondary">Esta propuesta activa una división organizacional.</p>
+                </div>
+                <button 
+                  className="btn bg-orange-600 hover:bg-orange-500 text-white border-none" 
+                  onClick={() => navigate(`/membership/mitosis/${id}`)}
+                >
+                  Gestionar Mitosis
+                </button>
+              </div>
+            )}
           </>
         )}
 
@@ -331,7 +346,15 @@ const ProposalDetail = () => {
                 onClick={() => handleVote(1)}
                 disabled={isVoting}
               >
-                <ThumbsUp size={20} /> A Favor
+                <ThumbsUp size={20} /> Aprobado
+              </button>
+              <button 
+                className="btn flex-1" 
+                style={{ padding: '1rem', fontSize: '1rem', backgroundColor: '#6b7280', color: 'white', border: 'none' }}
+                onClick={() => handleVote(2)}
+                disabled={isVoting}
+              >
+                Nulo
               </button>
               <button 
                 className="btn btn-secondary flex-1" 
@@ -355,7 +378,7 @@ const ProposalDetail = () => {
                 onClick={() => handleVote(-1)}
                 disabled={isVoting}
               >
-                <ThumbsDown size={20} /> En Contra
+                <ThumbsDown size={20} /> Rechazado
               </button>
             </div>
             

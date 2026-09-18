@@ -12,6 +12,7 @@ import Transparency from './pages/Transparency/Transparency';
 import WithdrawalPage from './pages/Membership/WithdrawalPage';
 import OrganizationEvents from './pages/Membership/OrganizationEvents';
 import FusionProcessDetail from './pages/Membership/FusionProcessDetail';
+import MitosisPage from './pages/Membership/MitosisPage';
 import Settings from './pages/Settings/Settings';
 import CreditsPage from './pages/Finance/CreditsPage';
 import DbManager from './pages/Dev/DbManager';
@@ -53,6 +54,7 @@ function App() {
           <Route path="organization/events" element={<OrganizationEvents />} />
           <Route path="membership/events" element={<Navigate to="/organization/events" />} />
           <Route path="membership/fusion/:id" element={<FusionProcessDetail />} />
+          <Route path="membership/mitosis/:id" element={<MitosisPage />} />
           <Route path="settings" element={<Settings />} />
           
           {/* Dev Routes */}

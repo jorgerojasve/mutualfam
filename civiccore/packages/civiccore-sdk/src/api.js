@@ -87,6 +87,14 @@ export const membershipApi = {
 };
 
 // ─────────────────────────────────────────────
+// Módulo: Mitosis (Escisión)
+// ─────────────────────────────────────────────
+
+export const mitosisApi = {
+  exportSnapshot: (data) => request('/membership/mitosis/export', { method: 'POST', body: JSON.stringify(data) })
+};
+
+// ─────────────────────────────────────────────
 // Módulo: Fusión
 // ─────────────────────────────────────────────
 

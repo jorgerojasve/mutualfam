@@ -142,3 +142,19 @@ from .schemas import OrganizationEventResponse
 def get_organization_events(db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
     return organization_service.get_organization_events(db)
 
+# --- Mitosis Endpoints ---
+from . import mitosis_export
+from pydantic import BaseModel
+
+class MitosisExportRequest(BaseModel):
+    leaving_member_ids: List[int]
+    snapshot_name: str = "mitosis_snapshot"
+
+@router.post("/mitosis/export")
+def export_mitosis_snapshot(request: MitosisExportRequest, db: Session = Depends(get_db), current_user: Member = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    file_path = mitosis_export.generate_mitosis_snapshot(db, request.leaving_member_ids, request.snapshot_name)
+    return {"status": "success", "file_path": file_path}
+
+
