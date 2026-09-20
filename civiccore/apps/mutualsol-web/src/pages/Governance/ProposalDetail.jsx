@@ -248,9 +248,11 @@ const ProposalDetail = () => {
           <>
             <h1 className="page-title mb-6">{proposal.title}</h1>
             
-            <div className="prose text-secondary mb-8" style={{ fontSize: '1.125rem', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
-              {proposal.content}
-            </div>
+            <div 
+              className="prose text-secondary mb-8 proposal-content-html" 
+              style={{ fontSize: '1.125rem', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}
+              dangerouslySetInnerHTML={{ __html: proposal.content }}
+            />
             
             {proposal.proposal_type === 'division' && (
               <div className="bg-orange-500/10 p-4 rounded-xl border border-orange-500/20 mb-8 flex justify-between items-center">
@@ -264,6 +266,41 @@ const ProposalDetail = () => {
                 >
                   Gestionar Mitosis
                 </button>
+              </div>
+            )}
+
+            {proposal.proposal_type === 'board_election' && proposal.extra_fields?.candidates && (
+              <div className="mb-8 p-6" style={{ background: 'var(--bg-primary)', borderRadius: '0.5rem', border: '1px solid var(--accent-primary)' }}>
+                <h3 className="mb-4 text-accent">Plancha: {proposal.extra_fields.slate_name}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {proposal.extra_fields.candidates.map((cand, idx) => (
+                    <div key={idx} className="glass-card p-4 border border-white/10 flex items-start gap-4">
+                      <div className="avatar bg-accent/20 text-accent font-bold">
+                        #{cand.member_id}
+                      </div>
+                      <div>
+                        <p className="font-bold text-white mb-1">{cand.position}</p>
+                        {cand.bio && <p className="text-sm text-muted">{cand.bio}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {proposal.proposal_type === 'committee_create' && proposal.extra_fields?.committee_name && (
+              <div className="mb-8 p-6" style={{ background: 'var(--bg-primary)', borderRadius: '0.5rem', border: '1px solid #3b82f6' }}>
+                <h3 className="mb-4 text-blue-400">Creación de Comité: {proposal.extra_fields.committee_name}</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="glass-card p-4 border border-white/10">
+                    <p className="text-sm text-secondary mb-1">Área de Enfoque</p>
+                    <p className="font-bold">{proposal.extra_fields.committee_area || 'Área General'}</p>
+                  </div>
+                  <div className="glass-card p-4 border border-white/10">
+                    <p className="text-sm text-secondary mb-1">Líder Propuesto</p>
+                    <p className="font-bold">Miembro #{proposal.extra_fields.lead_member_id}</p>
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -282,7 +319,7 @@ const ProposalDetail = () => {
                 {v.edit_reason && <p className="text-sm italic mb-2 text-muted">Motivo: {v.edit_reason}</p>}
                 <div className="p-3 bg-card-bg rounded" style={{ fontSize: '0.875rem' }}>
                   <h4 className="font-medium mb-1">{v.title}</h4>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{v.content}</p>
+                  <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: v.content }} />
                 </div>
               </div>
             ))}

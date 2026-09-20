@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { gobernanzaApi, boardApi, committeesApi } from '@civiccore/sdk';
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
+import InteractiveEditor from '../../components/Governance/InteractiveEditor';
 
 const CreateProposal = () => {
   const navigate = useNavigate();
@@ -157,15 +158,11 @@ const CreateProposal = () => {
               </div>
 
               <div className="form-group mb-6">
-                <label className="form-label">Contenido Detallado</label>
-                <textarea 
-                  className="form-input" 
-                  rows="8" 
-                  placeholder="Explica detalladamente el contexto, el problema y la solución propuesta..."
+                <label className="form-label">Contenido Detallado y Multimedia</label>
+                <InteractiveEditor 
                   value={formData.content}
-                  onChange={(e) => setFormData({...formData, content: e.target.value})}
-                  required
-                ></textarea>
+                  onChange={(val) => setFormData({...formData, content: val})}
+                />
               </div>
             </>
           )}

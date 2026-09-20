@@ -92,6 +92,31 @@ class GovernanceService:
             p.quorum_needed = int(math.ceil(total_members * (quorum_percentage / 100.0)))
             if p.quorum_needed < 1:
                 p.quorum_needed = 1
+                
+            # Representative Governance: Attach Slate / Committee Data to extra_fields for UI rendering
+            from .models import ProposalType, BoardSlate, BoardCandidate, Committee, CommitteeMember
+            if p.proposal_type == ProposalType.BOARD_ELECTION:
+                slate = db.query(BoardSlate).filter(BoardSlate.proposal_id == p.id).first()
+                if slate:
+                    cands = db.query(BoardCandidate).filter(BoardCandidate.slate_id == slate.id).all()
+                    if p.extra_fields is None: p.extra_fields = {}
+                    # Must make a copy or create a new dict so SQLAlchemy knows it changed, but we are just reading so it's fine.
+                    extra = dict(p.extra_fields)
+                    extra['slate_name'] = slate.name
+                    extra['candidates'] = [{"position": c.position, "member_id": c.member_id, "bio": c.bio} for c in cands]
+                    p.extra_fields = extra
+                    
+            elif p.proposal_type == ProposalType.COMMITTEE_CREATE:
+                committee = db.query(Committee).filter(Committee.proposal_id == p.id).first()
+                if committee:
+                    lead = db.query(CommitteeMember).filter(CommitteeMember.committee_id == committee.id, CommitteeMember.role == "leader").first()
+                    if p.extra_fields is None: p.extra_fields = {}
+                    extra = dict(p.extra_fields)
+                    extra['committee_name'] = committee.name
+                    extra['committee_area'] = committee.area
+                    extra['lead_member_id'] = lead.member_id if lead else None
+                    p.extra_fields = extra
+
         return p
 
     @staticmethod

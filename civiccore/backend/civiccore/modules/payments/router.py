@@ -3,7 +3,7 @@ Payments Module Router
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from ...core.database import get_db
 from ...core.permissions import require_role
@@ -27,6 +27,10 @@ def get_payment_plans(db: Session = Depends(get_db)):
 @router.post("/transactions", response_model=TransactionResponse)
 def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db)):
     return PaymentService.create_transaction(db, tx_in)
+
+@router.get("/transactions", response_model=List[TransactionResponse])
+def get_all_transactions(status: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return PaymentService.list_all_transactions(db, status, skip, limit)
 
 @router.get("/transactions/{member_id}", response_model=List[TransactionResponse])
 def get_member_transactions(member_id: int, db: Session = Depends(get_db)):

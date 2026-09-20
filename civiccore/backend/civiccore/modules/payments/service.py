@@ -81,6 +81,13 @@ class PaymentService:
     def list_member_transactions(db: Session, member_id: int) -> List[Transaction]:
         return db.query(Transaction).filter(Transaction.member_id == member_id).order_by(Transaction.created_at.desc()).all()
 
+    @staticmethod
+    def list_all_transactions(db: Session, status: str = None, skip: int = 0, limit: int = 100) -> List[Transaction]:
+        query = db.query(Transaction)
+        if status:
+            query = query.filter(Transaction.status == status)
+        return query.order_by(Transaction.created_at.desc()).offset(skip).limit(limit).all()
+
 from .models import CreditRequest, CreditStatus
 from .schemas import CreditRequestCreate
 

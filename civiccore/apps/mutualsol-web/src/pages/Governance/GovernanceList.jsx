@@ -227,7 +227,7 @@ const GovernanceList = () => {
                 
                 <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem' }}>{proposal.title}</h3>
                 <p className="text-secondary" style={{ fontSize: '0.875rem', marginBottom: '1.5rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                  {proposal.content}
+                  {proposal.content ? proposal.content.replace(/<[^>]*>?/gm, '') : ''}
                 </p>
                 
                 <div className="flex justify-between items-center" style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1rem' }}>

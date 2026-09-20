@@ -92,7 +92,8 @@ app = create_app(
     include_membership=True,
     include_governance=True,
     include_payments=True,
-    include_authorship=False
+    include_authorship=False,
+    include_fund=True
 )
 
 @app.middleware("http")

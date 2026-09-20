@@ -25,6 +25,10 @@ class CivicCoreSettings(BaseSettings):
     # App Manifest
     manifest: dict = {}
 
+    # Telegram Integration
+    telegram_bot_token: Optional[str] = None
+    telegram_storage_chat_id: Optional[str] = None
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]

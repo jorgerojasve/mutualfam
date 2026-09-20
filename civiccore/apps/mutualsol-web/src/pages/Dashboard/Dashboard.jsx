@@ -2,16 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore, membershipApi, gobernanzaApi } from '@civiccore/sdk';
 import { Users, TrendingUp, AlertTriangle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const mockChartData = [
-  { name: 'Ene', aportes: 4000, creditos: 2400 },
-  { name: 'Feb', aportes: 3000, creditos: 1398 },
-  { name: 'Mar', aportes: 2000, creditos: 9800 },
-  { name: 'Abr', aportes: 2780, creditos: 3908 },
-  { name: 'May', aportes: 1890, creditos: 4800 },
-  { name: 'Jun', aportes: 2390, creditos: 3800 },
-];
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -110,26 +100,8 @@ const Dashboard = () => {
       </div>
 
       <div className="dashboard-charts mt-8 grid grid-cols-1 gap-8">
-        <div className="glass-panel p-6 min-h-[300px]">
-          <h3 className="font-bold text-white mb-6">Balance Financiero (Mock)</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={mockChartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-                <XAxis dataKey="name" stroke="#ffffff50" />
-                <YAxis stroke="#ffffff50" />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#000000f0', borderColor: '#ffffff20' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="aportes" fill="#4ade80" name="Aportes" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="creditos" fill="#f97316" name="Créditos Otorgados" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="glass-panel p-6 min-h-[300px] flex items-center justify-center text-slate-500">
+          <p>Gráfico temporalmente deshabilitado</p>
         </div>
       </div>
     </div>

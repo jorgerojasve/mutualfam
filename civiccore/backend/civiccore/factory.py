@@ -14,7 +14,9 @@ def create_app(
     include_payments: bool = False,
     include_authorship: bool = False,
     include_config: bool = True,
-    include_fusion: bool = True
+    include_fusion: bool = True,
+    include_fund: bool = False,
+    include_media: bool = True
 ) -> FastAPI:
     """
     Creates and configures a FastAPI instance with the selected CivicCore modules.
@@ -70,6 +72,14 @@ def create_app(
     if include_fusion:
         from .modules.fusion.router import router as fusion_router
         app.include_router(fusion_router, prefix="/api/v1/fusion", tags=["Fusion"])
+        
+    if include_fund:
+        from .modules.fund.router import router as fund_router
+        app.include_router(fund_router, prefix="/api/v1/fund", tags=["Fund"])
+        
+    if include_media:
+        from .modules.media.router import router as media_router
+        app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
         
     import os
     if os.getenv("CIVICCORE_ENV") == "sandbox" or True: # Force enable for testing phase

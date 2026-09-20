@@ -9,10 +9,15 @@ const request = async (endpoint, options = {}) => {
   const token = await storage.getItem('jwt_token');
 
   const headers = {
-    'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
+
+  // Solo forzamos application/json si el body NO es FormData
+  // El navegador asume multipart/form-data automáticamente cuando es FormData
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(`${baseURL}${endpoint}`, {
     ...options,
@@ -163,6 +168,7 @@ export const paymentsApi = {
   listarPlanes: () => request('/payments/plans'),
   crearPlan: (data) => request('/payments/plans', { method: 'POST', body: JSON.stringify(data) }),
   misTransacciones: (memberId) => request(`/payments/transactions/${memberId}`),
+  listarTodas: (status = '') => request(status ? `/payments/transactions?status=${status}` : '/payments/transactions'),
   registrarTransaccion: (data) => request('/payments/transactions', { method: 'POST', body: JSON.stringify(data) }),
   cambiarEstadoTransaccion: (txId, status) => request(`/payments/transactions/${txId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
@@ -198,4 +204,39 @@ export const delegatesApi = {
   assign: (data) => request('/governance/delegations', { method: 'POST', body: JSON.stringify(data) }),
   myDelegations: () => request('/governance/delegations/mine'),
   revoke: (id) => request(`/governance/delegations/${id}`, { method: 'DELETE' })
+};
+
+// ─────────────────────────────────────────────
+// Módulo: Fondo Mutuo Quincenal
+// ─────────────────────────────────────────────
+
+export const fundApi = {
+  getSummary: () => request('/fund/summary'),
+  getRate: () => request('/fund/rate'),
+  listCycles: (skip = 0, limit = 100) => request(`/fund/cycles?skip=${skip}&limit=${limit}`),
+  openCycle: (data) => request('/fund/cycles', { method: 'POST', body: JSON.stringify(data) }),
+  closeCycle: (cycleId) => request(`/fund/cycles/${cycleId}/close`, { method: 'POST' }),
+  registerContribution: (cycleId, memberId, data) => request(`/fund/cycles/${cycleId}/contributions?member_id=${memberId}`, { method: 'POST', body: JSON.stringify(data) })
+};
+
+export const mediaApi = {
+  uploadFile: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const { storage } = getConfig();
+    const token = await storage.getItem('jwt_token');
+    
+    return request('/media/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+  },
+  getMediaUrl: (fileId) => {
+    const { baseURL } = getConfig();
+    return `${baseURL}/media/${fileId}`;
+  }
 };

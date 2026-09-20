@@ -1,19 +1,33 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store, Database, Handshake } from 'lucide-react';
-import { useAuthStore, useConfigStore, useManifest } from '@civiccore/sdk';
+import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store, Database, Handshake, ShieldCheck, PiggyBank } from 'lucide-react';
+import { useAuthStore, useConfigStore, useManifest, boardApi } from '@civiccore/sdk';
+import { useState, useEffect } from 'react';
 
 const Sidebar = () => {
   const { user } = useAuthStore();
   const { terminology } = useConfigStore();
   const manifest = useManifest();
   const m = manifest?.modules || {};
+  const [isBoardMember, setIsBoardMember] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      boardApi.getCurrentBoard()
+        .then(board => {
+          setIsBoardMember(board.some(b => b.member_id === user.id && b.active));
+        })
+        .catch(console.error);
+    }
+  }, [user]);
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', show: true },
+    { to: '/board-panel', icon: ShieldCheck, label: 'Panel de Junta', show: isBoardMember },
     { to: '/governance', icon: Gavel, label: terminology.governance, show: m.governance !== false },
     { to: '/transparency', icon: Shield, label: terminology.transparency, show: m.transparency !== false },
-    { to: '/credits', icon: Wallet, label: 'Créditos', show: m.credits !== false },
+    { to: '/fund', icon: PiggyBank, label: 'Fondo Mutuo', show: true },
+    { to: '/payments', icon: Wallet, label: 'Pagos Legacy', show: m.credits !== false },
     { to: '/mercado', icon: Store, label: 'Mercado', show: m.mercado !== false },
     { to: '/members', icon: Users, label: terminology.members, show: m.members !== false },
     { to: '/organization/events', icon: Handshake, label: 'Fusión de Mutuales', show: m.fusion !== false },

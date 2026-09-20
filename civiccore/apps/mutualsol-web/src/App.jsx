@@ -8,6 +8,8 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import GovernanceList from './pages/Governance/GovernanceList';
 import ProposalDetail from './pages/Governance/ProposalDetail';
 import CreateProposal from './pages/Governance/CreateProposal';
+import BoardPanel from './pages/Board/BoardPanel';
+import FundPage from './pages/Fund/FundPage';
 import Transparency from './pages/Transparency/Transparency';
 import WithdrawalPage from './pages/Membership/WithdrawalPage';
 import OrganizationEvents from './pages/Membership/OrganizationEvents';
@@ -43,6 +45,8 @@ function App() {
           <Route path="governance" element={<GovernanceList />} />
           <Route path="governance/create" element={<CreateProposal />} />
           <Route path="governance/:id" element={<ProposalDetail />} />
+          <Route path="board-panel" element={<BoardPanel />} />
+          <Route path="fund" element={<FundPage />} />
           
           {/* Transparency Route */}
           <Route path="transparency" element={<Transparency />} />
