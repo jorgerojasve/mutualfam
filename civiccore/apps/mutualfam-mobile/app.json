@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Mutual Familiar",
+    "slug": "mutualfam-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "sdkVersion": "57.0.0"
+  }
+}

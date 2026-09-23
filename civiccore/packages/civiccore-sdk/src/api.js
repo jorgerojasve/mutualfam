@@ -10,6 +10,7 @@ const request = async (endpoint, options = {}) => {
 
   const headers = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    'X-Organization-ID': await storage.getItem('organizationId') || '1',
     ...options.headers,
   };
 
@@ -98,6 +99,26 @@ export const membershipApi = {
 
 export const mitosisApi = {
   exportSnapshot: (data) => request('/membership/mitosis/export', { method: 'POST', body: JSON.stringify(data) })
+};
+
+// ─────────────────────────────────────────────
+// Módulo: Préstamos Familiares
+// ─────────────────────────────────────────────
+
+export const loansApi = {
+  getLoans: () => request('/loans/'),
+  createLoan: (data) => request('/loans/', { method: 'POST', body: JSON.stringify(data) }),
+  cancelLoan: (loanId) => request(`/loans/${loanId}`, { method: 'DELETE' }),
+  contribute: (loanId, data) => request(`/loans/${loanId}/contribute`, { method: 'POST', body: JSON.stringify(data) })
+};
+
+// ─────────────────────────────────────────────
+// Módulo: Fondos Comunes Familiares
+// ─────────────────────────────────────────────
+
+export const fundsApi = {
+  getFunds: () => request('/funds/'),
+  contribute: (fundId, data) => request(`/funds/${fundId}/contribute`, { method: 'POST', body: JSON.stringify(data) })
 };
 
 // ─────────────────────────────────────────────

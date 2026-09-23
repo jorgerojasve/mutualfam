@@ -21,6 +21,46 @@ class MemberStatus(str, enum.Enum):
     DECEASED = "deceased"
     MOROSO_BAJA = "moroso_baja"
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    is_active = Column(Boolean, default=True)
+
+    def __repr__(self):
+        return f"<Organization {self.id} - {self.name}>"
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(150), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    phone = Column(String(20), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    def __repr__(self):
+        return f"<User {self.email}>"
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    role = Column(String(50), default="member") # e.g. "admin", "member"
+    status = Column(Enum(MemberStatus), default=MemberStatus.ACTIVE)
+    joined_at = Column(DateTime, default=utcnow)
+
+    def __repr__(self):
+        return f"<OrganizationMembership User:{self.user_id} Org:{self.organization_id} Role:{self.role}>"
+
 
 
 class Member(Base):
