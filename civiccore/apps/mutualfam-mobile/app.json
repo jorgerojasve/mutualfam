@@ -3,6 +3,7 @@
     "name": "Mutual Familiar",
     "slug": "mutualfam-mobile",
     "version": "1.0.0",
+    "scheme": "mutualfam",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {

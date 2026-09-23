@@ -21,12 +21,21 @@ class MemberStatus(str, enum.Enum):
     DECEASED = "deceased"
     MOROSO_BAJA = "moroso_baja"
 
+class InviteStatus(str, enum.Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
 class Organization(Base):
     __tablename__ = "organizations"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(String(255), nullable=True)
+    
+    founder_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    grace_period_ends_at = Column(DateTime, nullable=True)
+    
     created_at = Column(DateTime, default=utcnow)
     is_active = Column(Boolean, default=True)
 
@@ -57,9 +66,27 @@ class OrganizationMembership(Base):
     role = Column(String(50), default="member") # e.g. "admin", "member"
     status = Column(Enum(MemberStatus), default=MemberStatus.ACTIVE)
     joined_at = Column(DateTime, default=utcnow)
+    invited_by_token = Column(String(64), nullable=True)
 
     def __repr__(self):
         return f"<OrganizationMembership User:{self.user_id} Org:{self.organization_id} Role:{self.role}>"
+
+class OrganizationInvite(Base):
+    __tablename__ = "organization_invites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    proposal_id = Column(Integer, nullable=True) 
+
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    max_uses = Column(Integer, nullable=True)
+    uses_count = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    status = Column(Enum(InviteStatus), default=InviteStatus.ACTIVE)
+
+    created_at = Column(DateTime, default=utcnow)
 
 
 

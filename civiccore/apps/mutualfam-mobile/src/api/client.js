@@ -36,6 +36,14 @@ export const authApi = {
   me: async () => {
     const { data } = await apiClient.get('/membership/me');
     return data;
+  },
+  register: async (email, password, fullName) => {
+    const { data } = await apiClient.post('/auth/register', {
+      email,
+      password,
+      full_name: fullName
+    });
+    return data;
   }
 };
 

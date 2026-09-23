@@ -5,11 +5,16 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
 import LoansScreen from './src/screens/LoansScreen';
 import FundsScreen from './src/screens/FundsScreen';
+import SelectMutualScreen from './src/screens/SelectMutualScreen';
+import CreateMutualScreen from './src/screens/CreateMutualScreen';
+import JoinMutualScreen from './src/screens/JoinMutualScreen';
+import InviteMembersScreen from './src/screens/InviteMembersScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,13 +50,38 @@ function MainTabs() {
           )
         }}
       />
+      <Tab.Screen 
+        name="Familia" 
+        component={InviteMembersScreen} 
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <View style={{ width: size, height: size, backgroundColor: color, borderRadius: size/2, opacity: 0.5 }} />
+          )
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
+import * as Linking from 'expo-linking';
+
+// ... (other imports remain, but we handle this via block replacement)
+const prefix = Linking.createURL('/');
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [initialRoute, setInitialRoute] = useState('Login');
+
+  const linking = {
+    prefixes: [prefix, 'mutualfam://'],
+    config: {
+      screens: {
+        JoinMutual: 'join/:token',
+        Login: 'login',
+        MainTabs: 'main',
+      },
+    },
+  };
 
   useEffect(() => {
     const checkToken = async () => {
@@ -79,10 +109,13 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <StatusBar style="light" />
       <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
+        <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
+        <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />
       </Stack.Navigator>
     </NavigationContainer>

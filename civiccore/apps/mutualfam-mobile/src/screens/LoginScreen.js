@@ -4,25 +4,49 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/client';
 
 export default function LoginScreen({ navigation }) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor ingresa correo y contraseña');
+  const handleSubmit = async () => {
+    if (!email || !password || (isRegistering && !fullName)) {
+      Alert.alert('Error', 'Por favor llena todos los campos');
       return;
     }
     
     setLoading(true);
     try {
-      const data = await authApi.login(email, password);
-      await AsyncStorage.setItem('jwt_token', data.access_token);
-      
-      // Navigate to the main tabs
-      navigation.replace('MainTabs');
+      if (isRegistering) {
+        await authApi.register(email, password, fullName);
+        Alert.alert('Éxito', 'Cuenta creada exitosamente. Iniciando sesión...');
+        
+        // Auto login
+        const data = await authApi.login(email, password);
+        await AsyncStorage.setItem('jwt_token', data.access_token);
+        
+        // El nuevo usuario no tiene mutual, así que vamos a la selección/creación
+        navigation.replace('SelectMutual');
+      } else {
+        const data = await authApi.login(email, password);
+        await AsyncStorage.setItem('jwt_token', data.access_token);
+        
+        const me = await authApi.me();
+        if (me.organizations && me.organizations.length > 0) {
+          if (me.organizations.length === 1) {
+             await AsyncStorage.setItem('org_id', me.organizations[0].id.toString());
+             navigation.replace('MainTabs');
+          } else {
+             navigation.replace('SelectMutual');
+          }
+        } else {
+          // No tiene organizaciones, debe crear o unirse a una
+          navigation.replace('SelectMutual');
+        }
+      }
     } catch (error) {
-      Alert.alert('Error de inicio de sesión', error.response?.data?.detail || error.message);
+      Alert.alert(isRegistering ? 'Error al registrar' : 'Error de inicio de sesión', error.response?.data?.detail || error.message);
     } finally {
       setLoading(false);
     }
@@ -33,6 +57,17 @@ export default function LoginScreen({ navigation }) {
       <View style={styles.card}>
         <View style={styles.iconPlaceholder} />
         <Text style={styles.title}>Mutual Familiar</Text>
+        
+        {isRegistering && (
+          <TextInput
+            style={styles.input}
+            placeholder="Nombre completo"
+            placeholderTextColor="#94a3b8"
+            autoCapitalize="words"
+            value={fullName}
+            onChangeText={setFullName}
+          />
+        )}
         
         <TextInput
           style={styles.input}
@@ -55,14 +90,24 @@ export default function LoginScreen({ navigation }) {
         
         <TouchableOpacity 
           style={styles.button} 
-          onPress={handleLogin}
+          onPress={handleSubmit}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Iniciar Sesión</Text>
+            <Text style={styles.buttonText}>{isRegistering ? 'Crear cuenta' : 'Iniciar Sesión'}</Text>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.switchButton} 
+          onPress={() => setIsRegistering(!isRegistering)}
+          disabled={loading}
+        >
+          <Text style={styles.switchText}>
+            {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -123,5 +168,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  switchButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+  },
+  switchText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   }
 });
