@@ -78,7 +78,7 @@ export default function InviteMembersScreen() {
       const inviteUrl = Linking.createURL(`join/${data.token}`);
       
       await Share.share({
-        message: `¡Únete a nuestra mutual familiar! Haz clic en este enlace para registrarte: ${inviteUrl}`,
+        message: inviteUrl,
       });
     } catch (e) {
       Alert.alert('Error', e.response?.data?.detail || 'No se pudo generar la invitación');

@@ -26,12 +26,26 @@ export default function LoginScreen({ navigation }) {
         const data = await authApi.login(email, password);
         await AsyncStorage.setItem('jwt_token', data.access_token);
         
+        // Check for pending join token first
+        const pendingToken = await AsyncStorage.getItem('pending_join_token');
+        if (pendingToken) {
+          navigation.replace('JoinMutual', { token: pendingToken });
+          return;
+        }
+
         // El nuevo usuario no tiene mutual, así que vamos a la selección/creación
         navigation.replace('SelectMutual');
       } else {
         const data = await authApi.login(email, password);
         await AsyncStorage.setItem('jwt_token', data.access_token);
         
+        // Check for pending join token first
+        const pendingToken = await AsyncStorage.getItem('pending_join_token');
+        if (pendingToken) {
+          navigation.replace('JoinMutual', { token: pendingToken });
+          return;
+        }
+
         const me = await authApi.me();
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/client';
 import apiClient from '../api/client';
 
@@ -38,11 +39,30 @@ export default function JoinMutualScreen({ route, navigation }) {
     
     setLoading(true);
     try {
+      const jwtToken = await AsyncStorage.getItem('jwt_token');
+      if (!jwtToken) {
+        // Not logged in
+        await AsyncStorage.setItem('pending_join_token', token);
+        Alert.alert('Atención', 'Debes crear una cuenta o iniciar sesión primero para unirte.');
+        navigation.replace('Login');
+        return;
+      }
+
       const { data } = await apiClient.post('/membership/organizations/join', { token });
+      await AsyncStorage.removeItem('pending_join_token');
       Alert.alert('¡Bienvenido!', data.message || 'Te has unido exitosamente.');
-      navigation.replace('SelectMutual');
+      
+      // Save org_id and go to main tabs
+      await AsyncStorage.setItem('org_id', data.organization_id.toString());
+      navigation.replace('MainTabs');
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.detail || 'No se pudo procesar la invitación');
+      if (e.response?.status === 401) {
+        await AsyncStorage.setItem('pending_join_token', token);
+        Alert.alert('Sesión expirada', 'Debes iniciar sesión nuevamente para unirte.');
+        navigation.replace('Login');
+      } else {
+        Alert.alert('Error', e.response?.data?.detail || 'No se pudo procesar la invitación');
+      }
     } finally {
       setLoading(false);
     }
