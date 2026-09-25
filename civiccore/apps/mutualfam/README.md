@@ -5,11 +5,21 @@
 Para levantar los diferentes entornos de esta aplicación (Backend, Web y Móvil), puedes ejecutar los siguientes comandos desde sus respectivos directorios:
 
 ### Backend
-Ubícate en el directorio del backend (`mutualfam`), activa el entorno virtual de `civiccore/backend` y ejecuta:
+Ubícate en el directorio del backend (`mutualfam`) y activa el entorno virtual de `civiccore/backend`.
+El comando de ejecución depende de dónde pruebes la app móvil:
+
+**Opción A: Emulador en tu PC**
 ```bash
 source ../../backend/venv/bin/activate
 uvicorn app:app --reload
 ```
+
+**Opción B: Teléfono Físico (vía WiFi)**
+```bash
+source ../../backend/venv/bin/activate
+uvicorn app:app --host 0.0.0.0 --reload
+```
+*(Recuerda poner tu IP WiFi local en el archivo `.env` de la app móvil).*
 
 ### Frontend (Sitio Web)
 Ubícate en el directorio de la web (`mutualfam-web`), instala las dependencias y ejecuta:

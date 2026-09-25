@@ -153,19 +153,35 @@ npx expo@57 start --clear
 
 ---
 
-## 6. Variables de entorno (IP LAN)
+## 6. Variables de entorno y Conexión de Red
 
-El archivo `.env` en la raíz de cada app controla la URL de la API.
-La IP de la máquina de desarrollo en la red local es:
+El archivo `.env` en la raíz de cada app móvil controla la URL de la API (`EXPO_PUBLIC_API_URL`). 
+La configuración depende estrictamente de dónde estés probando la app:
 
-```
-EXPO_PUBLIC_API_URL=http://172.16.0.12:8002/api/v1
-```
+### Opción A: Emulador de Android en la misma PC
+El emulador usa el alias `10.0.2.2` para acceder al `localhost` de tu computadora.
+1. **Backend**: Arranca normalmente
+   ```bash
+   uvicorn app:app --reload
+   ```
+2. **App Móvil** (`.env`):
+   ```
+   EXPO_PUBLIC_API_URL=http://10.0.2.2:8000/api/v1
+   ```
 
-Si cambias de red, actualiza este valor con la nueva IP:
-```bash
-ip a  # Linux
-```
+### Opción B: Teléfono Físico (Expo Go vía WiFi)
+Tu teléfono necesita conectarse a la IP de tu computadora en la red local.
+1. **Obtén tu IP local**: Puedes verla en la terminal de Expo al arrancar (ej: `exp://192.168.0.15:8081` -> la IP es `192.168.0.15`).
+2. **App Móvil** (`.env`):
+   ```
+   EXPO_PUBLIC_API_URL=http://192.168.X.X:8000/api/v1
+   ```
+3. **Backend**: Debes indicar a Uvicorn que acepte conexiones externas agregando `--host 0.0.0.0`:
+   ```bash
+   uvicorn app:app --host 0.0.0.0 --reload
+   ```
+
+> ⚠️ **Importante:** Cualquier cambio en el archivo `.env` requiere detener y reiniciar el servidor de Expo (`npx expo@57 start --clear`) para que Metro Bundler cargue el nuevo valor.
 
 ---
 

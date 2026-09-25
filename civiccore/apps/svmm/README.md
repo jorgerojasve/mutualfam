@@ -19,7 +19,9 @@ Para levantar los diferentes entornos de esta aplicación (Backend, Web y Móvil
 
 ### Backend
 Ubícate en el directorio del backend (`svmm`), activa el entorno virtual de `civiccore/backend` y asegúrate de tener instalado el paquete `civiccore`.
+El comando de ejecución depende de dónde pruebes la app móvil:
 
+**Opción A: Emulador en tu PC**
 ```bash
 # 1. Activar el entorno virtual
 source ../../backend/venv/bin/activate
@@ -30,6 +32,19 @@ cp .env.example .env
 # 3. Ejecutar la aplicación
 uvicorn app:app --reload
 ```
+
+**Opción B: Teléfono Físico (vía WiFi)**
+```bash
+# 1. Activar el entorno virtual
+source ../../backend/venv/bin/activate
+
+# 2. Copiar variables de entorno (si es primera vez)
+cp .env.example .env
+
+# 3. Ejecutar la aplicación permitiendo conexiones externas
+uvicorn app:app --host 0.0.0.0 --reload
+```
+*(Recuerda poner tu IP WiFi local en el archivo `.env` de la app móvil).*
 
 ### Frontend (Sitio Web)
 Ubícate en el directorio de la web (`svmm-web`), instala las dependencias y ejecuta:

@@ -15,6 +15,7 @@ import SelectMutualScreen from './src/screens/SelectMutualScreen';
 import CreateMutualScreen from './src/screens/CreateMutualScreen';
 import JoinMutualScreen from './src/screens/JoinMutualScreen';
 import InviteMembersScreen from './src/screens/InviteMembersScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -53,6 +54,15 @@ function MainTabs() {
       <Tab.Screen 
         name="Familia" 
         component={InviteMembersScreen} 
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <View style={{ width: size, height: size, backgroundColor: color, borderRadius: size/2, opacity: 0.5 }} />
+          )
+        }}
+      />
+      <Tab.Screen 
+        name="Perfil" 
+        component={ProfileScreen} 
         options={{
           tabBarIcon: ({ color, size }) => (
             <View style={{ width: size, height: size, backgroundColor: color, borderRadius: size/2, opacity: 0.5 }} />
