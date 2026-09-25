@@ -63,9 +63,6 @@ function MainTabs() {
   );
 }
 
-import * as Linking from 'expo-linking';
-
-// ... (other imports remain, but we handle this via block replacement)
 const prefix = Linking.createURL('/');
 
 export default function App() {

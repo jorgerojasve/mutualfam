@@ -9,6 +9,9 @@
     "ios": {
       "supportsTablet": true
     },
-    "sdkVersion": "57.0.0"
+    "sdkVersion": "57.0.0",
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

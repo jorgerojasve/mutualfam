@@ -1,33 +1,13 @@
-# Scientific Society - CivicCore Template
-
-This is a template demonstrating how to use the CivicCore framework to build a backend for a Scientific Society.
-
-## Features Mapped to CivicCore
-
-- **Members**: Represent Researchers, Fellows, and Students.
-- **Governance**: Used for electing the board of directors and approving resolutions.
-- **Authorship** (Planned): To record official minutes and publications.
-
-## Project Structure
-
-- `app.py`: The main FastAPI application factory.
-- `.env`: Configuration file.
+# SVMM App
 
 ## Ejecución de Servidores
 
 Para levantar los diferentes entornos de esta aplicación (Backend, Web y Móvil), puedes ejecutar los siguientes comandos desde sus respectivos directorios:
 
 ### Backend
-Ubícate en el directorio del backend (`svmm`), activa el entorno virtual de `civiccore/backend` y asegúrate de tener instalado el paquete `civiccore`.
-
+Ubícate en el directorio del backend (`svmm`), activa el entorno virtual de `civiccore/backend` y ejecuta:
 ```bash
-# 1. Activar el entorno virtual
 source ../../backend/venv/bin/activate
-
-# 2. Copiar variables de entorno (si es primera vez)
-cp .env.example .env
-
-# 3. Ejecutar la aplicación
 uvicorn app:app --reload
 ```
 
