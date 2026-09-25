@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import * as Linking from 'expo-linking';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function InviteMembersScreen() {
   const [loading, setLoading] = useState(true);
@@ -10,10 +11,14 @@ export default function InviteMembersScreen() {
   const [timeLeft, setTimeLeft] = useState('');
   const [canInvite, setCanInvite] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [debugOrgId, setDebugOrgId] = useState('');
 
-  useEffect(() => {
-    fetchOrgInfo();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrgInfo();
+    }, [])
+  );
 
   useEffect(() => {
     if (!orgData?.grace_period_ends_at) return;
@@ -43,6 +48,7 @@ export default function InviteMembersScreen() {
   const fetchOrgInfo = async () => {
     try {
       const orgId = await AsyncStorage.getItem('org_id');
+      setDebugOrgId(orgId || 'nulo');
       if (!orgId) return;
 
       const { data } = await apiClient.get('/membership/me');
@@ -50,9 +56,12 @@ export default function InviteMembersScreen() {
       
       if (myOrg) {
         setOrgData(myOrg);
+      } else {
+        setErrorMsg('Tu ID de mutual no coincide con ninguna mutual de tu cuenta.');
       }
     } catch (e) {
       console.warn(e);
+      setErrorMsg(e.message || 'Error de API');
     } finally {
       setLoading(false);
     }
@@ -127,7 +136,7 @@ export default function InviteMembersScreen() {
             onPress={generateInvite}
             disabled={generating}
           >
-            {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Generar Enlace por WhatsApp</Text>}
+            {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
           </TouchableOpacity>
         ) : (
           <View style={styles.expiredWarning}>
