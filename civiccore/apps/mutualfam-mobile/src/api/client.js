@@ -59,6 +59,10 @@ export const loansApi = {
   cancelLoan: async (loanId) => {
     const { data } = await apiClient.delete(`/loans/${loanId}`);
     return data;
+  },
+  contributeToLoan: async (loanId, contributionData) => {
+    const { data } = await apiClient.post(`/loans/${loanId}/contribute`, contributionData);
+    return data;
   }
 };
 

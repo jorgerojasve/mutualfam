@@ -14,6 +14,13 @@ export default function LoansScreen() {
   const [estimatedDate, setEstimatedDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Estados para aportar (Hacer la vaca)
+  const [showContributeModal, setShowContributeModal] = useState(false);
+  const [selectedLoan, setSelectedLoan] = useState(null);
+  const [contribAmount, setContribAmount] = useState('');
+  const [contribMethod, setContribMethod] = useState('');
+  const [contributing, setContributing] = useState(false);
+
   const fetchUser = async () => {
     try {
       const userData = await authApi.me();
@@ -112,6 +119,47 @@ export default function LoansScreen() {
     );
   };
 
+  const handleContribute = async () => {
+    if (!contribAmount || !contribMethod) {
+      Alert.alert('Error', 'Por favor llena todos los campos');
+      return;
+    }
+    
+    const parsedAmount = parseFloat(contribAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
+      return;
+    }
+    
+    setContributing(true);
+    try {
+      await loansApi.contributeToLoan(selectedLoan.id, {
+        amount_usd: parsedAmount,
+        payment_method: contribMethod
+      });
+      setShowContributeModal(false);
+      setContribAmount('');
+      setContribMethod('');
+      setSelectedLoan(null);
+      Alert.alert('¡Gracias!', 'Tu aporte ha sido registrado.');
+      fetchLoans();
+    } catch (error) {
+      let errorMsg = error.message;
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errorMsg = error.response.data.detail.map(e => e.msg).join('\n');
+        } else {
+          errorMsg = typeof error.response.data.detail === 'string' 
+            ? error.response.data.detail 
+            : JSON.stringify(error.response.data.detail);
+        }
+      }
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setContributing(false);
+    }
+  };
+
   const renderLoanCard = ({ item }) => {
     const isMine = user && user.id === item.requester_id;
     
@@ -139,7 +187,13 @@ export default function LoansScreen() {
               <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.actionButton} onPress={() => Alert.alert('Próximamente', 'Hacer la vaca')}>
+            <TouchableOpacity 
+              style={styles.actionButton} 
+              onPress={() => {
+                setSelectedLoan(item);
+                setShowContributeModal(true);
+              }}
+            >
               <Text style={styles.actionButtonText}>Aportar a este préstamo</Text>
             </TouchableOpacity>
           )}
@@ -208,6 +262,46 @@ export default function LoansScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSubmit} onPress={handleCreateRequest} disabled={submitting}>
                 {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Enviar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para aportar a un préstamo */}
+      <Modal visible={showContributeModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Hacer la Vaca 🐄</Text>
+            <Text style={{color: '#94a3b8', marginBottom: 15}}>
+              Aportando al préstamo de {selectedLoan?.requester_name}
+            </Text>
+            
+            <Text style={styles.label}>Monto a aportar (USD)</Text>
+            <TextInput 
+              style={styles.input}
+              keyboardType="numeric"
+              value={contribAmount}
+              onChangeText={setContribAmount}
+              placeholder="Ej: 50"
+              placeholderTextColor="#475569"
+            />
+            
+            <Text style={styles.label}>Método de Pago</Text>
+            <TextInput 
+              style={styles.input}
+              value={contribMethod}
+              onChangeText={setContribMethod}
+              placeholder="Ej: Zelle, Binance, Efectivo"
+              placeholderTextColor="#475569"
+            />
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowContributeModal(false)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSubmit} onPress={handleContribute} disabled={contributing}>
+                {contributing ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Confirmar</Text>}
               </TouchableOpacity>
             </View>
           </View>
