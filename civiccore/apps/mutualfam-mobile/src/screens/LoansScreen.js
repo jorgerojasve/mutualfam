@@ -47,6 +47,19 @@ export default function LoansScreen() {
       Alert.alert('Error', 'Por favor llena todos los campos');
       return;
     }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
+      return;
+    }
+
+    // Validar formato de fecha simple (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (estimatedDate && !dateRegex.test(estimatedDate)) {
+      Alert.alert('Error', 'La fecha debe tener el formato YYYY-MM-DD (ej. 2026-10-15)');
+      return;
+    }
     
     setSubmitting(true);
     try {
@@ -61,7 +74,17 @@ export default function LoansScreen() {
       setEstimatedDate('');
       fetchLoans();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || error.message);
+      let errorMsg = error.message;
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errorMsg = error.response.data.detail.map(e => e.msg).join('\n');
+        } else {
+          errorMsg = typeof error.response.data.detail === 'string' 
+            ? error.response.data.detail 
+            : JSON.stringify(error.response.data.detail);
+        }
+      }
+      Alert.alert('Error', errorMsg);
     } finally {
       setSubmitting(false);
     }
