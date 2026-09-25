@@ -44,7 +44,7 @@ export default function JoinMutualScreen({ route, navigation }) {
         // Not logged in
         await AsyncStorage.setItem('pending_join_token', token);
         Alert.alert('Atención', 'Debes crear una cuenta o iniciar sesión primero para unirte.');
-        navigation.replace('Login');
+        navigation.replace('Login', { intent: 'register' });
         return;
       }
 

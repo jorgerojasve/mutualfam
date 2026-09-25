@@ -3,8 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/client';
 
-export default function LoginScreen({ navigation }) {
-  const [isRegistering, setIsRegistering] = useState(false);
+export default function LoginScreen({ route, navigation }) {
+  const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
