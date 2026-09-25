@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { loansApi, authApi } from '../api/client';
 
 export default function LoansScreen() {
@@ -12,13 +14,17 @@ export default function LoansScreen() {
   const [amount, setAmount] = useState('');
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateObj, setDateObj] = useState(new Date());
   const [submitting, setSubmitting] = useState(false);
+  const [filter, setFilter] = useState('active'); // 'active' o 'history'
 
   // Estados para aportar (Hacer la vaca)
   const [showContributeModal, setShowContributeModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [contribAmount, setContribAmount] = useState('');
   const [contribMethod, setContribMethod] = useState('');
+  const [receiptUri, setReceiptUri] = useState(null);
   const [contributing, setContributing] = useState(false);
 
   const fetchUser = async () => {
@@ -133,13 +139,21 @@ export default function LoansScreen() {
     
     setContributing(true);
     try {
+      let finalReceiptUrl = null;
+      if (receiptUri) {
+         const uploadRes = await loansApi.uploadFile(receiptUri);
+         finalReceiptUrl = uploadRes.url;
+      }
+
       await loansApi.contributeToLoan(selectedLoan.id, {
         amount_usd: parsedAmount,
-        payment_method: contribMethod
+        payment_method: contribMethod,
+        receipt_url: finalReceiptUrl
       });
       setShowContributeModal(false);
       setContribAmount('');
       setContribMethod('');
+      setReceiptUri(null);
       setSelectedLoan(null);
       Alert.alert('¡Gracias!', 'Tu aporte ha sido registrado.');
       fetchLoans();
@@ -160,14 +174,64 @@ export default function LoansScreen() {
     }
   };
 
+  const handleRepay = (loanId) => {
+    Alert.alert(
+      "Saldar Préstamo",
+      "¿Ya devolviste el dinero y deseas marcar el préstamo como saldado?",
+      [
+        { text: "No", style: "cancel" },
+        { 
+          text: "Sí, Saldar", 
+          onPress: async () => {
+            try {
+              await loansApi.repayLoan(loanId);
+              Alert.alert('¡Excelente!', 'El préstamo ha sido marcado como pagado.');
+              fetchLoans();
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.detail || 'No se pudo saldar el préstamo');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      setReceiptUri(result.assets[0].uri);
+    }
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDateObj(selectedDate);
+      setEstimatedDate(selectedDate.toISOString().split('T')[0]);
+    }
+  };
+
   const renderLoanCard = ({ item }) => {
     const isMine = user && user.id === item.requester_id;
+    const canRepay = isMine && (item.status === 'funded' || item.status === 'partial');
+    
+    let statusLabel = item.status;
+    if (item.status === 'pending') statusLabel = 'Buscando fondeo';
+    if (item.status === 'partial') statusLabel = 'Fondeo parcial';
+    if (item.status === 'funded') statusLabel = '100% Fondeado';
+    if (item.status === 'repaid') statusLabel = 'Saldado ✅';
     
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{item.status === 'pending' ? 'Buscando fondeo' : item.status}</Text>
+          <View style={[styles.badge, item.status === 'funded' && {backgroundColor: 'rgba(34, 197, 94, 0.2)'}]}>
+            <Text style={[styles.badgeText, item.status === 'funded' && {color: '#4ade80'}]}>
+              {statusLabel}
+            </Text>
           </View>
           <Text style={styles.amountText}>${item.amount_usd}</Text>
         </View>
@@ -183,19 +247,30 @@ export default function LoansScreen() {
         
         <View style={styles.cardFooter}>
           {isMine ? (
-            <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => handleCancelLoan(item.id)}>
-              <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
-            </TouchableOpacity>
+            <View style={{ gap: 10 }}>
+              {item.status === 'pending' && (
+                <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => handleCancelLoan(item.id)}>
+                  <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
+                </TouchableOpacity>
+              )}
+              {canRepay && (
+                <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#10b981'}]} onPress={() => handleRepay(item.id)}>
+                  <Text style={styles.actionButtonText}>Marcar como Saldado</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ) : (
-            <TouchableOpacity 
-              style={styles.actionButton} 
-              onPress={() => {
-                setSelectedLoan(item);
-                setShowContributeModal(true);
-              }}
-            >
-              <Text style={styles.actionButtonText}>Aportar a este préstamo</Text>
-            </TouchableOpacity>
+            (item.status === 'pending' || item.status === 'partial') ? (
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => {
+                  setSelectedLoan(item);
+                  setShowContributeModal(true);
+                }}
+              >
+                <Text style={styles.actionButtonText}>Aportar a este préstamo</Text>
+              </TouchableOpacity>
+            ) : null
           )}
         </View>
       </View>
@@ -211,11 +286,29 @@ export default function LoansScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity 
+          style={[styles.tab, filter === 'active' && styles.activeTab]} 
+          onPress={() => setFilter('active')}
+        >
+          <Text style={[styles.tabText, filter === 'active' && styles.activeTabText]}>Vigentes</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, filter === 'history' && styles.activeTab]} 
+          onPress={() => setFilter('history')}
+        >
+          <Text style={[styles.tabText, filter === 'history' && styles.activeTabText]}>Historial</Text>
+        </TouchableOpacity>
+      </View>
+
       {loading ? (
         <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 50 }} />
       ) : (
         <FlatList
-          data={loans.filter(l => l.status !== 'cancelled')}
+          data={loans.filter(l => {
+            if (filter === 'active') return ['pending', 'partial', 'funded'].includes(l.status);
+            return ['repaid', 'cancelled'].includes(l.status);
+          })}
           keyExtractor={item => item.id.toString()}
           renderItem={renderLoanCard}
           contentContainerStyle={{ padding: 15 }}
@@ -239,14 +332,20 @@ export default function LoansScreen() {
               onChangeText={setAmount}
             />
             
-            <Text style={styles.label}>Fecha (YYYY-MM-DD)</Text>
-            <TextInput 
-              style={styles.input}
-              value={estimatedDate}
-              onChangeText={setEstimatedDate}
-              placeholder="Ej: 2026-10-15"
-              placeholderTextColor="#94a3b8"
-            />
+            <Text style={styles.label}>Fecha Límite Sugerida</Text>
+            <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
+              <Text style={{color: estimatedDate ? '#fff' : '#94a3b8'}}>
+                {estimatedDate || "Tocar para seleccionar fecha"}
+              </Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={dateObj}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+              />
+            )}
             
             <Text style={styles.label}>Motivo</Text>
             <TextInput 
@@ -295,6 +394,16 @@ export default function LoansScreen() {
               placeholder="Ej: Zelle, Binance, Efectivo"
               placeholderTextColor="#475569"
             />
+
+            <Text style={styles.label}>Comprobante (Opcional)</Text>
+            <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+              <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>
+                {receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}
+              </Text>
+            </TouchableOpacity>
+            {receiptUri && (
+              <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />
+            )}
             
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setShowContributeModal(false)}>
@@ -340,6 +449,28 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginTop: 15,
+    gap: 15,
+  },
+  tab: {
+    paddingVertical: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#3b82f6',
+  },
+  tabText: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  activeTabText: {
+    color: '#3b82f6',
   },
   emptyText: {
     color: '#94a3b8',

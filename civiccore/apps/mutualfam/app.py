@@ -2,7 +2,9 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+import os
 
 from civiccore.core.database import engine, Base
 import models
@@ -27,9 +29,13 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(membership.router, prefix="/api/v1/membership", tags=["membership"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["config"])
 
-from routers import loans, funds
+from routers import loans, funds, upload
 app.include_router(loans.router, prefix="/api/v1/loans", tags=["loans"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["funds"])
+app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
+
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 @app.get("/")
 def read_root():

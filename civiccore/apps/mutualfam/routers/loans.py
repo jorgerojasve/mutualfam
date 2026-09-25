@@ -162,9 +162,19 @@ def contribute_to_loan(
     )
     db.add(new_contrib)
     
-    # Simple logic: If pending, change to partial (or funded if amount reaches total)
-    # We will let the admin verify before marking as FUNDED, but for now we mark PARTIAL
-    if loan.status == LoanStatus.PENDING:
+    # Validar sumatoria de aportes
+    from sqlalchemy import func
+    
+    total_contributed = db.query(func.sum(LoanContribution.amount_usd)).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.status != ContributionStatus.REJECTED
+    ).scalar() or 0.0
+    
+    total_contributed += contrib.amount_usd
+    
+    if total_contributed >= loan.amount_usd:
+        loan.status = LoanStatus.FUNDED
+    else:
         loan.status = LoanStatus.PARTIAL
         
     db.commit()
@@ -174,3 +184,38 @@ def contribute_to_loan(
     send_telegram_notification(msg)
     
     return {"message": "Aporte registrado exitosamente", "contribution_id": new_contrib.id}
+
+@router.post("/{loan_id}/repay")
+def repay_loan(
+    loan_id: int,
+    org_member: dict = Depends(get_current_org_member), 
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    loan = db.query(LoanRequest).filter(
+        LoanRequest.id == loan_id,
+        LoanRequest.organization_id == org_member["organization"].id
+    ).first()
+    
+    if not loan:
+        raise HTTPException(status_code=404, detail="Préstamo no encontrado")
+        
+    if loan.requester_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el solicitante puede marcar el préstamo como pagado")
+        
+    if loan.status not in [LoanStatus.FUNDED, LoanStatus.PARTIAL]:
+        raise HTTPException(status_code=400, detail="El préstamo no está activo o ya fue pagado")
+        
+    loan.status = LoanStatus.REPAID
+    
+    from datetime import datetime, timezone
+    loan.repaid_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    
+    msg = f"🎉 <b>¡Préstamo Saldado!</b>\n\n👤 {org_member['user'].first_name} ha devuelto el préstamo de <b>${loan.amount_usd}</b>."
+    send_telegram_notification(msg)
+    
+    return {"message": "Préstamo marcado como pagado exitosamente"}

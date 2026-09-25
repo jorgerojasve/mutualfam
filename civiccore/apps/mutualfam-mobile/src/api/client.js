@@ -63,6 +63,22 @@ export const loansApi = {
   contributeToLoan: async (loanId, contributionData) => {
     const { data } = await apiClient.post(`/loans/${loanId}/contribute`, contributionData);
     return data;
+  },
+  repayLoan: async (loanId) => {
+    const { data } = await apiClient.post(`/loans/${loanId}/repay`);
+    return data;
+  },
+  uploadFile: async (fileUri) => {
+    let filename = fileUri.split('/').pop();
+    let match = /\.(\w+)$/.exec(filename);
+    let type = match ? `image/${match[1]}` : `image`;
+    let formData = new FormData();
+    formData.append('file', { uri: fileUri, name: filename, type });
+    
+    const res = await apiClient.post('/upload/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return res.data;
   }
 };
 
