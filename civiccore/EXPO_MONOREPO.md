@@ -1,191 +1,98 @@
-# Guía de Expo en el Monorepo CivicCore
+# Guía y Estrategia de Expo en el Monorepo CivicCore
 
-Este documento es parte del **framework CivicCore** y aplica a todas las apps
-Expo del monorepo (`mutualfam-mobile`, `mutualsol-app`, `svmm-app`, etc.).
-Léelo antes de iniciar cualquier desarrollo o depurar errores en apps móviles.
+Este documento unifica el framework y las estrategias de mitigación de errores para todas las apps Expo del monorepo (`mutualfam-mobile`, `mutualsol-app`, `svmm-app`, etc.). Léelo **antes** de iniciar cualquier desarrollo, agregar librerías o depurar errores en apps móviles.
 
 ---
 
-## 1. Arranque correcto
+## 1. La Configuración que Funciona (Estado Final Verificado)
 
-### NUNCA:
-```bash
-npx expo start   # Usa el CLI de la raíz del monorepo (versión incorrecta)
-npm start        # Mismo problema
-```
+### `apps/<nombre>/package.json`
+- **Librerías Nativas:** Usar `~` (patch) o versión exacta, NUNCA `^`.
+- **Babel:** `babel-preset-expo` DEBE coincidir con la major del SDK de Expo.
+- **React Native:** DEBE ser la versión exigida por el SDK (0.86.3 para SDK 57).
+- **Scripts:** `"start": "expo start"`
+- **Main:** `"main": "index.js"` (NUNCA apuntar a `expo/AppEntry.js`)
 
-### SIEMPRE:
-```bash
-cd civiccore/apps/<nombre-app>
-npx expo@57 start --clear
-```
-
-El flag `@57` fuerza el CLI correcto y `--clear` limpia la caché de Metro.
-
----
-
-## 2. Instalación de dependencias
-
-El monorepo tiene conflictos de `peerDependencies` entre apps (React 18 en web
-vs React 19 en móvil). Por eso **siempre** usar:
-
-```bash
-# Desde la raíz del monorepo (civiccore/)
-npm install --legacy-peer-deps
-```
-
----
-
-## 3. Configuración mínima de cada app Expo
-
-### `package.json`
-```json
-{
-  "main": "index.js",
-  "scripts": {
-    "start": "expo start"
-  }
-}
-```
-- `main` DEBE apuntar a un `index.js` local, **nunca** a `expo/AppEntry.js`.
-
-### `index.js`
-```js
-import { registerRootComponent } from 'expo';
-import App from './App';
-registerRootComponent(App);
-```
-
-### `app.json`
-```json
-{
-  "expo": {
-    "sdkVersion": "57.0.0"
-  }
-}
-```
-- **Siempre** declarar `sdkVersion` explícito.
-- **No** incluir `icon`, `splash` ni `adaptiveIcon` si los archivos no existen.
-
-### `babel.config.js`
-```js
-module.exports = function(api) {
-  api.cache(true);
-  return { presets: ['babel-preset-expo'] };
-};
-```
-
----
-
-## 4. Overrides obligatorios en `civiccore/package.json`
-
-Para evitar que npm eleve versiones incompatibles a la raíz del monorepo,
-el `package.json` raíz **debe** tener estos `overrides`:
-
+### `civiccore/package.json` — `overrides` en la raíz
 ```json
 {
   "overrides": {
     "react-native": "0.86.3",
     "@react-native/codegen": "0.86.3",
-    "expo": "~57.0.21",
+    "expo": "~57.0.24",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "4.26.0"
   }
 }
 ```
-
-> **Por qué `safe-area-context` y `screens`:** Versiones más nuevas de estos
-> paquetes (≥5.10 y ≥4.28 respectivamente) tienen `react-native@0.79.x` como
-> peer dependency. Si npm los instala localmente en el workspace, provocan el
-> error `PlatformConstants could not be found` aunque el `package.json` de la
-> app declare `react-native@0.86.3`.
+Los `overrides` fuerzan a todos los workspaces a usar la misma versión base.
 
 ---
 
-## 5. Árbol de decisiones para errores comunes
+## 2. Instalación y Arranque Correcto
 
-### 🔴 "Project incompatible — SDK 51 vs 57"
-```
-→ Estás usando npx expo start (versión vieja de la raíz)
-→ Solución: npx expo@57 start --clear
-```
-
-### 🔴 "PlatformConstants could not be found" (pantalla roja)
-```
-→ Hay una copia local de react-native@0.79.x en node_modules de la app
-   que prevalece sobre la versión 0.86.3 de la raíz.
-→ Causas frecuentes: react-native-safe-area-context o react-native-screens
-   instalados en versiones incompatibles localmente.
-→ Solución paso a paso:
-```
+### SIEMPRE:
 ```bash
-# 1. Eliminar las copias locales conflictivas (desde civiccore/)
-rm -rf apps/<nombre-app>/node_modules/react-native
-rm -rf apps/<nombre-app>/node_modules/react-native-safe-area-context
-rm -rf apps/<nombre-app>/node_modules/react-native-screens
-
-# 2. Verificar que los overrides del package.json raíz estén presentes
-
-# 3. Reinstalar desde la raíz del monorepo
+# Instalación siempre desde la raíz del monorepo
+cd civiccore/
 npm install --legacy-peer-deps
 
-# 4. Arrancar limpio
+# Arranque siempre forzando la versión del SDK y limpiando caché
+cd apps/<nombre-app>
 npx expo@57 start --clear
 ```
 
-### 🔴 "SyntaxError: ';' expected / match statement"
+### NUNCA:
+- `npx expo start` (Usa el CLI de la raíz que puede ser de otro SDK).
+- `npm start` (Mismo problema).
+
+---
+
+## 3. Lecciones Aprendidas: Depuración de Errores Críticos (Frontend)
+
+El monorepo `npm workspaces` eleva las dependencias a la raíz ("hoisting"), pero cuando hay conflictos locales, NPM instala copias ocultas ("nested node_modules") dentro de tu app. Esto causa choques catastróficos.
+
+### 🔴 "[runtime not ready]: TypeError: undefined is not a function" o "PlatformConstants not found"
+**Causa:**
+Al instalar librerías como `react-native-safe-area-context` o `datetimepicker`, NPM determinó que requerían una versión vieja de React Native (ej. `0.79.2`). Como la raíz ya tiene `0.86.3`, NPM creó la carpeta secreta `apps/<tu-app>/node_modules/react-native` con la versión 0.79.2. Metro Bundler cargó esa versión corrupta y el Bridge nativo colapsó.
+**Solución (El Borrado Post-Instalación):**
+```bash
+# 1. Instala normalmente en la raíz
+npm install --legacy-peer-deps
+
+# 2. DESPUÉS de instalar, borra manualmente las carpetas conflictivas locales
+rm -rf apps/<tu-app>/node_modules/react-native
+rm -rf apps/<tu-app>/node_modules/react-native-safe-area-context
+rm -rf apps/<tu-app>/node_modules/react-native-screens
+
+# 3. Arranca limpio
+npx expo@57 start --clear
 ```
-→ babel-preset-expo desactualizado en el package.json de la app
-→ Solución: "babel-preset-expo": "~57.0.0"
-```
+
+### 🔴 "Project incompatible — SDK 51 vs 57"
+**Causa:** Estás usando `npx expo start` y ejecutando un CLI viejo.
+**Solución:** Usa `npx expo@57 start --clear`.
 
 ### 🔴 "Got unexpected undefined" (Metro nullthrows)
-```
-→ El main del package.json apunta a expo/AppEntry en lugar de index.js local
-→ Solución: "main": "index.js" + crear index.js con registerRootComponent
-```
+**Causa:** `main` en `package.json` apunta a `expo/AppEntry`. Al hacer imports relativos desde allí, busca en la raíz del monorepo y no en tu app.
+**Solución:** Cambia `"main": "index.js"` y crea un `index.js` local con `registerRootComponent(App)`.
 
 ### 🔴 "Unable to resolve asset icon.png"
-```
-→ app.json declara icon/splash pero los archivos no existen
-→ Solución: eliminar esos campos del app.json
-```
+**Causa:** El `app.json` declara iconos o splash screens que no existen en el disco duro.
+**Solución:** Elimina esos campos de `app.json`.
 
 ---
 
-## 6. Variables de entorno y Conexión de Red
+## 4. Variables de Entorno y Conexión de Red
 
-El archivo `.env` en la raíz de cada app móvil controla la URL de la API (`EXPO_PUBLIC_API_URL`). 
-La configuración depende estrictamente de dónde estés probando la app:
-
-### Opción A: Emulador de Android en la misma PC
-El emulador usa el alias `10.0.2.2` para acceder al `localhost` de tu computadora.
-1. **Backend**: Arranca normalmente
-   ```bash
-   uvicorn app:app --reload
-   ```
-2. **App Móvil** (`.env`):
-   ```
-   EXPO_PUBLIC_API_URL=http://10.0.2.2:8000/api/v1
-   ```
-
-### Opción B: Teléfono Físico (Expo Go vía WiFi)
-Tu teléfono necesita conectarse a la IP de tu computadora en la red local.
-1. **Obtén tu IP local**: Puedes verla en la terminal de Expo al arrancar (ej: `exp://192.168.0.15:8081` -> la IP es `192.168.0.15`).
-2. **App Móvil** (`.env`):
-   ```
-   EXPO_PUBLIC_API_URL=http://192.168.X.X:8000/api/v1
-   ```
-3. **Backend**: Debes indicar a Uvicorn que acepte conexiones externas agregando `--host 0.0.0.0`:
-   ```bash
-   uvicorn app:app --host 0.0.0.0 --reload
-   ```
-
-> ⚠️ **Importante:** Cualquier cambio en el archivo `.env` requiere detener y reiniciar el servidor de Expo (`npx expo@57 start --clear`) para que Metro Bundler cargue el nuevo valor.
+El archivo `.env` controla la URL de la API (`EXPO_PUBLIC_API_URL`).
+- **Emulador en PC:** `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000/api/v1`
+- **Teléfono Físico (WiFi):** `EXPO_PUBLIC_API_URL=http://<TU_IP_LOCAL>:8000/api/v1`
+*(Cualquier cambio en el `.env` requiere reiniciar Expo con `--clear`)*.
 
 ---
 
-## 7. Tabla de compatibilidad (SDK 57)
+## 5. Tabla de Compatibilidad (SDK 57)
 
 | Paquete                        | Versión correcta |
 |-------------------------------|-----------------|
@@ -199,11 +106,9 @@ Tu teléfono necesita conectarse a la IP de tu computadora en la red local.
 
 ---
 
-## 8. Checklist antes de abrir un issue
-
-- [ ] `npx expo@57 start --clear` (no `npm start`)
-- [ ] `civiccore/package.json` tiene los 6 `overrides` de la sección 4
-- [ ] `npm ls react-native 2>&1 | grep invalid` no muestra resultados
-- [ ] `app.json` tiene `sdkVersion: "57.0.0"` y sin assets inexistentes
-- [ ] `index.js` usa `registerRootComponent`, no `expo/AppEntry`
-- [ ] `.env` tiene la IP LAN correcta
+## 6. Checklist de Entrega Final
+- [ ] `npm ls react-native` no muestra líneas con `invalid` (o borraste las locales).
+- [ ] `npx expo@57 start --clear` arranca sin warnings de versión.
+- [ ] `.env` tiene la IP LAN correcta.
+- [ ] `app.json` tiene `sdkVersion: "57.0.0"` explícito.
+- [ ] `index.js` usa `registerRootComponent` local.
