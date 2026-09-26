@@ -1,0 +1,16 @@
+# flyctl launch added from .gitignore
+**/.android
+**/.cache
+**/.config
+**/.emulator_console_auth_token
+**/.expo
+**/.npm-cache
+**/.npm
+**/expo-debug.log
+**/node_modules
+**/venv
+**/__pycache__
+**/venv
+**/__pycache__
+**/.env
+fly.toml

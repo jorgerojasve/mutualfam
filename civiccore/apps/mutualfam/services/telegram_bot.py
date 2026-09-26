@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_STORAGE_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("TELEGRAM_STORAGE_CHAT_ID")
 
 def send_telegram_notification(message: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -58,7 +58,7 @@ def send_telegram_photo(message: str, photo_path: str):
         
         # Add photo
         filename = os.path.basename(photo_path)
-        body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode('utf-8'))
+        body.extend(f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="{filename}"\r\nContent-Type: image/jpeg\r\n\r\n'.encode('utf-8'))
         
         with open(photo_path, 'rb') as f:
             body.extend(f.read())
@@ -69,5 +69,8 @@ def send_telegram_photo(message: str, photo_path: str):
         with urllib.request.urlopen(req) as response:
             return response.status == 200
     except Exception as e:
-        print(f"Error enviando foto a Telegram: {e}")
+        error_body = ""
+        if hasattr(e, 'read'):
+            error_body = e.read().decode('utf-8', errors='ignore')
+        print(f"Error enviando foto a Telegram: {e} - Response: {error_body}")
         return False
