@@ -62,7 +62,7 @@ class LoanContribution(Base):
     payment_method = Column(String(50)) # ej. "pago_movil", "zelle"
     receipt_url = Column(String(500), nullable=True) # URL de imagen en Telegram CDN
     
-    status = Column(Enum(ContributionStatus), default=ContributionStatus.PENDING_PROOF)
+    status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
     
     created_at = Column(DateTime, default=utcnow)
 
@@ -95,6 +95,6 @@ class FundContribution(Base):
     
     payment_method = Column(String(50))
     receipt_url = Column(String(500), nullable=True)
-    status = Column(Enum(ContributionStatus), default=ContributionStatus.PENDING_PROOF)
+    status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
     
     created_at = Column(DateTime, default=utcnow)

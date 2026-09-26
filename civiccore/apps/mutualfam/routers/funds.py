@@ -62,7 +62,7 @@ def contribute_to_fund(
         amount_usd=contrib.amount_usd,
         payment_method=contrib.payment_method,
         receipt_url=contrib.receipt_url,
-        status=ContributionStatus.PENDING_PROOF
+        status=ContributionStatus.PLEDGED
     )
     db.add(new_contrib)
     db.commit()
