@@ -202,3 +202,22 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
         "organization_name": org.name,
         "organization_id": org.id
     }
+
+@router.get("/members")
+def get_organization_members(org_member: dict = Depends(get_current_org_member), db: Session = Depends(get_db)):
+    org_id = org_member["organization"].id
+    memberships = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).all()
+    
+    result = []
+    for m in memberships:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            result.append({
+                "id": user.id,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role": m.role,
+                "status": m.status,
+                "joined_at": str(m.joined_at) if m.joined_at else None
+            })
+    return result

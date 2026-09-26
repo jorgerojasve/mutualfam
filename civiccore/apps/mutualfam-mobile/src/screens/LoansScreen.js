@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi } from '../api/client';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", "Zelle", "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
@@ -11,6 +12,8 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  
+  const serverUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1').replace('/api/v1', '');
   
   // Crear préstamo
   const [showModal, setShowModal] = useState(false);
@@ -34,12 +37,35 @@ export default function LoansScreen() {
   const [selectedContrib, setSelectedContrib] = useState(null);
   const [notifyMethod, setNotifyMethod] = useState('');
   const [receiptUri, setReceiptUri] = useState(null);
+  const [referenceText, setReferenceText] = useState('');
   const [notifying, setNotifying] = useState(false);
+
+  // Devolver dinero
+  const [showRepayModal, setShowRepayModal] = useState(false);
+  const [repayAmount, setRepayAmount] = useState('');
+  const [repaying, setRepaying] = useState(false);
 
   // Configurar Métodos de Pago
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [paymentConfig, setPaymentConfig] = useState({});
   const [savingConfig, setSavingConfig] = useState(false);
+  const [selectedConfigMethod, setSelectedConfigMethod] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
+  const [bcvRate, setBcvRate] = useState(null);
+  const [bcvDate, setBcvDate] = useState(null);
+  const [isBcvOutdated, setIsBcvOutdated] = useState(false);
+  const [manualBcvRate, setManualBcvRate] = useState('');
+
+  const fetchConfig = async () => {
+    try {
+      const data = await loansApi.getAppConfig();
+      setBcvRate(data.bcv_rate);
+      setBcvDate(data.bcv_date);
+      setIsBcvOutdated(data.is_bcv_outdated);
+    } catch (e) {
+      console.warn("Could not fetch config", e);
+    }
+  };
 
   const fetchUser = async () => {
     try {
@@ -49,6 +75,8 @@ export default function LoansScreen() {
       console.warn("Could not fetch user", e);
     }
   };
+
+  const effectiveBcvRate = manualBcvRate ? parseFloat(manualBcvRate.replace(',', '.')) : bcvRate;
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -64,6 +92,7 @@ export default function LoansScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      fetchConfig();
       fetchUser();
       fetchLoans();
     }, [])
@@ -80,9 +109,33 @@ export default function LoansScreen() {
   };
 
   const handleSaveConfig = async () => {
+    const configToSave = { ...paymentConfig };
+    
+    // Check all methods, remove empty ones
+    for (const method of Object.keys(configToSave)) {
+      if (method === 'Pago Móvil') {
+        const pm = configToSave['Pago Móvil'];
+        if (typeof pm === 'object') {
+          const isEmpty = !pm.banco && !pm.telefono && !pm.cedula;
+          if (isEmpty) {
+            delete configToSave['Pago Móvil'];
+          } else if (!pm.banco || !pm.telefono || !pm.cedula) {
+            Alert.alert('Incompleto', 'Por favor completa todos los campos de Pago Móvil (banco, documento y teléfono) o déjalos todos en blanco para eliminar el método.');
+            return;
+          }
+        }
+      } else {
+        // Other methods (string)
+        if (!configToSave[method] || configToSave[method].trim() === '') {
+          delete configToSave[method];
+        }
+      }
+    }
+    
     setSavingConfig(true);
     try {
-      await loansApi.updatePaymentMethods(JSON.stringify(paymentConfig));
+      await loansApi.updatePaymentMethods(JSON.stringify(configToSave));
+      setPaymentConfig(configToSave);
       Alert.alert("Guardado", "Tus datos de pago han sido guardados exitosamente.");
       setShowConfigModal(false);
     } catch (e) {
@@ -107,13 +160,37 @@ export default function LoansScreen() {
       Alert.alert('Error', 'Debes aceptar al menos un método de pago');
       return;
     }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
-      return;
-    }
+    
     setSubmitting(true);
     try {
+      // Validar que los métodos aceptados estén configurados
+      const res = await loansApi.getPaymentMethods();
+      const userConfig = JSON.parse(res.payment_methods_json || "{}");
+      
+      const missingMethods = acceptedMethods.filter(m => {
+         if (m === 'Pago Móvil') {
+            const pm = userConfig[m];
+            return !pm || !pm.banco || !pm.telefono || !pm.cedula;
+         }
+         return !userConfig[m] || userConfig[m].trim() === '';
+      });
+      
+      if (missingMethods.length > 0) {
+         Alert.alert(
+           'Faltan Datos de Pago', 
+           `Has seleccionado métodos de pago que no has configurado: ${missingMethods.join(', ')}.\nPor favor, ve a "⚙️ Datos" y complétalos primero.`
+         );
+         setSubmitting(false);
+         return;
+      }
+
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
+        setSubmitting(false);
+        return;
+      }
+
       await loansApi.createLoan({
         amount_usd: parsedAmount,
         motive: motive,
@@ -179,11 +256,13 @@ export default function LoansScreen() {
       }
       await loansApi.notifyPayment(selectedContrib.id, {
         payment_method: notifyMethod,
-        receipt_url: finalReceiptUrl
+        receipt_url: finalReceiptUrl,
+        reference_text: referenceText
       });
       setShowNotifyModal(false);
       setNotifyMethod('');
       setReceiptUri(null);
+      setReferenceText('');
       setSelectedContrib(null);
       setSelectedLoan(null);
       Alert.alert('¡Notificado!', 'El pago ha sido notificado al receptor.');
@@ -210,16 +289,68 @@ export default function LoansScreen() {
     ]);
   };
 
-  const handleRepay = (loanId) => {
-    Alert.alert("Saldar Préstamo", "¿Ya devolviste el dinero y deseas marcar el préstamo como saldado?", [
+  const handleCancelContribution = (contribId) => {
+    Alert.alert("Cancelar Aporte", "¿Estás seguro de que deseas cancelar tu promesa de aporte?", [
       { text: "No", style: "cancel" },
-      { text: "Sí, Saldar", onPress: async () => {
+      { text: "Sí, cancelar", style: "destructive", onPress: async () => {
           try {
-            await loansApi.repayLoan(loanId);
-            Alert.alert('¡Excelente!', 'El préstamo ha sido marcado como pagado.');
+            await loansApi.cancelContribution(contribId);
+            Alert.alert("Cancelado", "Tu aporte ha sido cancelado exitosamente.");
+            fetchLoans();
+          } catch (error) {
+            Alert.alert('Error', error.response?.data?.detail || error.message);
+          }
+      }}
+    ]);
+  };
+
+  const handleNotifyRepayment = async () => {
+    if (!notifyMethod || !repayAmount) {
+      Alert.alert('Error', 'Debes elegir el método de pago y el monto'); return;
+    }
+    const parsedAmount = parseFloat(repayAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Error', 'Monto inválido'); return;
+    }
+    setRepaying(true);
+    try {
+      let finalReceiptUrl = null;
+      if (receiptUri) {
+         const uploadRes = await loansApi.uploadFile(receiptUri);
+         finalReceiptUrl = uploadRes.url;
+      }
+      await loansApi.notifyRepayment(selectedContrib.id, {
+        amount_usd: parsedAmount,
+        payment_method: notifyMethod,
+        receipt_url: finalReceiptUrl,
+        reference_text: referenceText
+      });
+      setShowRepayModal(false);
+      setNotifyMethod('');
+      setRepayAmount('');
+      setReceiptUri(null);
+      setReferenceText('');
+      setSelectedContrib(null);
+      setSelectedLoan(null);
+      Alert.alert('¡Notificado!', 'Tu devolución ha sido notificada al aportante.');
+      fetchLoans();
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.detail || error.message);
+    } finally {
+      setRepaying(false);
+    }
+  };
+
+  const handleVerifyRepayment = (repayId) => {
+    Alert.alert("Validar Devolución", "¿Confirmas que recibiste tu dinero de vuelta?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sí, Validar", onPress: async () => {
+          try {
+            await loansApi.verifyRepayment(repayId);
+            Alert.alert('Exito', 'Devolución verificada correctamente.');
             fetchLoans();
           } catch (e) {
-            Alert.alert('Error', e.response?.data?.detail || 'No se pudo saldar el préstamo');
+            Alert.alert('Error', e.response?.data?.detail || 'No se pudo verificar la devolución');
           }
       }}
     ]);
@@ -301,25 +432,67 @@ export default function LoansScreen() {
                   {c.status === 'paid' && c.payment_method && (
                     <Text style={{color: '#94a3b8', fontSize: 12}}>Vía {c.payment_method}</Text>
                   )}
-                  {c.status === 'paid' && c.receipt_url && (
-                    <Text style={{color: '#3b82f6', fontSize: 12}}>Tiene comprobante adjunto</Text>
+                  {c.reference_text && (
+                    <Text style={{color: '#94a3b8', fontSize: 12}}>Referencia: {c.reference_text}</Text>
                   )}
+                  {c.status === 'paid' && c.receipt_url && (
+                    <TouchableOpacity onPress={() => Linking.openURL(serverUrl + c.receipt_url)}>
+                      <Text style={{color: '#3b82f6', fontSize: 12, textDecorationLine: 'underline'}}>Ver comprobante adjunto</Text>
+                    </TouchableOpacity>
+                  )}
+                  {c.repayments && c.repayments.map(r => (
+                     <View key={r.id} style={{marginTop: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 5}}>
+                        <Text style={{color: '#f8fafc', fontSize: 12}}>↪ Devolución de ${r.amount_usd}</Text>
+                        <Text style={{color: r.status === 'paid' ? '#eab308' : '#10b981', fontSize: 11}}>
+                           Estatus: {r.status === 'paid' ? 'Por validar' : 'Validada'}
+                        </Text>
+                        {r.reference_text && (
+                          <Text style={{color: '#94a3b8', fontSize: 11}}>Ref: {r.reference_text}</Text>
+                        )}
+                        {r.receipt_url && (
+                          <TouchableOpacity onPress={() => Linking.openURL(serverUrl + r.receipt_url)}>
+                            <Text style={{color: '#3b82f6', fontSize: 11, textDecorationLine: 'underline'}}>Ver comprobante</Text>
+                          </TouchableOpacity>
+                        )}
+                        {c.funder_id === user?.id && r.status === 'paid' && (
+                          <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981', marginTop: 5, alignSelf: 'flex-start'}]} onPress={() => handleVerifyRepayment(r.id)}>
+                            <Text style={styles.smallActionText}>Validar Devolución</Text>
+                          </TouchableOpacity>
+                        )}
+                     </View>
+                  ))}
                 </View>
                 
-                <View style={{flexDirection: 'row', gap: 5}}>
+                <View style={{flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'wrap', marginTop: 5}}>
                   {c.funder_id === user?.id && c.status === 'pledged' && (
-                    <TouchableOpacity style={styles.smallActionBtn} onPress={() => {
-                      setSelectedContrib(c);
-                      setSelectedLoan(item); // to know accepted methods & info
-                      setNotifyMethod('');
-                      setShowNotifyModal(true);
-                    }}>
-                      <Text style={styles.smallActionText}>Notificar Pago</Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#ef4444'}]} onPress={() => handleCancelContribution(c.id)}>
+                        <Text style={{color: '#ef4444', fontSize: 12, fontWeight: 'bold'}}>❌</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => {
+                        setSelectedContrib(c);
+                        setSelectedLoan(item); // to know accepted methods & info
+                        setNotifyMethod('');
+                        setShowNotifyModal(true);
+                      }}>
+                        <Text style={styles.smallActionText}>Notificar Pago</Text>
+                      </TouchableOpacity>
+                    </>
                   )}
                   {isMine && c.status === 'paid' && (
                     <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981'}]} onPress={() => handleVerify(c.id)}>
                       <Text style={styles.smallActionText}>Validar</Text>
+                    </TouchableOpacity>
+                  )}
+                  {isMine && (c.status === 'verified' || c.status === 'repay_notified') && (
+                    <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#f59e0b'}]} onPress={() => {
+                        setSelectedContrib(c);
+                        setSelectedLoan(item);
+                        setNotifyMethod('');
+                        setRepayAmount(c.amount_usd.toString());
+                        setShowRepayModal(true);
+                    }}>
+                      <Text style={styles.smallActionText}>Devolver</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -334,11 +507,6 @@ export default function LoansScreen() {
               {item.status === 'pending' && (
                 <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => handleCancelLoan(item.id)}>
                   <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
-                </TouchableOpacity>
-              )}
-              {canRepay && (
-                <TouchableOpacity style={[styles.actionButton, {backgroundColor: '#10b981'}]} onPress={() => handleRepay(item.id)}>
-                  <Text style={styles.actionButtonText}>Marcar como Saldado</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -363,7 +531,14 @@ export default function LoansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Préstamos</Text>
+        <View>
+          <Text style={styles.title}>Préstamos</Text>
+          {bcvRate && (
+            <Text style={{color: isBcvOutdated ? '#ef4444' : '#94a3b8', fontSize: 13, marginTop: 4}}>
+              🏦 Tasa BCV: {bcvRate} Bs/USD {isBcvOutdated ? '(⚠️ Desactualizada)' : ''}
+            </Text>
+          )}
+        </View>
         <View style={{flexDirection: 'row', gap: 10}}>
           <TouchableOpacity style={[styles.addButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3b82f6'}]} onPress={handleOpenConfig}>
             <Text style={[styles.addButtonText, {color: '#3b82f6'}]}>⚙️ Datos</Text>
@@ -449,28 +624,126 @@ export default function LoansScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {maxHeight: '90%'}]}>
             <ScrollView>
-              <Text style={styles.modalTitle}>Mis Datos de Pago</Text>
-              <Text style={{color: '#94a3b8', marginBottom: 15}}>Configura cómo deseas recibir el dinero para que los aportantes puedan pagarte.</Text>
-              
-              {AVAILABLE_PAYMENT_METHODS.map(method => (
-                <View key={method}>
-                  <Text style={styles.label}>{method}</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    value={paymentConfig[method] || ''} 
-                    onChangeText={text => setPaymentConfig({...paymentConfig, [method]: text})}
-                    placeholder={`Datos para ${method}`}
-                    placeholderTextColor="#475569"
-                  />
-                </View>
-              ))}
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.modalCancel} onPress={() => setShowConfigModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.modalSubmit} onPress={handleSaveConfig} disabled={savingConfig}>
-                  {savingConfig ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Guardar</Text>}
-                </TouchableOpacity>
-              </View>
+              {!selectedConfigMethod ? (
+                <>
+                  <Text style={styles.modalTitle}>Mis Datos de Pago</Text>
+                  <Text style={{color: '#94a3b8', marginBottom: 15}}>Selecciona un método para configurarlo.</Text>
+                  
+                  {AVAILABLE_PAYMENT_METHODS.map(method => {
+                    const isConfigured = !!paymentConfig[method];
+                    return (
+                      <TouchableOpacity 
+                        key={method} 
+                        style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                        onPress={() => setSelectedConfigMethod(method)}
+                      >
+                        <Text style={{color: '#fff'}}>{method}</Text>
+                        {isConfigured && <Text style={{color: '#10b981', fontSize: 12}}>✓ Configurado</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+    
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => setShowConfigModal(false)}><Text style={styles.modalCancelText}>Cerrar</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.modalSubmit} onPress={handleSaveConfig} disabled={savingConfig}>
+                      {savingConfig ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Guardar Todo</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+                    <TouchableOpacity onPress={() => setSelectedConfigMethod(null)} style={{ marginRight: 15 }}>
+                      <Text style={{ color: '#3b82f6', fontSize: 16 }}>← Volver</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.modalTitle, { marginBottom: 0 }]}>{selectedConfigMethod}</Text>
+                  </View>
+                  
+                  {selectedConfigMethod === 'Pago Móvil' ? (
+                    <View>
+                      <Text style={styles.label}>Código del banco (ej. 0102)</Text>
+                      <TextInput 
+                        style={styles.input} 
+                        keyboardType="numeric"
+                        maxLength={4}
+                        value={paymentConfig['Pago Móvil']?.banco || ''} 
+                        onChangeText={text => setPaymentConfig({
+                          ...paymentConfig, 
+                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), banco: text }
+                        })}
+                        placeholder="0102"
+                        placeholderTextColor="#475569"
+                      />
+                      
+                      <Text style={styles.label}>Tipo de documento</Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
+                        {['Persona', 'Comercio', 'Comuna'].map(tipo => (
+                          <TouchableOpacity 
+                            key={tipo}
+                            style={[
+                              styles.methodPill, 
+                              (paymentConfig['Pago Móvil']?.tipo_doc || 'Persona') === tipo ? styles.methodPillActive : null,
+                              { flex: 1, marginHorizontal: 2 }
+                            ]}
+                            onPress={() => setPaymentConfig({
+                              ...paymentConfig, 
+                              'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), tipo_doc: tipo }
+                            })}
+                          >
+                            <Text style={
+                              (paymentConfig['Pago Móvil']?.tipo_doc || 'Persona') === tipo ? styles.methodPillTextActive : styles.methodPillText
+                            }>{tipo}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      
+                      <Text style={styles.label}>Número de documento</Text>
+                      <TextInput 
+                        style={styles.input} 
+                        keyboardType="numeric"
+                        value={paymentConfig['Pago Móvil']?.cedula || ''} 
+                        onChangeText={text => setPaymentConfig({
+                          ...paymentConfig, 
+                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), cedula: text }
+                        })}
+                        placeholder="12345678"
+                        placeholderTextColor="#475569"
+                      />
+                      
+                      <Text style={styles.label}>Teléfono</Text>
+                      <TextInput 
+                        style={styles.input} 
+                        keyboardType="phone-pad"
+                        value={paymentConfig['Pago Móvil']?.telefono || ''} 
+                        onChangeText={text => setPaymentConfig({
+                          ...paymentConfig, 
+                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), telefono: text }
+                        })}
+                        placeholder="04141234567"
+                        placeholderTextColor="#475569"
+                      />
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.label}>Detalles de {selectedConfigMethod}</Text>
+                      <TextInput 
+                        style={[styles.input, { height: 100, textAlignVertical: 'top' }]} 
+                        multiline
+                        value={typeof paymentConfig[selectedConfigMethod] === 'string' ? paymentConfig[selectedConfigMethod] : ''} 
+                        onChangeText={text => setPaymentConfig({...paymentConfig, [selectedConfigMethod]: text})}
+                        placeholder={`Ingresa los datos para ${selectedConfigMethod}...`}
+                        placeholderTextColor="#475569"
+                      />
+                    </View>
+                  )}
+                  
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={[styles.modalSubmit, { width: '100%' }]} onPress={() => setSelectedConfigMethod(null)}>
+                      <Text style={styles.modalSubmitText}>Confirmar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -503,10 +776,25 @@ export default function LoansScreen() {
             <ScrollView>
               <Text style={styles.modalTitle}>Notificar Pago 💸</Text>
               <Text style={{color: '#94a3b8', marginBottom: 15}}>Notificando pago de ${selectedContrib?.amount_usd}</Text>
+
+              {isBcvOutdated && (
+                <View style={{backgroundColor: 'rgba(239, 68, 68, 0.2)', padding: 10, borderRadius: 8, marginBottom: 15}}>
+                  <Text style={{color: '#ef4444', fontSize: 13, fontWeight: 'bold'}}>⚠️ La tasa BCV ({bcvDate}) podría estar desactualizada.</Text>
+                  <Text style={{color: '#f8fafc', fontSize: 13, marginTop: 5}}>Puedes ingresar la tasa actual a continuación si deseas ajustar el cálculo en Bolívares:</Text>
+                  <TextInput 
+                    style={[styles.input, {marginTop: 10, marginBottom: 0, height: 40}]} 
+                    placeholder="Ej. 45.50" 
+                    placeholderTextColor="#94a3b8" 
+                    keyboardType="numeric" 
+                    value={manualBcvRate} 
+                    onChangeText={setManualBcvRate} 
+                  />
+                </View>
+              )}
               
               <Text style={styles.label}>Método que usaste</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
-                {selectedLoan?.accepted_payment_methods?.map(method => {
+                {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
                   return (
                     <TouchableOpacity 
@@ -522,14 +810,89 @@ export default function LoansScreen() {
 
               {notifyMethod ? (
                 <View style={{backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: 15, borderRadius: 8, marginBottom: 15}}>
-                  <Text style={{color: '#60a5fa', fontWeight: 'bold', marginBottom: 5}}>Instrucciones de Pago ({notifyMethod}):</Text>
-                  {selectedLoan?.requester_payment_methods_json && JSON.parse(selectedLoan.requester_payment_methods_json)[notifyMethod] ? (
-                    <Text style={{color: '#f8fafc', fontSize: 16}}>{JSON.parse(selectedLoan.requester_payment_methods_json)[notifyMethod]}</Text>
-                  ) : (
-                    <Text style={{color: '#94a3b8'}}>El solicitante no configuró datos para este método. Deberás coordinar por otro medio.</Text>
-                  )}
+                  <Text style={{color: '#60a5fa', fontWeight: 'bold', marginBottom: 10}}>Instrucciones de Pago ({notifyMethod}):</Text>
+                  {(() => {
+                    if (!selectedLoan?.requester_payment_methods_json) return <Text style={{color: '#94a3b8'}}>El solicitante no configuró datos para este método. Deberás coordinar por otro medio.</Text>;
+                    try {
+                      const config = JSON.parse(selectedLoan.requester_payment_methods_json)[notifyMethod];
+                      if (!config) return <Text style={{color: '#94a3b8'}}>El solicitante no configuró datos para este método. Deberás coordinar por otro medio.</Text>;
+                      if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
+                        const getPrefix = (tipo) => {
+                          if (!tipo) return 'V';
+                          if (tipo === 'Persona') return 'V';
+                          if (tipo === 'Comercio') return 'J';
+                          if (tipo === 'Comuna') return 'G';
+                          return tipo[0] || 'V';
+                        };
+                        const docPrefix = getPrefix(config.tipo_doc);
+                        const safeDoc = `${docPrefix}-${config.cedula || ''}`;
+                        const safeBanco = config.banco || '';
+                        const safeTelefono = config.telefono || '';
+                        
+                        const montoBs = effectiveBcvRate ? (selectedContrib?.amount_usd * effectiveBcvRate).toFixed(2) : null;
+                        const montoText = montoBs ? ` | Monto: ${montoBs} Bs` : '';
+                        
+                        const copyField = async (label, value) => {
+                          await Clipboard.setStringAsync(value);
+                          setCopiedField(label);
+                          setTimeout(() => setCopiedField(null), 2000);
+                        };
+                        const copyAll = async () => {
+                          const text = `Banco: ${safeBanco} | ${safeDoc} | ${safeTelefono}${montoText}`;
+                          await Clipboard.setStringAsync(text);
+                          setCopiedField('all');
+                          setTimeout(() => setCopiedField(null), 2000);
+                        };
+                        return (
+                          <View>
+                            {montoBs && (
+                              <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('monto', montoBs)}>
+                                <View>
+                                  <Text style={styles.copyDataLabel}>Monto a pagar (Tasa BCV: {effectiveBcvRate})</Text>
+                                  <Text style={[styles.copyDataValue, {color: '#10b981'}]}>{montoBs} Bs</Text>
+                                </View>
+                                <Text style={styles.copyIcon}>{copiedField === 'monto' ? '✓' : '📋'}</Text>
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('banco', safeBanco)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Banco</Text>
+                                <Text style={styles.copyDataValue}>{safeBanco}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('doc', safeDoc)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Documento</Text>
+                                <Text style={styles.copyDataValue}>{safeDoc}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'doc' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('tel', safeTelefono)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Teléfono</Text>
+                                <Text style={styles.copyDataValue}>{safeTelefono}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'tel' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyAllButton} onPress={copyAll}>
+                              <Text style={styles.copyAllButtonText}>
+                                {copiedField === 'all' ? '✅ ¡Copiado!' : '📋  Copiar todo para el banco'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+                      return <Text style={{color: '#f8fafc', fontSize: 16}}>{config}</Text>;
+                    } catch(e) {
+                      return <Text style={{color: '#94a3b8'}}>Error al leer configuración.</Text>;
+                    }
+                  })()}
                 </View>
               ) : null}
+
+              <Text style={styles.label}>Referencia (Opcional)</Text>
+              <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
 
               <Text style={styles.label}>Comprobante (Opcional)</Text>
               <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
@@ -541,6 +904,156 @@ export default function LoansScreen() {
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setShowNotifyModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.modalSubmit} onPress={handleNotify} disabled={notifying}>
                   {notifying ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Confirmar</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para Notificar Devolución */}
+      <Modal visible={showRepayModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, {maxHeight: '90%'}]}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>Devolver Dinero</Text>
+              
+              {selectedContrib && selectedLoan && (
+                <View style={{marginBottom: 15, padding: 10, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8}}>
+                  <Text style={{color: '#f8fafc'}}>Acreedor: <Text style={{fontWeight: 'bold'}}>{selectedContrib.funder_name}</Text></Text>
+                  <Text style={{color: '#94a3b8'}}>Monto original: ${selectedContrib.amount_usd}</Text>
+                </View>
+              )}
+
+              {isBcvOutdated && (
+                <View style={{backgroundColor: 'rgba(239, 68, 68, 0.2)', padding: 10, borderRadius: 8, marginBottom: 15}}>
+                  <Text style={{color: '#ef4444', fontSize: 13, fontWeight: 'bold'}}>⚠️ La tasa BCV ({bcvDate}) podría estar desactualizada.</Text>
+                  <Text style={{color: '#f8fafc', fontSize: 13, marginTop: 5}}>Ingresa la tasa actual a continuación si deseas ajustar el cálculo en Bolívares:</Text>
+                  <TextInput 
+                    style={[styles.input, {marginTop: 10, marginBottom: 0, height: 40}]} 
+                    placeholder="Ej. 45.50" 
+                    placeholderTextColor="#94a3b8" 
+                    keyboardType="numeric" 
+                    value={manualBcvRate} 
+                    onChangeText={setManualBcvRate} 
+                  />
+                </View>
+              )}
+
+              <Text style={styles.label}>Monto a devolver (USD)</Text>
+              <TextInput style={styles.input} keyboardType="numeric" value={repayAmount} onChangeText={setRepayAmount} placeholder="Ej. 10" placeholderTextColor="#475569" />
+
+              <Text style={styles.label}>¿Cómo le transferiste?</Text>
+              <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15}}>
+                {selectedContrib?.funder_payment_methods_json && Object.keys(JSON.parse(selectedContrib.funder_payment_methods_json)).map(method => {
+                  const isSelected = notifyMethod === method;
+                  return (
+                    <TouchableOpacity 
+                      key={method} 
+                      style={[styles.methodChip, isSelected && styles.methodChipSelected]}
+                      onPress={() => setNotifyMethod(method)}
+                    >
+                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}]}>{method}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {notifyMethod && selectedContrib?.funder_payment_methods_json ? (
+                <View style={{backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: 15, borderRadius: 8, marginBottom: 15}}>
+                  <Text style={{color: '#60a5fa', fontWeight: 'bold', marginBottom: 10}}>Instrucciones de Pago de {selectedContrib?.funder_name} ({notifyMethod}):</Text>
+                  {(() => {
+                    try {
+                      const config = JSON.parse(selectedContrib.funder_payment_methods_json)[notifyMethod];
+                      if (!config) return <Text style={{color: '#94a3b8'}}>No tiene este método bien configurado.</Text>;
+                      if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
+                        const getPrefix = (tipo) => {
+                          if (!tipo) return 'V';
+                          if (tipo === 'Persona') return 'V';
+                          if (tipo === 'Comercio') return 'J';
+                          if (tipo === 'Comuna') return 'G';
+                          return tipo[0] || 'V';
+                        };
+                        const docPrefix = getPrefix(config.tipo_doc);
+                        const safeDoc = `${docPrefix}-${config.cedula || ''}`;
+                        const safeBanco = config.banco || '';
+                        const safeTelefono = config.telefono || '';
+                        
+                        const montoBs = effectiveBcvRate && repayAmount ? (parseFloat(repayAmount) * effectiveBcvRate).toFixed(2) : null;
+                        const montoText = montoBs ? ` | Monto: ${montoBs} Bs` : '';
+                        
+                        const copyField = async (label, value) => {
+                          await Clipboard.setStringAsync(value);
+                          setCopiedField(label);
+                          setTimeout(() => setCopiedField(null), 2000);
+                        };
+                        const copyAll = async () => {
+                          const text = `Banco: ${safeBanco} | ${safeDoc} | ${safeTelefono}${montoText}`;
+                          await Clipboard.setStringAsync(text);
+                          setCopiedField('all');
+                          setTimeout(() => setCopiedField(null), 2000);
+                        };
+                        return (
+                          <View>
+                            {montoBs && (
+                              <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('monto', montoBs)}>
+                                <View>
+                                  <Text style={styles.copyDataLabel}>Monto a pagar (Tasa BCV: {effectiveBcvRate})</Text>
+                                  <Text style={[styles.copyDataValue, {color: '#10b981'}]}>{montoBs} Bs</Text>
+                                </View>
+                                <Text style={styles.copyIcon}>{copiedField === 'monto' ? '✓' : '📋'}</Text>
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('banco', safeBanco)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Banco</Text>
+                                <Text style={styles.copyDataValue}>{safeBanco}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('doc', safeDoc)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Documento</Text>
+                                <Text style={styles.copyDataValue}>{safeDoc}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'doc' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('tel', safeTelefono)}>
+                              <View>
+                                <Text style={styles.copyDataLabel}>Teléfono</Text>
+                                <Text style={styles.copyDataValue}>{safeTelefono}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'tel' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.copyAllButton} onPress={copyAll}>
+                              <Text style={styles.copyAllButtonText}>
+                                {copiedField === 'all' ? '✅ ¡Copiado!' : '📋  Copiar todo para el banco'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+                      return <Text style={{color: '#f8fafc', fontSize: 16}}>{config}</Text>;
+                    } catch(e) {
+                      return <Text style={{color: '#94a3b8'}}>Error al leer configuración.</Text>;
+                    }
+                  })()}
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Referencia (Opcional)</Text>
+              <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
+
+              <Text style={styles.label}>Comprobante (Opcional)</Text>
+              <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}</Text>
+              </TouchableOpacity>
+              {receiptUri && <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />}
+              
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setShowRepayModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.modalSubmit} onPress={handleNotifyRepayment} disabled={repaying}>
+                  {repaying ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Confirmar</Text>}
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -599,5 +1112,15 @@ const styles = StyleSheet.create({
   modalSubmitText: { color: '#fff', fontWeight: 'bold' },
   methodChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#3b82f6', backgroundColor: 'transparent' },
   methodChipSelected: { backgroundColor: '#3b82f6' },
-  methodChipText: { color: '#3b82f6', fontSize: 13, fontWeight: 'bold' }
+  methodChipText: { color: '#3b82f6', fontSize: 13, fontWeight: 'bold' },
+  methodPill: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent', alignItems: 'center' },
+  methodPillActive: { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' },
+  methodPillText: { color: '#94a3b8', fontSize: 14 },
+  methodPillTextActive: { color: '#10b981', fontSize: 14, fontWeight: 'bold' },
+  copyDataRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 12, marginBottom: 8 },
+  copyDataLabel: { color: '#94a3b8', fontSize: 11, marginBottom: 2 },
+  copyDataValue: { color: '#f1f5f9', fontSize: 17, fontWeight: 'bold', letterSpacing: 1 },
+  copyIcon: { fontSize: 18, opacity: 0.8 },
+  copyAllButton: { backgroundColor: 'rgba(59, 130, 246, 0.25)', borderWidth: 1, borderColor: '#3b82f6', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 6 },
+  copyAllButtonText: { color: '#93c5fd', fontWeight: 'bold', fontSize: 14 }
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Share, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import apiClient from '../api/client';
+import apiClient, { authApi } from '../api/client';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -13,6 +13,7 @@ export default function InviteMembersScreen() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [debugOrgId, setDebugOrgId] = useState('');
+  const [members, setMembers] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,6 +57,12 @@ export default function InviteMembersScreen() {
       
       if (myOrg) {
         setOrgData(myOrg);
+        try {
+          const membersData = await authApi.getMembers(orgId);
+          setMembers(membersData);
+        } catch (memErr) {
+          console.warn("Could not fetch members", memErr);
+        }
       } else {
         setErrorMsg('Tu ID de mutual no coincide con ninguna mutual de tu cuenta.');
       }
@@ -103,50 +110,62 @@ export default function InviteMembersScreen() {
     );
   }
 
-  if (orgData.role !== 'founder') {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={{color: '#fff', fontSize: 18, textAlign: 'center', padding: 20}}>
-          Solo el fundador puede ver esta pantalla y generar invitaciones.
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Invitar Familiares</Text>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Familia Mutual</Text>
       
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Período de Gracia de 24 Horas</Text>
-        <Text style={styles.cardText}>
-          Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
-        </Text>
-        
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerLabel}>Tiempo restante:</Text>
-          <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
-            {timeLeft || 'Calculando...'}
-          </Text>
-        </View>
-        
-        {canInvite ? (
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={generateInvite}
-            disabled={generating}
-          >
-            {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
-          </TouchableOpacity>
+      <View style={[styles.card, { marginBottom: 20 }]}>
+        <Text style={styles.cardTitle}>Miembros Actuales</Text>
+        {members.length === 0 ? (
+          <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
         ) : (
-          <View style={styles.expiredWarning}>
-            <Text style={styles.expiredText}>
-              El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante el módulo de Gobernanza.
-            </Text>
-          </View>
+          members.map(member => (
+            <View key={member.id} style={styles.memberRow}>
+              <View style={styles.memberAvatar}>
+                <Text style={styles.memberAvatarText}>{(member.first_name || 'U')[0]}</Text>
+              </View>
+              <View>
+                <Text style={styles.memberName}>{member.first_name} {member.last_name}</Text>
+                <Text style={styles.memberRole}>{member.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
+              </View>
+            </View>
+          ))
         )}
       </View>
-    </View>
+
+      {orgData.role === 'founder' && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
+          <Text style={styles.cardText}>
+            Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
+          </Text>
+          
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>Tiempo restante:</Text>
+            <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
+              {timeLeft || 'Calculando...'}
+            </Text>
+          </View>
+          
+          {canInvite ? (
+            <TouchableOpacity 
+              style={styles.button} 
+              onPress={generateInvite}
+              disabled={generating}
+            >
+              {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.expiredWarning}>
+              <Text style={styles.expiredText}>
+                El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante el módulo de Gobernanza.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+      <View style={{height: 40}} />
+    </ScrollView>
   );
 }
 
@@ -225,5 +244,36 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 14,
     textAlign: 'center',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: 10,
+    borderRadius: 8,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3b82f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  memberAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  memberName: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  memberRole: {
+    color: '#94a3b8',
+    fontSize: 14,
   }
 });

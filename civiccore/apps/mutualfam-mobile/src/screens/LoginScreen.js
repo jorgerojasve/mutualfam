@@ -8,11 +8,31 @@ export default function LoginScreen({ route, navigation }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!email || !password || (isRegistering && !fullName)) {
       Alert.alert('Error', 'Por favor llena todos los campos');
+      return;
+    }
+    
+    // Validar formato de correo
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Por favor ingresa un correo válido');
+      return;
+    }
+    
+    // Validar longitud de contraseña
+    if (password.length < 6) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    
+    if (isRegistering && password !== confirmPassword) {
+      Alert.alert('Error', 'Las contraseñas no coinciden');
       return;
     }
     
@@ -93,14 +113,32 @@ export default function LoginScreen({ route, navigation }) {
           onChangeText={setEmail}
         />
         
-        <TextInput
-          style={styles.input}
-          placeholder="Contraseña"
-          placeholderTextColor="#94a3b8"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Contraseña"
+            placeholderTextColor="#94a3b8"
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+            <Text style={{color: '#94a3b8'}}>{showPassword ? 'Ocultar' : 'Mostrar'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isRegistering && (
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Confirmar contraseña"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry={!showPassword}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+          </View>
+        )}
         
         <TouchableOpacity 
           style={styles.button} 
@@ -169,6 +207,25 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: '#f8fafc',
     fontSize: 16,
+  },
+  passwordContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    color: '#f8fafc',
+    fontSize: 16,
+  },
+  eyeButton: {
+    padding: 15,
   },
   button: {
     width: '100%',

@@ -42,6 +42,8 @@ class ContributionStatus(str, enum.Enum):
     PLEDGED = "pledged"     # Prometió pagar
     PAID = "paid"           # Notificó el pago
     VERIFIED = "verified"   # El receptor confirmó recibirlo
+    REPAY_NOTIFIED = "repay_notified" # El prestatario notificó que devolvió el dinero
+    REPAID = "repaid"       # El aportante confirmó que recibió la devolución
     REJECTED = "rejected"   # El receptor indica que no lo recibió
 
 class LoanContribution(Base):
@@ -61,6 +63,7 @@ class LoanContribution(Base):
     
     payment_method = Column(String(50)) # ej. "pago_movil", "zelle"
     receipt_url = Column(String(500), nullable=True) # URL de imagen en Telegram CDN
+    reference_text = Column(String(255), nullable=True) # Texto de referencia del pago
     
     status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
     
@@ -98,3 +101,20 @@ class FundContribution(Base):
     status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
     
     created_at = Column(DateTime, default=utcnow)
+
+class RepaymentStatus(str, enum.Enum):
+    PAID = "paid"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+class LoanRepayment(Base):
+    __tablename__ = "loan_repayments"
+    id = Column(Integer, primary_key=True, index=True)
+    contribution_id = Column(Integer, ForeignKey("loan_contributions.id"), nullable=False)
+    amount_usd = Column(Float, nullable=False)
+    payment_method = Column(String(50))
+    receipt_url = Column(String(500), nullable=True)
+    reference_text = Column(String(255), nullable=True)
+    status = Column(Enum(RepaymentStatus), default=RepaymentStatus.PAID)
+    created_at = Column(DateTime, default=utcnow)
+    verified_at = Column(DateTime, nullable=True)

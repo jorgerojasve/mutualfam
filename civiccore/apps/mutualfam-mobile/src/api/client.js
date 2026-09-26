@@ -44,6 +44,10 @@ export const authApi = {
       full_name: fullName
     });
     return data;
+  },
+  getMembers: async (orgId) => {
+    const { data } = await apiClient.get('/membership/members', { headers: { 'X-Organization-ID': orgId }});
+    return data;
   }
 };
 
@@ -64,12 +68,20 @@ export const loansApi = {
     const { data } = await apiClient.get('/config/payment_methods');
     return data;
   },
+  getAppConfig: async () => {
+    const { data } = await apiClient.get('/config/');
+    return data;
+  },
   updatePaymentMethods: async (paymentMethodsJson) => {
     const { data } = await apiClient.post('/config/payment_methods', { payment_methods_json: paymentMethodsJson });
     return data;
   },
   contributeToLoan: async (loanId, amount_usd) => {
     const { data } = await apiClient.post(`/loans/${loanId}/contribute`, { amount_usd });
+    return data;
+  },
+  cancelContribution: async (contribId) => {
+    const { data } = await apiClient.delete(`/loans/contributions/${contribId}`);
     return data;
   },
   notifyPayment: async (contribId, paymentData) => {
@@ -80,8 +92,12 @@ export const loansApi = {
     const { data } = await apiClient.post(`/loans/contributions/${contribId}/verify_payment`);
     return data;
   },
-  repayLoan: async (loanId) => {
-    const { data } = await apiClient.post(`/loans/${loanId}/repay`);
+  notifyRepayment: async (contribId, repayData) => {
+    const { data } = await apiClient.post(`/loans/contributions/${contribId}/repay`, repayData);
+    return data;
+  },
+  verifyRepayment: async (repayId) => {
+    const { data } = await apiClient.post(`/loans/repayments/${repayId}/verify`);
     return data;
   },
   uploadFile: async (fileUri) => {
