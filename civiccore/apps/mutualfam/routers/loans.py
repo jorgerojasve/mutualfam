@@ -480,6 +480,9 @@ def verify_return_payment(
     repay.status = RepaymentStatus.VERIFIED
     repay.verified_at = datetime.now(timezone.utc)
     
+    # Flush para que el SUM en la DB tome en cuenta este repayment ya verificado
+    db.flush()
+    
     from sqlalchemy import func
     total_verified = db.query(func.sum(LoanRepayment.amount_usd)).filter(
         LoanRepayment.contribution_id == contrib.id,
