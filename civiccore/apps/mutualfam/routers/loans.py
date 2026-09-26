@@ -6,7 +6,8 @@ from datetime import date
 
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import User
-from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus
+import json
+from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig
 from routers.membership import get_current_org_member
 from services.telegram_bot import send_telegram_notification
 
@@ -16,6 +17,19 @@ class LoanRequestCreate(BaseModel):
     amount_usd: float
     motive: str
     estimated_repayment_date: Optional[date] = None
+    accepted_payment_methods: List[str] = []
+
+class ContributionResponse(BaseModel):
+    id: int
+    funder_name: str
+    funder_id: int
+    amount_usd: float
+    status: str
+    payment_method: Optional[str]
+    receipt_url: Optional[str]
+    
+    class Config:
+        from_attributes = True
 
 class LoanRequestResponse(BaseModel):
     id: int
@@ -25,6 +39,14 @@ class LoanRequestResponse(BaseModel):
     status: str
     requester_name: str
     requester_id: int
+    
+    accepted_payment_methods: List[str] = []
+    requester_payment_methods_json: str = "{}"
+    
+    amount_pledged: float = 0.0
+    amount_paid: float = 0.0
+    amount_verified: float = 0.0
+    contributions: List[ContributionResponse] = []
     
     class Config:
         from_attributes = True
@@ -44,7 +66,8 @@ def create_loan_request(
         amount_usd=loan.amount_usd,
         motive=loan.motive,
         estimated_repayment_date=loan.estimated_repayment_date,
-        status=LoanStatus.PENDING
+        status=LoanStatus.PENDING,
+        accepted_payment_methods=json.dumps(loan.accepted_payment_methods)
     )
     db.add(new_loan)
     db.commit()
@@ -55,6 +78,8 @@ def create_loan_request(
     msg = f"🚨 <b>Nueva solicitud de préstamo</b>\n\n👤 {org_member['user'].first_name} solicitó <b>${loan.amount_usd}</b>\n📝 Motivo: {loan.motive}{time_text}"
     send_telegram_notification(msg)
     
+    requester_config = db.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == org_member["user"].id).first()
+    
     return {
         "id": new_loan.id,
         "amount_usd": new_loan.amount_usd,
@@ -62,7 +87,13 @@ def create_loan_request(
         "estimated_repayment_date": new_loan.estimated_repayment_date,
         "status": new_loan.status.value,
         "requester_name": f'{org_member["user"].first_name} {org_member["user"].last_name}',
-        "requester_id": new_loan.requester_id
+        "requester_id": new_loan.requester_id,
+        "accepted_payment_methods": loan.accepted_payment_methods,
+        "requester_payment_methods_json": requester_config.payment_methods_json if requester_config else "{}",
+        "amount_pledged": 0.0,
+        "amount_paid": 0.0,
+        "amount_verified": 0.0,
+        "contributions": []
     }
 
 @router.get("/", response_model=List[LoanRequestResponse])
@@ -80,6 +111,39 @@ def get_loan_requests(
     response = []
     for l in loans:
         requester = db.query(User).filter(User.id == l.requester_id).first()
+        
+        db_contribs = db.query(LoanContribution).filter(LoanContribution.loan_request_id == l.id).all()
+        contributions = []
+        amt_pledged = 0.0
+        amt_paid = 0.0
+        amt_verified = 0.0
+        
+        for c in db_contribs:
+            funder = db.query(User).filter(User.id == c.funder_id).first()
+            if c.status == ContributionStatus.PLEDGED:
+                amt_pledged += c.amount_usd
+            elif c.status == ContributionStatus.PAID:
+                amt_paid += c.amount_usd
+            elif c.status == ContributionStatus.VERIFIED:
+                amt_verified += c.amount_usd
+                
+            contributions.append({
+                "id": c.id,
+                "funder_name": f'{funder.first_name} {funder.last_name}' if funder else "Desconocido",
+                "funder_id": c.funder_id,
+                "amount_usd": c.amount_usd,
+                "status": c.status.value,
+                "payment_method": c.payment_method,
+                "receipt_url": c.receipt_url
+            })
+            
+        requester_config = db.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == l.requester_id).first()
+        
+        try:
+            accepted_pm = json.loads(l.accepted_payment_methods)
+        except:
+            accepted_pm = []
+            
         response.append({
             "id": l.id,
             "amount_usd": l.amount_usd,
@@ -87,7 +151,13 @@ def get_loan_requests(
             "estimated_repayment_date": l.estimated_repayment_date,
             "status": l.status.value,
             "requester_name": f'{requester.first_name} {requester.last_name}' if requester else "Desconocido",
-            "requester_id": l.requester_id
+            "requester_id": l.requester_id,
+            "accepted_payment_methods": accepted_pm,
+            "requester_payment_methods_json": requester_config.payment_methods_json if requester_config else "{}",
+            "amount_pledged": amt_pledged,
+            "amount_paid": amt_paid,
+            "amount_verified": amt_verified,
+            "contributions": contributions
         })
     return response
 
@@ -124,8 +194,8 @@ def cancel_loan_request(
 
 class ContributionCreate(BaseModel):
     amount_usd: float
-    amount_ves: Optional[float] = None
-    exchange_rate_used: Optional[float] = None
+
+class ContributionNotify(BaseModel):
     payment_method: str
     receipt_url: Optional[str] = None
 
@@ -154,11 +224,7 @@ def contribute_to_loan(
         loan_request_id=loan.id,
         funder_id=org_member["user"].id,
         amount_usd=contrib.amount_usd,
-        amount_ves=contrib.amount_ves,
-        exchange_rate_used=contrib.exchange_rate_used,
-        payment_method=contrib.payment_method,
-        receipt_url=contrib.receipt_url,
-        status=ContributionStatus.PENDING_PROOF
+        status=ContributionStatus.PLEDGED
     )
     db.add(new_contrib)
     
@@ -180,10 +246,68 @@ def contribute_to_loan(
     db.commit()
     db.refresh(new_contrib)
     
-    msg = f"✅ <b>¡Nuevo Aporte!</b>\n\n👤 {org_member['user'].first_name} ha aportado <b>${contrib.amount_usd}</b> al préstamo de {loan.motive}."
+    msg = f"✅ <b>¡Nuevo Aporte Prometido!</b>\n\n👤 {org_member['user'].first_name} se comprometió a aportar <b>${contrib.amount_usd}</b> al préstamo de {loan.motive}."
     send_telegram_notification(msg)
     
-    return {"message": "Aporte registrado exitosamente", "contribution_id": new_contrib.id}
+    return {"message": "Aporte prometido exitosamente", "contribution_id": new_contrib.id}
+
+@router.post("/contributions/{contrib_id}/notify_payment")
+def notify_payment(
+    contrib_id: int,
+    notify: ContributionNotify,
+    org_member: dict = Depends(get_current_org_member), 
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Aporte no encontrado")
+        
+    if contrib.funder_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el aportante puede notificar el pago")
+        
+    if contrib.status != ContributionStatus.PLEDGED:
+        raise HTTPException(status_code=400, detail="Solo se puede notificar pago de aportes prometidos")
+        
+    contrib.status = ContributionStatus.PAID
+    contrib.payment_method = notify.payment_method
+    contrib.receipt_url = notify.receipt_url
+    db.commit()
+    
+    msg = f"💸 <b>¡Pago Notificado!</b>\n\n👤 {org_member['user'].first_name} ha pagado su aporte de <b>${contrib.amount_usd}</b>."
+    send_telegram_notification(msg)
+    
+    return {"message": "Pago notificado exitosamente"}
+
+@router.post("/contributions/{contrib_id}/verify_payment")
+def verify_payment(
+    contrib_id: int,
+    org_member: dict = Depends(get_current_org_member), 
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Aporte no encontrado")
+        
+    loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+    if not loan or loan.requester_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el solicitante del préstamo puede verificar los pagos")
+        
+    if contrib.status != ContributionStatus.PAID:
+        raise HTTPException(status_code=400, detail="Solo se pueden verificar aportes que hayan notificado pago")
+        
+    contrib.status = ContributionStatus.VERIFIED
+    db.commit()
+    
+    msg = f"👍 <b>¡Pago Verificado!</b>\n\n👤 {org_member['user'].first_name} confirmó recibir el aporte de <b>${contrib.amount_usd}</b>."
+    send_telegram_notification(msg)
+    
+    return {"message": "Pago verificado exitosamente"}
 
 @router.post("/{loan_id}/repay")
 def repay_loan(

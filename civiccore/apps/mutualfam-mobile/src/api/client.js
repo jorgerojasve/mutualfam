@@ -60,8 +60,24 @@ export const loansApi = {
     const { data } = await apiClient.delete(`/loans/${loanId}`);
     return data;
   },
-  contributeToLoan: async (loanId, contributionData) => {
-    const { data } = await apiClient.post(`/loans/${loanId}/contribute`, contributionData);
+  getPaymentMethods: async () => {
+    const { data } = await apiClient.get('/config/payment_methods');
+    return data;
+  },
+  updatePaymentMethods: async (paymentMethodsJson) => {
+    const { data } = await apiClient.post('/config/payment_methods', { payment_methods_json: paymentMethodsJson });
+    return data;
+  },
+  contributeToLoan: async (loanId, amount_usd) => {
+    const { data } = await apiClient.post(`/loans/${loanId}/contribute`, { amount_usd });
+    return data;
+  },
+  notifyPayment: async (contribId, paymentData) => {
+    const { data } = await apiClient.post(`/loans/contributions/${contribId}/notify_payment`, paymentData);
+    return data;
+  },
+  verifyPayment: async (contribId) => {
+    const { data } = await apiClient.post(`/loans/contributions/${contribId}/verify_payment`);
     return data;
   },
   repayLoan: async (loanId) => {

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, Enum, ForeignKey, Text
 from datetime import datetime, timezone
 import enum
 from civiccore.core.database import Base
@@ -13,6 +13,12 @@ class LoanStatus(str, enum.Enum):
     REPAID = "repaid"         # Pagado de vuelta
     CANCELLED = "cancelled"   # Cancelado
 
+class UserPaymentConfig(Base):
+    __tablename__ = "mutualfam_user_payment_configs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, unique=True)
+    payment_methods_json = Column(Text, default="{}")
+
 class LoanRequest(Base):
     __tablename__ = "loan_requests"
     
@@ -25,6 +31,7 @@ class LoanRequest(Base):
     estimated_repayment_date = Column(Date, nullable=True)
     
     status = Column(Enum(LoanStatus), default=LoanStatus.PENDING)
+    accepted_payment_methods = Column(Text, default="[]")
     
     created_at = Column(DateTime, default=utcnow)
     funded_at = Column(DateTime, nullable=True)
@@ -32,8 +39,10 @@ class LoanRequest(Base):
 
 
 class ContributionStatus(str, enum.Enum):
-    PENDING_PROOF = "pending_proof" # Comprometido pero sin comprobante
-    VERIFIED = "verified"           # Comprobante validado
+    PLEDGED = "pledged"     # Prometió pagar
+    PAID = "paid"           # Notificó el pago
+    VERIFIED = "verified"   # El receptor confirmó recibirlo
+    REJECTED = "rejected"   # El receptor indica que no lo recibió
 
 class LoanContribution(Base):
     """
