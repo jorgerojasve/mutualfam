@@ -19,15 +19,27 @@ allprojects {
     maven { url 'https://www.jitpack.io' }
   }
 
-  // Disable codegen schema generation for react-native-screens.
   // react-native-screens@4.26.0 uses CT.WithDefault<boolean, true> TypeScript syntax
-  // that is incompatible with @react-native/codegen@0.86.3's parser.
-  // Since newArchEnabled=false, these codegen artifacts are not needed.
-  // tasks.configureEach is lazy and avoids afterEvaluate timing errors.
+  // incompatible with @react-native/codegen@0.86.3 parser. Since newArchEnabled=false,
+  // codegen artifacts are not needed. We disable both tasks AND create a stub schema.json
+  // during configuration time (before Gradle validates task inputs) to avoid:
+  // "An input file was expected to be present but it doesn't exist."
   tasks.configureEach { task ->
-    if (task.name == "generateCodegenSchemaFromJavaScript" &&
-        task.project.name == "react-native-screens") {
-      task.enabled = false
+    if (task.project.name == "react-native-screens") {
+      if (task.name == "generateCodegenSchemaFromJavaScript") {
+        task.enabled = false
+      }
+      if (task.name == "generateCodegenArtifactsFromSchema") {
+        // Create stub schema.json NOW (config phase) so Gradle input validation passes
+        def schemaDir = new File(task.project.buildDir, "generated/source/codegen")
+        schemaDir.mkdirs()
+        def schemaFile = new File(schemaDir, "schema.json")
+        if (!schemaFile.exists()) {
+          schemaFile.text = '{"modules":{},"components":{}}'
+          logger.lifecycle("[build-fix] Created stub schema.json for react-native-screens")
+        }
+        task.enabled = false
+      }
     }
   }
 }
