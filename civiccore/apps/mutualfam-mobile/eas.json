@@ -4,26 +4,17 @@
     "appVersionSource": "local"
   },
   "build": {
-    "base": {
-      "node": {
-        "version": "22.x"
-      }
-    },
     "development": {
-      "extends": "base",
       "developmentClient": true,
       "distribution": "internal"
     },
     "preview": {
-      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
-    "production": {
-      "extends": "base"
-    }
+    "production": {}
   },
   "submit": {
     "production": {}
