@@ -54,6 +54,47 @@ done <<< "$(find "$FABRIC_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \))"
 
 echo "[patch-screens] Done with react-native-screens."
 
+# ===========================================================================
+# Patch expo-modules-core (nested inside expo/node_modules/) for RN 0.79.2.
+#
+# Problem: React Native 0.79.2 changed the `Promise` interface signatures from
+#   reject(code: String?, ...) -> reject(code: String, ...)  (non-nullable code)
+# expo-modules-core's `Promise.kt` (inside expo/node_modules/) still uses the
+# old nullable `code: String?` signatures which fail to compile against RN 0.79.2.
+#
+# We fix this by patching only the `object : com.facebook.react.bridge.Promise {}`
+# implementation block inside `Promise.kt` (lines that say `override fun reject`).
+# We must NOT touch the `expo.modules.kotlin.Promise` interface itself which uses String?.
+# ===========================================================================
+echo "[patch-expo] Patching expo-modules-core for React Native 0.79.2 Promise compatibility..."
+
+# Find all expo-modules-core nested inside expo/node_modules/
+for EXPO_CORE_DIR in $(find . -type d -name "expo-modules-core" -path "*/expo/node_modules/*" 2>/dev/null); do
+  PROMISE_FILE="$EXPO_CORE_DIR/android/src/main/java/expo/modules/kotlin/Promise.kt"
+  KWRAPPER_FILE="$EXPO_CORE_DIR/android/src/main/java/expo/modules/kotlin/KPromiseWrapper.kt"
+
+  if [ -f "$PROMISE_FILE" ]; then
+    # Fix the bridge Promise implementation: nullable -> non-nullable for the
+    # `override fun reject` methods that implement com.facebook.react.bridge.Promise
+    # (these are the ones inside the `object : com.facebook.react.bridge.Promise` block)
+    # RN 0.79.2 signature: reject(code: String, message: String?)  (no ? on code)
+    sed -i 's/override fun reject(code: String?, message: String?)/override fun reject(code: String, message: String?)/g' "$PROMISE_FILE"
+    sed -i 's/override fun reject(code: String?, throwable: Throwable?)/override fun reject(code: String, throwable: Throwable?)/g' "$PROMISE_FILE"
+    sed -i 's/override fun reject(code: String?, message: String?, throwable: Throwable?)/override fun reject(code: String, message: String?, throwable: Throwable?)/g' "$PROMISE_FILE"
+    sed -i 's/override fun reject(code: String?, userInfo: WritableMap)/override fun reject(code: String, userInfo: WritableMap)/g' "$PROMISE_FILE"
+    sed -i 's/override fun reject(code: String?, throwable: Throwable?, userInfo: WritableMap)/override fun reject(code: String, throwable: Throwable?, userInfo: WritableMap)/g' "$PROMISE_FILE"
+    sed -i 's/override fun reject(code: String?, message: String?, userInfo: WritableMap)/override fun reject(code: String, message: String?, userInfo: WritableMap)/g' "$PROMISE_FILE"
+    # The last overload still accepts String? per RN 0.79.2 spec, keep as is.
+    echo "[patch-expo] Patched Promise.kt in $EXPO_CORE_DIR"
+  fi
+
+  if [ -f "$KWRAPPER_FILE" ]; then
+    # KPromiseWrapper.reject(code: String?, message: String?, cause: Throwable?) calls
+    # bridgePromise.reject(code, message, cause) but bridge expects code: String.
+    # Fix: pass `code ?: "E_UNKNOWN"` to bridge.
+    sed -i 's/bridgePromise\.reject(code, message, cause)/bridgePromise.reject(code ?: "E_UNKNOWN", message, cause)/g' "$KWRAPPER_FILE"
+    echo "[patch-expo] Patched KPromiseWrapper.kt in $EXPO_CORE_DIR"
+  fi
+done
 
 echo "[patch] Done."
-
