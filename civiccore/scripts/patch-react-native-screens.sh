@@ -24,22 +24,10 @@ fi
 
 echo "[patch-screens] Patching $FABRIC_DIR to fix CodegenTypes namespace..."
 
-FILES=(
-  "FullWindowOverlayNativeComponent.ts"
-  "ModalScreenNativeComponent.ts"
-  "ScreenNativeComponent.ts"
-  "ScreenStackHeaderConfigNativeComponent.ts"
-  "ScreenStackHeaderSubviewNativeComponent.ts"
-  "ScreenStackNativeComponent.ts"
-  "SearchBarNativeComponent.ts"
-)
-
-for f in "${FILES[@]}"; do
-  FILE_PATH="$FABRIC_DIR/$f"
-  if [ ! -f "$FILE_PATH" ]; then
-    echo "[patch-screens]   Skipping $f (not found)"
-    continue
-  fi
+# Find all .ts files in FABRIC_DIR recursively
+while IFS= read -r FILE_PATH; do
+  if [ -z "$FILE_PATH" ]; then continue; fi
+  f=$(basename "$FILE_PATH")
 
   # Remove CT. prefix from WithDefault so Codegen 0.86 recognizes them
   # and string enums can maintain their default values
@@ -58,7 +46,7 @@ for f in "${FILES[@]}"; do
   sed -i 's/import type { CodegenTypes as CT, \(.*\) } from '"'"'react-native'"'"';/import type { \1, WithDefault, Int32, Float, Double, UnsafeMixed } from '"'"'react-native'"'"';/' "$FILE_PATH"
   
   echo "[patch-screens]   Patched $f"
-done
+done <<< "$(find "$FABRIC_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \))"
 
 echo "[patch-screens] Done with react-native-screens."
 
