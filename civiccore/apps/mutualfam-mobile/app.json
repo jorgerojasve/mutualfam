@@ -12,6 +12,14 @@
     "sdkVersion": "57.0.0",
     "plugins": [
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4dacbcd7-b02a-4f4a-ba89-1800624a2f88"
+      }
+    },
+    "android": {
+      "package": "com.jorgerojasve.mutualfammobile"
+    }
   }
 }
