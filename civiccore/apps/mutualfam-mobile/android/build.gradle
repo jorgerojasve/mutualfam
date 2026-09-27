@@ -29,29 +29,8 @@ allprojects {
     }
   }
 
-  // react-native-screens@4.26.0 uses CT.WithDefault<boolean, true> TypeScript syntax
-  // incompatible with @react-native/codegen@0.86.3 parser. Since newArchEnabled=false,
-  // codegen artifacts are not needed. We disable both tasks AND create a stub schema.json
-  // during configuration time (before Gradle validates task inputs) to avoid:
-  // "An input file was expected to be present but it doesn't exist."
-  tasks.configureEach { task ->
-    if (task.project.name == "react-native-screens") {
-      if (task.name == "generateCodegenSchemaFromJavaScript") {
-        task.enabled = false
-      }
-      if (task.name == "generateCodegenArtifactsFromSchema") {
-        // Create stub schema.json NOW (config phase) so Gradle input validation passes
-        def schemaDir = new File(task.project.buildDir, "generated/source/codegen")
-        schemaDir.mkdirs()
-        def schemaFile = new File(schemaDir, "schema.json")
-        if (!schemaFile.exists()) {
-          schemaFile.text = '{"modules":{},"components":{}}'
-          logger.lifecycle("[build-fix] Created stub schema.json for react-native-screens")
-        }
-        task.enabled = false
-      }
-    }
-  }
+  // The TypeScript issues in react-native-screens are fixed by patch-react-native-screens.sh.
+  // We do not need to disable codegen; it will run successfully and produce necessary artifacts.
 }
 
 apply plugin: "expo-root-project"

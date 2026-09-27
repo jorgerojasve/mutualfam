@@ -8,14 +8,7 @@
 set -e
 
 # Find react-native-screens in node_modules (works in both monorepo and standalone)
-SCREENS_DIR=""
-if [ -d "node_modules/react-native-screens" ]; then
-  SCREENS_DIR="node_modules/react-native-screens"
-elif [ -d "../node_modules/react-native-screens" ]; then
-  SCREENS_DIR="../node_modules/react-native-screens"
-elif [ -d "../../node_modules/react-native-screens" ]; then
-  SCREENS_DIR="../../node_modules/react-native-screens"
-fi
+SCREENS_DIR=$(find . -type d -path "*/node_modules/react-native-screens" -prune | head -n 1)
 
 if [ -z "$SCREENS_DIR" ]; then
   echo "[patch-screens] WARNING: react-native-screens not found, skipping patch"
@@ -69,22 +62,11 @@ done
 echo "[patch-screens] Done with react-native-screens."
 
 echo "[patch-expo] Patching expo-modules-core for React Native 0.86 Promise compatibility..."
-EXPO_CORE_DIR=""
-if [ -d "node_modules/expo-modules-core" ]; then
-  EXPO_CORE_DIR="node_modules/expo-modules-core"
-elif [ -d "../node_modules/expo-modules-core" ]; then
-  EXPO_CORE_DIR="../node_modules/expo-modules-core"
-elif [ -d "../../node_modules/expo-modules-core" ]; then
-  EXPO_CORE_DIR="../../node_modules/expo-modules-core"
-fi
+EXPO_CORE_DIR=$(find . -type d -path "*/node_modules/expo-modules-core" -prune | head -n 1)
 
 # Fallback: check inside expo module if not hoisted
 if [ -z "$EXPO_CORE_DIR" ]; then
-  if [ -d "node_modules/expo/node_modules/expo-modules-core" ]; then
-    EXPO_CORE_DIR="node_modules/expo/node_modules/expo-modules-core"
-  elif [ -d "../../node_modules/expo/node_modules/expo-modules-core" ]; then
-    EXPO_CORE_DIR="../../node_modules/expo/node_modules/expo-modules-core"
-  fi
+  EXPO_CORE_DIR=$(find . -type d -path "*/node_modules/expo/node_modules/expo-modules-core" -prune | head -n 1)
 fi
 
 if [ -n "$EXPO_CORE_DIR" ]; then
