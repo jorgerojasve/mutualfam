@@ -41,8 +41,9 @@ for f in "${FILES[@]}"; do
     continue
   fi
 
-  # Replace CT.WithDefault<Type, Default> with Type | null | undefined
-  perl -i -0pe 's/CT\.WithDefault<\s*\n?\s*([^,>\n]+),\s*\n?\s*[^>\n]*\n?\s*>/\1 | null | undefined/g' "$FILE_PATH"
+  # Remove CT. prefix from WithDefault so Codegen 0.86 recognizes them
+  # and string enums can maintain their default values
+  sed -i 's/CT\.WithDefault/WithDefault/g' "$FILE_PATH"
   
   # Replace other CT.* types with plain types
   sed -i 's/CT\.Int32/Int32/g' "$FILE_PATH"
@@ -53,8 +54,8 @@ for f in "${FILES[@]}"; do
   sed -i 's/CT\.DirectEventHandler/DirectEventHandler/g' "$FILE_PATH"
   
   # Fix the import line: replace 'CodegenTypes as CT, ' with ''
-  # and add Int32, Float, Double, UnsafeMixed if not already present
-  sed -i 's/import type { CodegenTypes as CT, \(.*\) } from '"'"'react-native'"'"';/import type { \1, Int32, Float, Double, UnsafeMixed } from '"'"'react-native'"'"';/' "$FILE_PATH"
+  # and add WithDefault, Int32, Float, Double, UnsafeMixed if not already present
+  sed -i 's/import type { CodegenTypes as CT, \(.*\) } from '"'"'react-native'"'"';/import type { \1, WithDefault, Int32, Float, Double, UnsafeMixed } from '"'"'react-native'"'"';/' "$FILE_PATH"
   
   echo "[patch-screens]   Patched $f"
 done
