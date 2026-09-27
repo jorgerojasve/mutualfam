@@ -19,6 +19,16 @@ allprojects {
     maven { url 'https://www.jitpack.io' }
   }
 
+  configurations.all {
+    resolutionStrategy {
+      // Downgrade to avoid AGP 8.9.1 / compileSdk 36 requirements from newer androidx libs
+      force 'androidx.core:core:1.15.0'
+      force 'androidx.core:core-ktx:1.15.0'
+      force 'androidx.activity:activity:1.9.3'
+      force 'androidx.activity:activity-ktx:1.9.3'
+    }
+  }
+
   // react-native-screens@4.26.0 uses CT.WithDefault<boolean, true> TypeScript syntax
   // incompatible with @react-native/codegen@0.86.3 parser. Since newArchEnabled=false,
   // codegen artifacts are not needed. We disable both tasks AND create a stub schema.json
