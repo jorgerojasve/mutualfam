@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "eas-build-pre-install": "echo 'Setting legacy-peer-deps...' && npm config set legacy-peer-deps true",
-    "postinstall": "bash scripts/patch-react-native-screens.sh"
+    "postinstall": "bash scripts/patch-react-native-screens.sh",
+    "eas-build-post-install": "bash scripts/patch-react-native-screens.sh"
   },
   "overrides": {
     "tar": "^7.5.21"

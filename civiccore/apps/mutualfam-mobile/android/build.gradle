@@ -33,5 +33,29 @@ allprojects {
   // We do not need to disable codegen; it will run successfully and produce necessary artifacts.
 }
 
+// ---------------------------------------------------------------------------
+// Exclude react-native-screens "gamma" source files from compilation.
+//
+// The "gamma" feature in react-native-screens 4.26+ uses React Native 0.80+
+// internal APIs that do not exist in React Native 0.79.2 (used by Expo SDK 57):
+//   - UIManagerHelper.getUIManager(ReactContext, UIManagerType)
+//   - JSTouchDispatcher.onChildStartedNativeGesture(MotionEvent, EventDispatcher, ReactContext)
+//   - UIManagerHelper.getEventDispatcher(ReactContext, UIManagerType)
+//
+// Since rnsGammaEnabled=false is set in gradle.properties, these code paths
+// are never executed at runtime — but Kotlin still compiles them, causing build
+// failures. This block excludes the entire gamma directory from compilation.
+// ---------------------------------------------------------------------------
+subprojects { proj ->
+  if (proj.name == 'react-native-screens') {
+    proj.afterEvaluate {
+      android.sourceSets.main {
+        kotlin.exclude '**/gamma/**'
+        java.exclude '**/gamma/**'
+      }
+    }
+  }
+}
+
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
