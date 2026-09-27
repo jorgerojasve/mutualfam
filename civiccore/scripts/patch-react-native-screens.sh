@@ -33,6 +33,10 @@ while IFS= read -r FILE_PATH; do
   # and string enums can maintain their default values
   sed -i 's/CT\.WithDefault/WithDefault/g' "$FILE_PATH"
   
+  # Replace React.ComponentRef with React.ElementRef because older RN codegen (like 0.79.2) 
+  # strictly expects React.ElementRef and throws if it sees React.ComponentRef
+  sed -i 's/React\.ComponentRef/React.ElementRef/g' "$FILE_PATH"
+  
   # Replace other CT.* types with plain types
   sed -i 's/CT\.Int32/Int32/g' "$FILE_PATH"
   sed -i 's/CT\.Float/Float/g' "$FILE_PATH"
