@@ -18,22 +18,19 @@ allprojects {
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
   }
+
+  // Disable codegen schema generation for react-native-screens.
+  // react-native-screens@4.26.0 uses CT.WithDefault<boolean, true> TypeScript syntax
+  // that is incompatible with @react-native/codegen@0.86.3's parser.
+  // Since newArchEnabled=false, these codegen artifacts are not needed.
+  // tasks.configureEach is lazy and avoids afterEvaluate timing errors.
+  tasks.configureEach { task ->
+    if (task.name == "generateCodegenSchemaFromJavaScript" &&
+        task.project.name == "react-native-screens") {
+      task.enabled = false
+    }
+  }
 }
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
-
-// Disable codegen schema generation for react-native-screens.
-// react-native-screens@4.26.0 uses CT.WithDefault<boolean, true> TypeScript syntax
-// that is incompatible with @react-native/codegen@0.86.3's parser.
-// Since newArchEnabled=false, these codegen artifacts are not needed.
-subprojects { subproject ->
-  subproject.afterEvaluate {
-    if (subproject.tasks.findByName("generateCodegenSchemaFromJavaScript") &&
-        subproject.name == "react-native-screens") {
-      subproject.tasks.named("generateCodegenSchemaFromJavaScript").configure {
-        enabled = false
-      }
-    }
-  }
-}
