@@ -19,3 +19,21 @@ civiccore/apps/mutualfam-mobile/android/.gradle/
 civiccore/apps/mutualfam-mobile/android/build/
 civiccore/apps/mutualfam-mobile/android/app/build/
 civiccore/apps/mutualfam-mobile/android/local.properties
+
+# Entornos Virtuales y Dependencias Python
+.venv*/
+.pytest_cache/
+
+# Compilados de Frontend
+dist/
+build/
+.next/
+
+# Bases de datos y respaldos
+*.db
+*.sqlite
+*.sqlite3
+backups/
+
+# Archivos de usuario
+uploads/
