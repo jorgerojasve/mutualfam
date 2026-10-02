@@ -82,10 +82,20 @@ export default function InviteMembersScreen() {
         headers: { 'X-Organization-ID': orgId }
       });
       
-      const inviteUrl = Linking.createURL(`join/${data.token}`);
+      let inviteUrl = '';
+      if (process.env.EXPO_PUBLIC_INVITE_URL_BASE) {
+        inviteUrl = `${process.env.EXPO_PUBLIC_INVITE_URL_BASE}${data.token}`;
+      } else {
+        // Fallback nativo para desarrollo (Expo Go)
+        inviteUrl = Linking.createURL(`join/${data.token}`);
+      }
+      
+      const shareMessage = process.env.EXPO_PUBLIC_INVITE_URL_BASE
+        ? `¡Únete a nuestra Mutual Familiar! 🤝\n\nIngresa a este enlace para instalar la app y unirte a nosotros:\n${inviteUrl}`
+        : inviteUrl;
       
       await Share.share({
-        message: inviteUrl,
+        message: shareMessage,
       });
     } catch (e) {
       Alert.alert('Error', e.response?.data?.detail || 'No se pudo generar la invitación');

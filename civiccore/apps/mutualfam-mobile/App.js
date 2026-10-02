@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 
@@ -116,15 +117,17 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer linking={linking}>
-      <StatusBar style="light" />
-      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
-        <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
-        <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabs} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer linking={linking}>
+        <StatusBar style="light" />
+        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
+          <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
+          <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }

@@ -12,6 +12,7 @@ __pycache__/
 venv/
 __pycache__/
 .env
+*.apk
 
 # Android bare workflow - excluir solo artifacts generados
 civiccore/apps/mutualfam-mobile/android/.gradle/

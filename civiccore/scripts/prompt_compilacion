@@ -1,0 +1,7 @@
+Hemos tenido demasiadas dificultades para compilar la apk de MutualFam. Tres métodos diferentes (EAS en la nube, EAS local y compilación local directa) no han dado resultado luego de numerosos intentos. Vamos a intentar un nuevo enfoque:
+1- Vamos a crear una rama git aparte con un hola mundo básico de expo.
+2- Vamos a generar una apk de ese hola mundo utilizando las tres opciones.
+3- A partir de las opciones que funcionen, vamos a ir progresivamente incorporando la complejidad de MutualFam para identificar el punto exacto de falla. Proponeme vos el mejor enfoque para lograrlo.
+4- Te pido por favor que no borres nada del repositorio, únicamente crees y trabajes sobre la nueva rama.
+5- Vamos a establecer un número máximo de iteraciones para cada opción, de manera que si alcanzamos este máximo sin éxito, pasemos a la siguiente opción. Si más adelante nos bloqueamos con una de las opciones podemos retomar opciones anteriores que hayan quedado detenidas o seguir con las que estén pendientes.
+6- Elabora un plan maestro para este proceso y documenta las lecciones aprendidas en un archivo .md.
