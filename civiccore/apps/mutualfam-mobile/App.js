@@ -97,7 +97,8 @@ export default function App() {
       try {
         const token = await AsyncStorage.getItem('jwt_token');
         if (token) {
-          setInitialRoute('MainTabs');
+          const orgId = await AsyncStorage.getItem('org_id');
+          setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
         }
       } catch (e) {
         console.warn(e);

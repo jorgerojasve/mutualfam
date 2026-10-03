@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi } from '../api/client';
+import apiClient, { authApi } from '../api/client';
+import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
+  const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
 
   useEffect(() => {
     fetchData();
@@ -14,11 +16,25 @@ export default function SelectMutualScreen({ navigation }) {
   const fetchData = async () => {
     try {
       const data = await authApi.me();
-      setOrganizations(data.organizations || []);
+      const orgs = data.organizations || [];
+      setOrganizations(orgs);
+      if (orgs.length === 0) detectInvite();
     } catch (e) {
       Alert.alert('Error', 'No se pudo cargar la información del usuario');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const detectInvite = async () => {
+    let code = extractInviteCode(await AsyncStorage.getItem('pending_join_token'));
+    if (!code) code = await getInviteFromClipboard();
+    if (!code) return;
+    try {
+      const { data } = await apiClient.get(`/membership/invites/${encodeURIComponent(code)}`);
+      setDetectedInvite({ token: data.token || code, organization_name: data.organization_name });
+    } catch (e) {
+      // Invitación inválida: no mostramos nada
     }
   };
 
@@ -62,7 +78,25 @@ export default function SelectMutualScreen({ navigation }) {
         />
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Aún no perteneces a ninguna familia/mutual.</Text>
+          {detectedInvite ? (
+            <View style={styles.inviteCard}>
+              <Text style={styles.inviteCardLabel}>✨ Tienes una invitación</Text>
+              <Text style={styles.inviteCardOrg}>{detectedInvite.organization_name}</Text>
+              <TouchableOpacity
+                style={[styles.primaryButton, { alignSelf: 'stretch', marginTop: 16, marginBottom: 0 }]}
+                onPress={() => navigation.navigate('JoinMutual', { token: detectedInvite.token })}
+              >
+                <Text style={styles.primaryButtonText}>Ver invitación y unirme</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.emptyText}>Aún no perteneces a ninguna familia/mutual.</Text>
+              <Text style={styles.emptyHint}>
+                Si alguien te invitó, toca "Tengo un código de invitación" y escribe el código que aparece en tu mensaje.
+              </Text>
+            </>
+          )}
         </View>
       )}
 
@@ -134,6 +168,35 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94a3b8',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  emptyHint: {
+    color: '#64748b',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 20,
+    paddingHorizontal: 10,
+  },
+  inviteCard: {
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  inviteCardLabel: {
+    color: '#34d399',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  inviteCardOrg: {
+    color: '#f8fafc',
+    fontSize: 22,
+    fontWeight: 'bold',
     textAlign: 'center',
   },
   actionsContainer: {

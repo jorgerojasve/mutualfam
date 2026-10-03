@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi } from '../api/client';
+import apiClient, { authApi } from '../api/client';
+import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 
 export default function LoginScreen({ route, navigation }) {
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
@@ -11,6 +12,35 @@ export default function LoginScreen({ route, navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [invite, setInvite] = useState(null); // { token, organization_name }
+
+  useEffect(() => {
+    // Capa 2 del flujo de invitación: el usuario acaba de instalar el APK y abrió
+    // la app directamente (perdiendo el deep link). Recuperamos la invitación desde
+    // AsyncStorage o desde el enlace que el Landing Page copió al portapapeles.
+    const detectInvite = async () => {
+      let code = extractInviteCode(await AsyncStorage.getItem('pending_join_token'));
+      if (!code) code = await getInviteFromClipboard();
+      if (!code) return;
+      try {
+        const { data } = await apiClient.get(`/membership/invites/${encodeURIComponent(code)}`);
+        const token = data.token || code;
+        await AsyncStorage.setItem('pending_join_token', token);
+        setInvite({ token, organization_name: data.organization_name });
+        setIsRegistering(true);
+      } catch (e) {
+        // Invitación inválida o expirada: no molestamos al usuario
+        await AsyncStorage.removeItem('pending_join_token');
+      }
+    };
+    detectInvite();
+  }, []);
+
+  const discardInvite = async () => {
+    if (invite) await dismissClipboardInvite(invite.token);
+    await AsyncStorage.removeItem('pending_join_token');
+    setInvite(null);
+  };
 
   const handleSubmit = async () => {
     if (!email || !password || (isRegistering && !fullName)) {
@@ -93,7 +123,20 @@ export default function LoginScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      {invite && (
+        <View style={styles.inviteBanner}>
+          <Text style={styles.inviteBannerTitle}>🎉 Te invitaron a {invite.organization_name}</Text>
+          <Text style={styles.inviteBannerText}>
+            {isRegistering
+              ? 'Crea tu cuenta y te uniremos automáticamente a la mutual.'
+              : 'Inicia sesión y te uniremos automáticamente a la mutual.'}
+          </Text>
+          <TouchableOpacity onPress={discardInvite}>
+            <Text style={styles.inviteBannerDismiss}>No es para mí</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.card}>
         <View style={styles.iconPlaceholder} />
         <Text style={styles.title}>Mutual Familiar</Text>
@@ -168,16 +211,44 @@ export default function LoginScreen({ route, navigation }) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
     flex: 1,
     backgroundColor: '#0f172a', // Slate 900
+  },
+  container: {
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+  },
+  inviteBanner: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  inviteBannerTitle: {
+    color: '#34d399',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  inviteBannerText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  inviteBannerDismiss: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginTop: 8,
+    textDecorationLine: 'underline',
   },
   card: {
     backgroundColor: '#1e293b', // Slate 800

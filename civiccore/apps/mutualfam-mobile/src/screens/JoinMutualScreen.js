@@ -1,58 +1,101 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi } from '../api/client';
 import apiClient from '../api/client';
+import {
+  extractInviteCode,
+  formatInviteCode,
+  getInviteFromClipboard,
+  pasteInviteFromClipboard,
+  dismissClipboardInvite,
+} from '../utils/invite';
 
 export default function JoinMutualScreen({ route, navigation }) {
+  const [input, setInput] = useState('');
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [mutualInfo, setMutualInfo] = useState(null);
+  const [fromClipboard, setFromClipboard] = useState(false);
 
   useEffect(() => {
-    // Si viene desde un deep link (mutualfam://join/TOKEN)
-    if (route.params?.token) {
-      setToken(route.params.token);
-      checkToken(route.params.token);
-    }
+    const init = async () => {
+      // 1) Viene desde un deep link (mutualfam://join/TOKEN) o desde Login/SelectMutual
+      const paramCode = extractInviteCode(route.params?.token);
+      if (paramCode) {
+        setInput(formatInviteCode(paramCode));
+        checkToken(paramCode);
+        return;
+      }
+      // 2) Invitación pendiente guardada antes de registrarse
+      const pending = extractInviteCode(await AsyncStorage.getItem('pending_join_token'));
+      if (pending) {
+        setInput(formatInviteCode(pending));
+        checkToken(pending);
+        return;
+      }
+      // 3) Enlace de invitación copiado en el portapapeles (Landing Page / WhatsApp)
+      const clip = await getInviteFromClipboard();
+      if (clip) {
+        setFromClipboard(true);
+        setInput(formatInviteCode(clip));
+        checkToken(clip);
+      }
+    };
+    init();
   }, [route.params?.token]);
 
-  const checkToken = async (tokenToCheck) => {
-    if (!tokenToCheck) return;
+  const checkToken = async (rawValue) => {
+    const code = extractInviteCode(rawValue);
+    if (!code) {
+      Alert.alert(
+        'Código no válido',
+        'Escribe el código de 8 caracteres que aparece en tu invitación (ej. K7P3-QX9M) o pega el enlace completo que te enviaron.'
+      );
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await apiClient.get(`/membership/invites/${tokenToCheck}`);
+      const { data } = await apiClient.get(`/membership/invites/${encodeURIComponent(code)}`);
+      setToken(data.token || code);
       setMutualInfo(data);
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.detail || 'Token inválido o expirado');
+      Alert.alert('Invitación no encontrada', e.response?.data?.detail || 'El código es inválido o ya expiró. Pide una nueva invitación.');
       setMutualInfo(null);
+      setFromClipboard(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoin = async () => {
-    if (!token) {
-      Alert.alert('Error', 'Por favor ingresa un token de invitación');
+  const handlePaste = async () => {
+    const { text, code } = await pasteInviteFromClipboard();
+    if (!text) {
+      Alert.alert('Portapapeles vacío', 'Primero copia el enlace o código de invitación que te enviaron.');
       return;
     }
-    
+    setInput(code ? formatInviteCode(code) : text);
+    if (code) checkToken(code);
+  };
+
+  const handleJoin = async () => {
+    if (!token) return;
+
     setLoading(true);
     try {
       const jwtToken = await AsyncStorage.getItem('jwt_token');
       if (!jwtToken) {
-        // Not logged in
+        // Aún no tiene cuenta: guardamos la invitación y lo mandamos a registrarse
         await AsyncStorage.setItem('pending_join_token', token);
-        Alert.alert('Atención', 'Debes crear una cuenta o iniciar sesión primero para unirte.');
+        Alert.alert('Un paso más', 'Crea tu cuenta (o inicia sesión) y te uniremos automáticamente a la mutual.');
         navigation.replace('Login', { intent: 'register' });
         return;
       }
 
       const { data } = await apiClient.post('/membership/organizations/join', { token });
       await AsyncStorage.removeItem('pending_join_token');
+      await dismissClipboardInvite(token);
       Alert.alert('¡Bienvenido!', data.message || 'Te has unido exitosamente.');
-      
-      // Save org_id and go to main tabs
+
       await AsyncStorage.setItem('org_id', data.organization_id.toString());
       navigation.replace('MainTabs');
     } catch (e) {
@@ -68,48 +111,79 @@ export default function JoinMutualScreen({ route, navigation }) {
     }
   };
 
+  const handleCancel = async () => {
+    await AsyncStorage.removeItem('pending_join_token');
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    // Abierto directamente por deep link: no hay pantalla anterior
+    const jwtToken = await AsyncStorage.getItem('jwt_token');
+    navigation.replace(jwtToken ? 'SelectMutual' : 'Login');
+  };
+
+  const resetCode = () => {
+    setMutualInfo(null);
+    setToken('');
+    setInput('');
+    setFromClipboard(false);
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Unirse a Mutual</Text>
-      
+      <Text style={styles.title}>Unirse a una Mutual</Text>
+
       {!mutualInfo ? (
         <>
-          <Text style={styles.subtitle}>Ingresa el código que te compartió el administrador de la familia.</Text>
+          <Text style={styles.subtitle}>
+            Escribe el código de invitación que te enviaron (aparece en el mensaje y en la página de invitación).
+          </Text>
           <TextInput
             style={styles.input}
-            placeholder="Ej. AbCdEfGh..."
-            placeholderTextColor="#94a3b8"
-            value={token}
-            onChangeText={setToken}
-            autoCapitalize="none"
+            placeholder="Ej. K7P3-QX9M"
+            placeholderTextColor="#64748b"
+            value={input}
+            onChangeText={setInput}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onSubmitEditing={() => checkToken(input)}
+            returnKeyType="go"
           />
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={() => checkToken(token)}
-            disabled={loading || !token}
+          <TouchableOpacity style={styles.pasteButton} onPress={handlePaste} disabled={loading}>
+            <Text style={styles.pasteText}>📋 Pegar enlace o código copiado</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, (!input || loading) && styles.buttonMuted]}
+            onPress={() => checkToken(input)}
+            disabled={loading}
           >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verificar Código</Text>}
           </TouchableOpacity>
         </>
       ) : (
         <View style={styles.infoCard}>
+          {fromClipboard && (
+            <Text style={styles.detectedBadge}>✨ Detectamos tu invitación automáticamente</Text>
+          )}
           <Text style={styles.infoTitle}>Has sido invitado a:</Text>
           <Text style={styles.orgName}>{mutualInfo.organization_name}</Text>
-          
-          <TouchableOpacity 
-            style={[styles.button, { marginTop: 20 }]} 
+          {!!mutualInfo.code && <Text style={styles.codeText}>Código {mutualInfo.code}</Text>}
+
+          <TouchableOpacity
+            style={[styles.button, styles.fullWidth, { marginTop: 20 }]}
             onPress={handleJoin}
             disabled={loading}
           >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Confirmar y Unirme</Text>}
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.linkButton} onPress={resetCode} disabled={loading}>
+            <Text style={styles.linkText}>Usar otro código</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      <TouchableOpacity 
-        style={styles.cancelButton} 
-        onPress={() => navigation.goBack()}
-      >
+      <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
         <Text style={styles.cancelText}>Cancelar</Text>
       </TouchableOpacity>
     </View>
@@ -133,20 +207,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#94a3b8',
     marginBottom: 30,
+    lineHeight: 22,
   },
   input: {
     backgroundColor: '#1e293b',
     color: '#f8fafc',
     padding: 15,
     borderRadius: 8,
-    fontSize: 16,
-    marginBottom: 20,
+    fontSize: 22,
+    letterSpacing: 3,
+    textAlign: 'center',
+    fontWeight: 'bold',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  pasteButton: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  pasteText: {
+    color: '#60a5fa',
+    fontSize: 15,
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#3b82f6',
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  buttonMuted: {
+    opacity: 0.6,
+  },
+  fullWidth: {
+    alignSelf: 'stretch',
   },
   buttonText: {
     color: '#fff',
@@ -168,6 +264,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
+  detectedBadge: {
+    color: '#34d399',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 14,
+  },
   infoTitle: {
     color: '#94a3b8',
     fontSize: 16,
@@ -177,5 +279,21 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 24,
     fontWeight: 'bold',
-  }
+    textAlign: 'center',
+  },
+  codeText: {
+    color: '#64748b',
+    fontSize: 13,
+    marginTop: 6,
+    letterSpacing: 1,
+  },
+  linkButton: {
+    marginTop: 14,
+    padding: 6,
+  },
+  linkText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
 });
