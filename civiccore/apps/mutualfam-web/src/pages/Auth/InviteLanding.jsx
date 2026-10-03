@@ -16,7 +16,7 @@ export default function InviteLanding() {
   }
 
   // Apuntamos al APK servido estáticamente desde la carpeta public/
-  const downloadApkLink = "https://github.com/jorgerojasve/mutualfam/releases/download/v1.0.0-qa/mutualfam-release.apk";
+  const downloadApkLink = "https://github.com/jorgerojasve/mutualfam/releases/download/v1.0.0-qa/mutualfam.apk";
   const deepLink = `mutualfam://join/${token}`;
 
   return (

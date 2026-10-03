@@ -23,6 +23,56 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Si el error es 401 (Unauthorized) y no hemos intentado refrescar ya
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshToken = await AsyncStorage.getItem('refresh_token');
+        if (!refreshToken) {
+          // No hay refresh token, forzamos cierre de sesión lógico
+          await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
+          return Promise.reject(error);
+        }
+        
+        // Hacemos petición cruda con axios para no caer en el interceptor nuevamente
+        const response = await axios.post(`${baseURL}/auth/refresh`, null, {
+          headers: { Authorization: `Bearer ${refreshToken}` }
+        });
+        
+        const newAccessToken = response.data.access_token;
+        await AsyncStorage.setItem('jwt_token', newAccessToken);
+        
+        // Reintentar la petición original con el nuevo token
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        return apiClient(originalRequest);
+        
+      } catch (refreshError) {
+        // Si el refresh falló (ej. expiró también), limpiamos sesión
+        await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
+        
+        // Importación lazy para evitar ciclos de dependencia con App.js
+        const { navigationRef } = require('../../App');
+        if (navigationRef.isReady()) {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        }
+        
+        return Promise.reject(refreshError);
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 export const authApi = {
   login: async (email, password) => {
     const params = new URLSearchParams();

@@ -44,7 +44,10 @@ export default function LoginScreen({ route, navigation }) {
         
         // Auto login
         const data = await authApi.login(email, password);
-        await AsyncStorage.setItem('jwt_token', data.access_token);
+        await AsyncStorage.multiSet([
+          ['jwt_token', data.access_token],
+          ['refresh_token', data.refresh_token]
+        ]);
         
         // Check for pending join token first
         const pendingToken = await AsyncStorage.getItem('pending_join_token');
@@ -57,7 +60,10 @@ export default function LoginScreen({ route, navigation }) {
         navigation.replace('SelectMutual');
       } else {
         const data = await authApi.login(email, password);
-        await AsyncStorage.setItem('jwt_token', data.access_token);
+        await AsyncStorage.multiSet([
+          ['jwt_token', data.access_token],
+          ['refresh_token', data.refresh_token]
+        ]);
         
         // Check for pending join token first
         const pendingToken = await AsyncStorage.getItem('pending_join_token');

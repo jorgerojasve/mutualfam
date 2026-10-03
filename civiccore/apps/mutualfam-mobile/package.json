@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android"
+    "android": "expo run:android",
+    "build:apk": "npx expo prebuild --platform android --clean && cd android && ./gradlew assembleRelease --no-daemon && cp app/build/outputs/apk/release/app-release.apk ../mutualfam.apk"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
