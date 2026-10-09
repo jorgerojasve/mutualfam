@@ -1,16 +1,21 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import Constants from 'expo-constants';
+import { NativeModules } from 'react-native';
 
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 if (!baseURL) {
   if (__DEV__) {
-    // Desarrollo: Auto-detectamos la IP local
-    const hostUri = Constants?.expoConfig?.hostUri;
-    if (hostUri) {
-      baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+    // Desarrollo: Extraemos la IP local desde donde Metro está sirviendo el bundle
+    const scriptURL = NativeModules.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const match = scriptURL.match(/^https?:\/\/([^:]+)/);
+      if (match && match[1]) {
+        baseURL = `http://${match[1]}:8000/api/v1`;
+      } else {
+        baseURL = 'http://localhost:8000/api/v1';
+      }
     } else {
       baseURL = 'http://localhost:8000/api/v1';
     }
