@@ -44,6 +44,7 @@ jobs:
         env:
           # Si tienes variables de entorno necesarias para la compilación, ponlas aquí:
           EXPO_PUBLIC_API_URL: "https://mutualfam-backend.fly.dev/api/v1"
+          EXPO_PUBLIC_INVITE_URL_BASE: "https://mutualfam.vercel.app/invite?token="
 
       - name: 🚀 Crear GitHub Release y Subir APK
         uses: softprops/action-gh-release@v2
