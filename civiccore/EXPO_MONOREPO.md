@@ -14,18 +14,22 @@ Este documento unifica el framework y las estrategias de mitigación de errores 
 - **Main:** `"main": "index.js"` (NUNCA apuntar a `expo/AppEntry.js`)
 
 ### `civiccore/package.json` — `overrides` en la raíz
+Estado **real** actual del repo:
 ```json
 {
   "overrides": {
-    "react-native": "0.86.3",
-    "@react-native/codegen": "0.86.3",
-    "expo": "~57.0.24",
-    "react-native-safe-area-context": "5.7.0",
-    "react-native-screens": "4.26.0"
+    "tar": "^7.5.21"
   }
 }
 ```
-Los `overrides` fuerzan a todos los workspaces a usar la misma versión base.
+> [!IMPORTANT]
+> Esta guía documentó antes overrides para `react-native`, `expo`, `react-native-screens`, etc. que **nunca estuvieron en el `package.json`**. No los agregues: la versión de `react-native-screens` se controla **por app** (ver §5 y la nota de APK).
+
+### Nota crítica: `react-native-screens` en `mutualfam-mobile` (APK)
+`mutualfam-mobile` fija `react-native-screens: 5.0.0-alpha.3` como **copia anidada** en `apps/mutualfam-mobile/node_modules/`. Es la única versión verificada que compila en release con RN 0.86.3 / Fabric (ver `docs/GUIA_COMPILACION_RN086.md` §5). Con `4.26.x` falla `:react-native-screens:compileReleaseKotlin` (`getFabricUIManagerNotNull ... receiver type mismatch`).
+- **NO** borres `apps/mutualfam-mobile/node_modules/react-native-screens` (sí borra `react-native` y `react-native-safe-area-context` anidados, ver §3).
+- **NO** cambies esa versión a `4.26.0` para "alinear" con la raíz.
+- La copia de la raíz (`4.26.x`) la usan las demás apps.
 
 ---
 
@@ -63,7 +67,8 @@ npm install --legacy-peer-deps
 # 2. DESPUÉS de instalar, borra manualmente las carpetas conflictivas locales
 rm -rf apps/<tu-app>/node_modules/react-native
 rm -rf apps/<tu-app>/node_modules/react-native-safe-area-context
-rm -rf apps/<tu-app>/node_modules/react-native-screens
+# (react-native-screens: borrar la copia anidada SOLO si la app no la fija
+#  explícitamente. mutualfam-mobile NO: necesita 5.0.0-alpha.3 anidada)
 
 # 3. Arranca limpio
 npx expo@57 start --clear
@@ -101,7 +106,7 @@ El archivo `.env` controla la URL de la API (`EXPO_PUBLIC_API_URL`).
 | `react`                        | `19.2.3`        |
 | `babel-preset-expo`            | `~57.0.0`       |
 | `react-native-safe-area-context` | `5.7.0`       |
-| `react-native-screens`         | `4.26.0`        |
+| `react-native-screens`         | `4.26.0` (dev/Metro y apps sin pin) · `5.0.0-alpha.3` (`mutualfam-mobile`, APK release) |
 | `react-native-gesture-handler` | `~2.32.0`       |
 
 ---

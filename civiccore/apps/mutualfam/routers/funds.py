@@ -19,6 +19,38 @@ class FundResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class CreateFundRequest(BaseModel):
+    name: str
+    fund_type: str = "emergency"
+    target_monthly_contribution_usd: Optional[float] = None
+
+@router.post("/", response_model=FundResponse)
+def create_fund(
+    req: CreateFundRequest,
+    org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    if org_member["membership"].role != "founder":
+        raise HTTPException(status_code=403, detail="Solo los fundadores pueden crear fondos")
+        
+    new_fund = Fund(
+        organization_id=org_member["organization"].id,
+        name=req.name,
+        fund_type=req.fund_type,
+        target_monthly_contribution_usd=req.target_monthly_contribution_usd
+    )
+    db.add(new_fund)
+    db.commit()
+    db.refresh(new_fund)
+    
+    msg = f"🏦 <b>¡Nuevo Fondo Creado!</b>\n\n👤 {org_member['user'].first_name} ha creado el fondo <i>{new_fund.name}</i> para la mutual."
+    send_telegram_notification(msg)
+    
+    return new_fund
+
 @router.get("/", response_model=List[FundResponse])
 def get_funds(
     org_member: dict = Depends(get_current_org_member), 

@@ -17,6 +17,7 @@ import CreateMutualScreen from './src/screens/CreateMutualScreen';
 import JoinMutualScreen from './src/screens/JoinMutualScreen';
 import InviteMembersScreen from './src/screens/InviteMembersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import { OrgProvider } from './src/context/OrgContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -97,7 +98,7 @@ export default function App() {
       try {
         const token = await AsyncStorage.getItem('jwt_token');
         if (token) {
-          const orgId = await AsyncStorage.getItem('org_id');
+          const orgId = await AsyncStorage.getItem('active_org_id');
           setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
         }
       } catch (e) {
@@ -119,17 +120,19 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef} linking={linking}>
-        <StatusBar style="light" />
-        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
-          <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
-          <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
-          <Stack.Screen name="MainTabs" component={MainTabs} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <OrgProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <NavigationContainer ref={navigationRef} linking={linking}>
+          <StatusBar style="light" />
+          <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
+            <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
+            <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </OrgProvider>
   );
 }

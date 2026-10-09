@@ -51,6 +51,11 @@ React Native 0.86+ activa por defecto la **Nueva Arquitectura** (incluyendo Fabr
 - Actualizar agresivamente la dependencia a una versión compatible con Fabric.
 - Ejemplo: Se tuvo que actualizar `react-native-screens` específicamente a la versión `@5.0.0-alpha.3` la cual incluye los adaptadores de C++ modernos para SDK 57.
 
+> [!WARNING]
+> **Regresión conocida:** bajar `react-native-screens` de `mutualfam-mobile` a `4.26.x` (por ejemplo, para "alinear" con `EXPO_MONOREPO.md`) reproduce este mismo error, porque la app pasa a usar la copia hoisteada de la raíz. `4.26.x` solo vale para desarrollo con Metro. Para el APK debe quedar `5.0.0-alpha.3` anidada en `apps/mutualfam-mobile/node_modules/`.
+>
+> **Script `scripts/patch-react-native-screens.sh` (postinstall):** su parche de los archivos Kotlin `gamma` es un stub para RN 0.79.x. Ahora solo se aplica si la versión de RN instalada es 0.79.x; con 0.86.3 sobrescribirlo rompe `compileReleaseKotlin`. Si una copia de `react-native-screens` ya fue parcheada con el stub, bórrala (`rm -rf node_modules/react-native-screens`) y reinstala desde la raíz.
+
 ## Estrategia de Diagnóstico Recomendada ("Divide y Vencerás")
 Si una app del framework colapsa irremediablemente durante el `prebuild`:
 1. Crea un proyecto puro de Expo con la misma versión (`npx create-expo-app hello-world`).

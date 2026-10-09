@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
+import { OrgContext } from '../context/OrgContext';
 
 export default function CreateMutualScreen({ navigation }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const { loadActiveOrg } = React.useContext(OrgContext);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -24,7 +26,8 @@ export default function CreateMutualScreen({ navigation }) {
       
       // Auto-select the newly created org
       if (data.organization_id) {
-        await AsyncStorage.setItem('org_id', data.organization_id.toString());
+        await AsyncStorage.setItem('active_org_id', data.organization_id.toString());
+        await loadActiveOrg(); // This will fetch organizations and set activeOrg
         navigation.replace('MainTabs');
       } else {
         navigation.replace('SelectMutual');

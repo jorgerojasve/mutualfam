@@ -10,7 +10,7 @@ const request = async (endpoint, options = {}) => {
 
   const headers = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'X-Organization-ID': await storage.getItem('organizationId') || '1',
+    'X-Organization-ID': await storage.getItem('organizationId') || getConfig().manifest?.organizationId || '1',
     ...options.headers,
   };
 

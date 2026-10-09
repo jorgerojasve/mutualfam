@@ -8,7 +8,6 @@ const apiClient = axios.create({
   baseURL,
   headers: {
     'Content-Type': 'application/json',
-    'X-Organization-ID': '1', // Hardcoded MVP para familia 1
   },
 });
 
@@ -17,6 +16,10 @@ apiClient.interceptors.request.use(
     const token = await AsyncStorage.getItem('jwt_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    const orgId = await AsyncStorage.getItem('active_org_id');
+    if (orgId) {
+      config.headers['X-Organization-ID'] = orgId;
     }
     return config;
   },
@@ -167,6 +170,10 @@ export const loansApi = {
 export const fundsApi = {
   getFunds: async () => {
     const { data } = await apiClient.get('/funds/');
+    return data;
+  },
+  createFund: async (payload) => {
+    const { data } = await apiClient.post('/funds/', payload);
     return data;
   }
 };

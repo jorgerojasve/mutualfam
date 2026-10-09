@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import json
@@ -86,3 +87,27 @@ def get_config():
             "funds_enabled": True
         }
     }
+
+@router.get("/latest-apk")
+def redirect_to_latest_apk():
+    """Redirige automáticamente al usuario al enlace de descarga de la última versión del APK en GitHub"""
+    fallback_url = "https://github.com/jorgerojasve/mutualfam/releases"
+    try:
+        # Consultamos la API pública de GitHub para obtener el release más reciente
+        req = urllib.request.Request(
+            "https://api.github.com/repos/jorgerojasve/mutualfam/releases/latest",
+            headers={'User-Agent': 'MutualFam-Backend'}
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as response:
+            data = json.loads(response.read().decode())
+            
+            # Buscamos en los assets el primer archivo que termine en .apk
+            for asset in data.get("assets", []):
+                if asset.get("name", "").endswith(".apk"):
+                    return RedirectResponse(url=asset["browser_download_url"], status_code=302)
+                    
+            # Si no hay assets o no hay apk, volvemos al fallback
+            return RedirectResponse(url=fallback_url, status_code=302)
+    except Exception as e:
+        print(f"Error fetching latest release from github: {e}")
+        return RedirectResponse(url=fallback_url, status_code=302)

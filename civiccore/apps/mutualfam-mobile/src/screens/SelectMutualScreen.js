@@ -3,11 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
+import { OrgContext } from '../context/OrgContext';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
+  const { selectOrg, loadActiveOrg } = React.useContext(OrgContext);
 
   useEffect(() => {
     fetchData();
@@ -38,14 +40,14 @@ export default function SelectMutualScreen({ navigation }) {
     }
   };
 
-  const handleSelectOrg = async (orgId) => {
-    await AsyncStorage.setItem('org_id', orgId.toString());
+  const handleSelectOrg = async (org) => {
+    await selectOrg(org);
     navigation.replace('MainTabs');
   };
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('jwt_token');
-    await AsyncStorage.removeItem('org_id');
+    await AsyncStorage.removeItem('active_org_id');
     navigation.replace('Login');
   };
 
@@ -69,7 +71,7 @@ export default function SelectMutualScreen({ navigation }) {
           renderItem={({ item }) => (
             <TouchableOpacity 
               style={styles.orgCard}
-              onPress={() => handleSelectOrg(item.id)}
+              onPress={() => handleSelectOrg(item)}
             >
               <Text style={styles.orgName}>{item.name}</Text>
               <Text style={styles.orgRole}>Rol: {item.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>

@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
+import MutualHeader from '../components/MutualHeader';
+import { OrgContext } from '../context/OrgContext';
 
 export default function InviteMembersScreen() {
   const [loading, setLoading] = useState(true);
@@ -14,11 +16,12 @@ export default function InviteMembersScreen() {
   const [errorMsg, setErrorMsg] = useState('');
   const [debugOrgId, setDebugOrgId] = useState('');
   const [members, setMembers] = useState([]);
+  const { activeOrg } = React.useContext(OrgContext);
 
   useFocusEffect(
     useCallback(() => {
-      fetchOrgInfo();
-    }, [])
+      if (activeOrg?.id) fetchOrgInfo();
+    }, [activeOrg?.id])
   );
 
   useEffect(() => {
@@ -47,24 +50,18 @@ export default function InviteMembersScreen() {
   }, [orgData]);
 
   const fetchOrgInfo = async () => {
+    setLoading(true);
     try {
-      const orgId = await AsyncStorage.getItem('org_id');
-      setDebugOrgId(orgId || 'nulo');
-      if (!orgId) return;
-
-      const { data } = await apiClient.get('/membership/me');
-      const myOrg = data.organizations?.find(o => o.id.toString() === orgId);
-      
-      if (myOrg) {
-        setOrgData(myOrg);
-        try {
-          const membersData = await authApi.getMembers(orgId);
-          setMembers(membersData);
-        } catch (memErr) {
-          console.warn("Could not fetch members", memErr);
-        }
-      } else {
+      if (!activeOrg?.id) {
         setErrorMsg('Tu ID de mutual no coincide con ninguna mutual de tu cuenta.');
+        return;
+      }
+      setOrgData(activeOrg);
+      try {
+        const membersData = await authApi.getMembers(activeOrg.id);
+        setMembers(membersData);
+      } catch (memErr) {
+        console.warn("Could not fetch members", memErr);
       }
     } catch (e) {
       console.warn(e);
@@ -123,7 +120,7 @@ export default function InviteMembersScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Familia Mutual</Text>
+      <MutualHeader title="Familia Mutual" />
       
       <View style={[styles.card, { marginBottom: 20 }]}>
         <Text style={styles.cardTitle}>Miembros Actuales</Text>

@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MutualHeader from '../components/MutualHeader';
+import { OrgContext } from '../context/OrgContext';
 
 export default function ProfileScreen({ navigation }) {
+  const { activeOrg, clearOrg } = useContext(OrgContext);
+
   const handleLogout = async () => {
+    await clearOrg();
     await AsyncStorage.removeItem('jwt_token');
-    await AsyncStorage.removeItem('org_id');
     // Navegamos al stack principal a la pantalla de Login
     navigation.reset({
       index: 0,
@@ -15,9 +19,13 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Perfil y Ajustes</Text>
+      <MutualHeader title="Perfil y Ajustes" />
       
       <View style={styles.card}>
+        <Text style={{color: '#f8fafc', fontSize: 18, fontWeight: 'bold', marginBottom: 10}}>Mi Mutual Activa</Text>
+        <Text style={styles.cardText}>Nombre: {activeOrg?.name}</Text>
+        <Text style={[styles.cardText, {marginBottom: 10}]}>Rol: {activeOrg?.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
+        
         <Text style={styles.cardText}>
           Si no puedes ver tus datos, es probable que tu sesión haya expirado o la base de datos del servidor se haya reiniciado. Cierra sesión y vuelve a entrar.
         </Text>

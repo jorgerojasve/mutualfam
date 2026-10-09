@@ -15,6 +15,7 @@ const manifest = {
   },
 
   apiUrl: import.meta.env.VITE_API_URL || "http://localhost:8002/api/v1",
+  organizationId: import.meta.env.VITE_ORGANIZATION_ID || "1",
 
   modules: {
     governance:    true,

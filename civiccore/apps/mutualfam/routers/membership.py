@@ -19,6 +19,56 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 def utcnow():
     return datetime.now(timezone.utc)
 
+# --- Códigos de invitación cortos y legibles ---
+# Alfabeto sin caracteres ambiguos (0/O, 1/I/L) para que se puedan dictar y escribir a mano.
+INVITE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+INVITE_CODE_LENGTH = 8  # 31^8 ≈ 8.5e11 combinaciones
+
+def generate_invite_code(db: Session) -> str:
+    for _ in range(10):
+        code = "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(INVITE_CODE_LENGTH))
+        if not db.query(OrganizationInvite).filter(OrganizationInvite.token == code).first():
+            return code
+    raise HTTPException(status_code=500, detail="No se pudo generar un código de invitación único")
+
+def extract_invite_candidate(raw: str) -> str:
+    """Acepta el código, el token antiguo o el enlace completo pegado por el usuario."""
+    text = (raw or "").strip()
+    if "token=" in text:
+        text = text.split("token=", 1)[1].split("&", 1)[0]
+    elif "join/" in text:
+        text = text.split("join/", 1)[1].split("?", 1)[0]
+    return text.strip().strip("/")
+
+def find_invite(db: Session, raw: str):
+    candidate = extract_invite_candidate(raw)
+    if not candidate:
+        return None
+    # 1) Coincidencia exacta (tokens antiguos token_urlsafe son sensibles a mayúsculas)
+    invite = db.query(OrganizationInvite).filter(OrganizationInvite.token == candidate).first()
+    if invite:
+        return invite
+    # 2) Código corto normalizado: sin espacios/guiones y en mayúsculas
+    compact = candidate.replace("-", "").replace(" ", "").upper()
+    if len(compact) == INVITE_CODE_LENGTH and all(c in INVITE_CODE_ALPHABET for c in compact):
+        return db.query(OrganizationInvite).filter(OrganizationInvite.token == compact).first()
+    return None
+
+def format_invite_code(code: str) -> str:
+    if len(code) == INVITE_CODE_LENGTH:
+        return f"{code[:4]}-{code[4:]}"
+    return code
+
+def invite_is_expired(invite: OrganizationInvite, db: Session) -> bool:
+    """Las invitaciones directas del fundador viven solo durante el período de gracia.
+    Para invitaciones antiguas sin expires_at se usa el período de gracia de la mutual,
+    salvo las creadas por una propuesta de gobernanza (proposal_id)."""
+    expires_at = invite.expires_at
+    if expires_at is None and invite.proposal_id is None:
+        org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+        expires_at = org.grace_period_ends_at if org else None
+    return bool(expires_at and utcnow() > expires_at.replace(tzinfo=timezone.utc))
+
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(status_code=401, detail="No se pudo validar las credenciales")
     try:
@@ -117,31 +167,32 @@ def create_invite(org_id: int, current_org_member: dict = Depends(get_current_or
     if not org.grace_period_ends_at or utcnow() > org.grace_period_ends_at.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=403, detail="El período de gracia de 24 horas ha expirado. Debe proponerse en asamblea.")
         
-    token = secrets.token_urlsafe(16)
+    token = generate_invite_code(db)
     invite = OrganizationInvite(
         organization_id=org.id,
         created_by_user_id=current_org_member["user"].id,
         token=token,
         max_uses=None,
+        expires_at=org.grace_period_ends_at,
         status=InviteStatus.ACTIVE
     )
     db.add(invite)
     db.commit()
     
-    return {"token": token, "expires_at": invite.expires_at}
+    return {"token": token, "code": format_invite_code(token), "expires_at": invite.expires_at}
 
 class JoinRequest(BaseModel):
     token: str
 
 @router.post("/organizations/join")
 def join_organization(req: JoinRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    invite = db.query(OrganizationInvite).filter(OrganizationInvite.token == req.token).first()
+    invite = find_invite(db, req.token)
     
     if not invite or invite.status != InviteStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="Invitación inválida o inactiva")
         
-    if invite.expires_at and utcnow() > invite.expires_at.replace(tzinfo=timezone.utc):
-        raise HTTPException(status_code=400, detail="Invitación expirada")
+    if invite_is_expired(invite, db):
+        raise HTTPException(status_code=400, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
         
     if invite.max_uses and invite.uses_count >= invite.max_uses:
         raise HTTPException(status_code=400, detail="Invitación agotada")
@@ -192,15 +243,19 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
 
 @router.get("/invites/{token}")
 def get_invite_info(token: str, db: Session = Depends(get_db)):
-    invite = db.query(OrganizationInvite).filter(OrganizationInvite.token == token).first()
+    invite = find_invite(db, token)
     if not invite or invite.status != InviteStatus.ACTIVE:
         raise HTTPException(status_code=404, detail="Invitación inválida o expirada")
+    if invite_is_expired(invite, db):
+        raise HTTPException(status_code=404, detail="Invitación expirada")
         
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     
     return {
         "organization_name": org.name,
-        "organization_id": org.id
+        "organization_id": org.id,
+        "token": invite.token,
+        "code": format_invite_code(invite.token)
     }
 
 @router.get("/members")

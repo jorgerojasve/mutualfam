@@ -1,11 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { fundsApi } from '../api/client';
+import MutualHeader from '../components/MutualHeader';
+import { OrgContext } from '../context/OrgContext';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { activeOrg } = React.useContext(OrgContext);
+  const [showModal, setShowModal] = useState(false);
+  const [newFundName, setNewFundName] = useState('');
+  const [newFundType, setNewFundType] = useState('emergency');
+  const [newFundTarget, setNewFundTarget] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCreateFund = async () => {
+    if (!newFundName) {
+      Alert.alert('Error', 'El nombre es requerido');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await fundsApi.createFund({
+        name: newFundName,
+        fund_type: newFundType,
+        target_monthly_contribution_usd: newFundTarget ? parseFloat(newFundTarget) : null
+      });
+      setShowModal(false);
+      setNewFundName('');
+      setNewFundTarget('');
+      fetchFunds();
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.detail || 'Error al crear fondo');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const fetchFunds = async () => {
     setLoading(true);
@@ -21,8 +52,8 @@ export default function FundsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchFunds();
-    }, [])
+      if (activeOrg?.id) fetchFunds();
+    }, [activeOrg?.id])
   );
 
   const renderFundCard = ({ item }) => (
@@ -52,7 +83,12 @@ export default function FundsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Fondos Comunes</Text>
+        <MutualHeader title="Fondos Comunes" />
+        {activeOrg?.role === 'founder' && (
+          <TouchableOpacity style={styles.headerAddButton} onPress={() => setShowModal(true)}>
+            <Text style={styles.headerAddButtonText}>Crear Fondo</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -68,6 +104,27 @@ export default function FundsScreen() {
           }
         />
       )}
+
+      <Modal visible={showModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Crear Fondo</Text>
+            
+            <Text style={styles.label}>Nombre del Fondo</Text>
+            <TextInput style={styles.input} value={newFundName} onChangeText={setNewFundName} placeholder="Ej: Fondo de Emergencia" placeholderTextColor="#475569" />
+            
+            <Text style={styles.label}>Aporte Mensual Sugerido (USD) - Opcional</Text>
+            <TextInput style={styles.input} keyboardType="numeric" value={newFundTarget} onChangeText={setNewFundTarget} placeholder="Ej: 10" placeholderTextColor="#475569" />
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalSubmit} onPress={handleCreateFund} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Crear</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -148,6 +205,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  headerAddButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: -10,
+  },
+  headerAddButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#f8fafc',
+    marginBottom: 20,
+  },
+  label: {
+    color: '#94a3b8',
+    marginBottom: 5,
+    fontSize: 14,
+  },
+  input: {
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 15,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 10,
+  },
+  modalCancel: {
+    padding: 12,
+  },
+  modalCancelText: {
+    color: '#94a3b8',
+    fontWeight: 'bold',
+  },
+  modalSubmit: {
+    backgroundColor: '#3b82f6',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalSubmitText: {
     color: '#fff',
     fontWeight: 'bold',
   }

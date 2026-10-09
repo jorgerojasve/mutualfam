@@ -9,6 +9,7 @@ import {
   pasteInviteFromClipboard,
   dismissClipboardInvite,
 } from '../utils/invite';
+import { OrgContext } from '../context/OrgContext';
 
 export default function JoinMutualScreen({ route, navigation }) {
   const [input, setInput] = useState('');
@@ -16,6 +17,7 @@ export default function JoinMutualScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [mutualInfo, setMutualInfo] = useState(null);
   const [fromClipboard, setFromClipboard] = useState(false);
+  const { loadActiveOrg } = React.useContext(OrgContext);
 
   useEffect(() => {
     const init = async () => {
@@ -96,7 +98,8 @@ export default function JoinMutualScreen({ route, navigation }) {
       await dismissClipboardInvite(token);
       Alert.alert('¡Bienvenido!', data.message || 'Te has unido exitosamente.');
 
-      await AsyncStorage.setItem('org_id', data.organization_id.toString());
+      await AsyncStorage.setItem('active_org_id', data.organization_id.toString());
+      await loadActiveOrg();
       navigation.replace('MainTabs');
     } catch (e) {
       if (e.response?.status === 401) {

@@ -5,6 +5,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi } from '../api/client';
+import MutualHeader from '../components/MutualHeader';
+import { OrgContext } from '../context/OrgContext';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", "Zelle", "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -12,6 +14,7 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const { activeOrg } = React.useContext(OrgContext);
   
   const serverUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1').replace('/api/v1', '');
   
@@ -94,8 +97,8 @@ export default function LoansScreen() {
     useCallback(() => {
       fetchConfig();
       fetchUser();
-      fetchLoans();
-    }, [])
+      if (activeOrg?.id) fetchLoans();
+    }, [activeOrg?.id])
   );
 
   const handleOpenConfig = async () => {
@@ -531,21 +534,21 @@ export default function LoansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Préstamos</Text>
-          {bcvRate && (
-            <Text style={{color: isBcvOutdated ? '#ef4444' : '#94a3b8', fontSize: 13, marginTop: 4}}>
+        <MutualHeader title="Préstamos" />
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+          {bcvRate ? (
+            <Text style={{color: isBcvOutdated ? '#ef4444' : '#94a3b8', fontSize: 13}}>
               🏦 Tasa BCV: {bcvRate} Bs/USD {isBcvOutdated ? '(⚠️ Desactualizada)' : ''}
             </Text>
-          )}
-        </View>
-        <View style={{flexDirection: 'row', gap: 10}}>
-          <TouchableOpacity style={[styles.addButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3b82f6'}]} onPress={handleOpenConfig}>
-            <Text style={[styles.addButtonText, {color: '#3b82f6'}]}>⚙️ Datos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowModal(true)}>
-            <Text style={styles.addButtonText}>Pedir</Text>
-          </TouchableOpacity>
+          ) : <View />}
+          <View style={{flexDirection: 'row', gap: 10}}>
+            <TouchableOpacity style={[styles.addButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3b82f6', paddingVertical: 8, paddingHorizontal: 12}]} onPress={handleOpenConfig}>
+              <Text style={[styles.addButtonText, {color: '#3b82f6', fontSize: 14}]}>⚙️ Datos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addButton, {paddingVertical: 8, paddingHorizontal: 12}]} onPress={() => setShowModal(true)}>
+              <Text style={[styles.addButtonText, {fontSize: 14}]}>Pedir</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 

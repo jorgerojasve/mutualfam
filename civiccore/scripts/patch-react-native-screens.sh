@@ -7,6 +7,16 @@
 
 set -e
 
+# The gamma Kotlin stubs below only make sense for React Native 0.79.x.
+# On RN >= 0.80 (e.g. 0.86.3 / Expo SDK 57) the original gamma sources compile
+# as-is, and overwriting them breaks :react-native-screens:compileReleaseKotlin.
+RN_VERSION=$(node -p "require('./node_modules/react-native/package.json').version" 2>/dev/null || echo "unknown")
+case "$RN_VERSION" in
+  0.79.*) PATCH_GAMMA=1 ;;
+  *)      PATCH_GAMMA=0 ;;
+esac
+echo "[patch-screens] React Native $RN_VERSION detected (gamma stub patch: $PATCH_GAMMA)"
+
 # Find ALL instances of react-native-screens in node_modules
 SCREENS_DIRS=$(find . -type d -name "react-native-screens" -path "*/node_modules/react-native-screens" 2>/dev/null)
 
@@ -47,7 +57,7 @@ while IFS= read -r SCREENS_DIR; do
   # -------------------------------------------------------------------
   # Patch Kotlin gamma files (RN 0.80+ APIs -> RN 0.79.2 compatible stubs)
   # -------------------------------------------------------------------
-  if [ -d "$GAMMA_DIR" ]; then
+  if [ "$PATCH_GAMMA" = "1" ] && [ -d "$GAMMA_DIR" ]; then
     echo "[patch-gamma] Patching gamma Kotlin files in $SCREENS_DIR..."
 
     # 1. Replace UIManagerHelperExt.kt with a compile-compatible stub.
@@ -104,7 +114,8 @@ echo "[patch-screens] Done with react-native-screens."
 # ===========================================================================
 echo "[patch-expo] Patching expo-modules-core for React Native 0.79.2 Promise compatibility..."
 
-for EXPO_CORE_DIR in $(find . -type d -name "expo-modules-core" -path "*/expo/node_modules/*" 2>/dev/null); do
+if [ "$PATCH_GAMMA" = "1" ]; then
+  for EXPO_CORE_DIR in $(find . -type d -name "expo-modules-core" -path "*/expo/node_modules/*" 2>/dev/null); do
   PROMISE_FILE="$EXPO_CORE_DIR/android/src/main/java/expo/modules/kotlin/Promise.kt"
   KWRAPPER_FILE="$EXPO_CORE_DIR/android/src/main/java/expo/modules/kotlin/KPromiseWrapper.kt"
 
@@ -122,6 +133,7 @@ for EXPO_CORE_DIR in $(find . -type d -name "expo-modules-core" -path "*/expo/no
     sed -i 's/bridgePromise\.reject(code, message, cause)/bridgePromise.reject(code ?: "E_UNKNOWN", message, cause)/g' "$KWRAPPER_FILE"
     echo "[patch-expo] Patched KPromiseWrapper.kt in $EXPO_CORE_DIR"
   fi
-done
+  done
+fi
 
 echo "[patch] Done."
