@@ -9,6 +9,8 @@ jobs:
   build-apk:
     name: Compilar y Publicar APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: ⬇️ Descargar Código
