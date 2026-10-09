@@ -48,6 +48,7 @@ export const OrgProvider = ({ children }) => {
   const selectOrg = async (org) => {
     await AsyncStorage.setItem('active_org_id', org.id.toString());
     setActiveOrg(org);
+    await fetchOrganizations();
   };
 
   const clearOrg = async () => {

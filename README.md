@@ -43,11 +43,11 @@ mutual/
 ### Backend (API + Base de datos)
 ```bash
 # Copiar variables de entorno
-cp backend/.env.example backend/.env
+cp civiccore/backend/.env.example civiccore/backend/.env
 # Editar .env con tus valores
 
-# Levantar todo con Docker
-docker-compose up -d
+# Levantar la aplicación backend deseada con el script interactivo
+./start.sh
 
 # La API estará disponible en:
 # http://localhost:8000
@@ -56,7 +56,7 @@ docker-compose up -d
 
 ### Frontend (App Android)
 ```bash
-cd frontend
+cd civiccore/apps/mutualfam-mobile
 npm install
 npx expo start
 # Escanear el QR con la app Expo Go en el teléfono Android

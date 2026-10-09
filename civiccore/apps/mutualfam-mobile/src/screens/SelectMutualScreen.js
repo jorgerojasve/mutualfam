@@ -9,7 +9,7 @@ export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
-  const { selectOrg, loadActiveOrg } = React.useContext(OrgContext);
+  const { selectOrg, loadActiveOrg, clearOrg } = React.useContext(OrgContext);
 
   useEffect(() => {
     fetchData();
@@ -46,6 +46,7 @@ export default function SelectMutualScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
+    if (clearOrg) await clearOrg();
     await AsyncStorage.removeItem('jwt_token');
     await AsyncStorage.removeItem('active_org_id');
     navigation.replace('Login');

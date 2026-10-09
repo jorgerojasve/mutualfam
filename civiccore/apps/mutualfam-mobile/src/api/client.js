@@ -1,8 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// In Expo, EXPO_PUBLIC_ variables are automatically injected
-const baseURL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1';
+// En QA apuntamos al servidor remoto por defecto
+const baseURL = process.env.EXPO_PUBLIC_API_URL || 'https://mutualfam-backend.fly.dev/api/v1';
 
 const apiClient = axios.create({
   baseURL,
