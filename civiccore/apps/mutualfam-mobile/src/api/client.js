@@ -3,15 +3,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Constants from 'expo-constants';
 
-// En Desarrollo auto-detectamos la IP local si no hay URL explícita
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 if (!baseURL) {
-  const hostUri = Constants?.expoConfig?.hostUri;
-  if (hostUri) {
-    baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+  if (__DEV__) {
+    // Desarrollo: Auto-detectamos la IP local
+    const hostUri = Constants?.expoConfig?.hostUri;
+    if (hostUri) {
+      baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+    } else {
+      baseURL = 'http://localhost:8000/api/v1';
+    }
   } else {
-    baseURL = 'http://localhost:8000/api/v1';
+    // Producción / QA build: apuntar a Fly.io
+    baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
   }
 }
 
