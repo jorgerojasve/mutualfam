@@ -49,6 +49,19 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
+    // Manejo de Fase 0: Si el usuario ya no pertenece a la mutual seleccionada
+    if (error.response && error.response.status === 403 && error.response.data?.detail === "No perteneces a esta mutual") {
+      await AsyncStorage.removeItem('active_org_id');
+      const { navigationRef } = require('../../App');
+      if (navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'SelectMutual' }],
+        });
+      }
+      return Promise.reject(error);
+    }
+    
     // Si el error es 401 (Unauthorized) y no hemos intentado refrescar ya
     if (error.response && error.response.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;

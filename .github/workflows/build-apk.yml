@@ -43,7 +43,7 @@ jobs:
         run: npm run build:apk
         env:
           # Si tienes variables de entorno necesarias para la compilación, ponlas aquí:
-          EXPO_PUBLIC_API_URL: "https://mutualfam-backend.fly.dev"
+          EXPO_PUBLIC_API_URL: "https://mutualfam-backend.fly.dev/api/v1"
 
       - name: 🚀 Crear GitHub Release y Subir APK
         uses: softprops/action-gh-release@v2
