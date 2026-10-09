@@ -1,8 +1,19 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// En QA apuntamos al servidor remoto por defecto
-const baseURL = process.env.EXPO_PUBLIC_API_URL || 'https://mutualfam-backend.fly.dev/api/v1';
+import Constants from 'expo-constants';
+
+// En Desarrollo auto-detectamos la IP local si no hay URL explícita
+let baseURL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!baseURL) {
+  const hostUri = Constants?.expoConfig?.hostUri;
+  if (hostUri) {
+    baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+  } else {
+    baseURL = 'http://localhost:8000/api/v1';
+  }
+}
 
 const apiClient = axios.create({
   baseURL,
