@@ -1,21 +1,16 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { NativeModules } from 'react-native';
+import Constants from 'expo-constants';
 
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 if (!baseURL) {
   if (__DEV__) {
-    // Desarrollo: Extraemos la IP local desde donde Metro está sirviendo el bundle
-    const scriptURL = NativeModules.SourceCode?.scriptURL;
-    if (scriptURL) {
-      const match = scriptURL.match(/^https?:\/\/([^:]+)/);
-      if (match && match[1]) {
-        baseURL = `http://${match[1]}:8000/api/v1`;
-      } else {
-        baseURL = 'http://localhost:8000/api/v1';
-      }
+    const hostUri = Constants?.expoConfig?.hostUri;
+    console.log("hostUri detectado:", hostUri);
+    if (hostUri) {
+      baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
     } else {
       baseURL = 'http://localhost:8000/api/v1';
     }
@@ -24,6 +19,8 @@ if (!baseURL) {
     baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
   }
 }
+
+console.log("baseURL final en client.js:", baseURL);
 
 const apiClient = axios.create({
   baseURL,

@@ -5,7 +5,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi } from '../api/client';
-import MutualHeader from '../components/MutualHeader';
+import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", "Zelle", "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
@@ -534,7 +534,7 @@ export default function LoansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <MutualHeader title="Préstamos" />
+        <ScreenTitle title="Préstamos" />
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
           {bcvRate ? (
             <Text style={{color: isBcvOutdated ? '#ef4444' : '#94a3b8', fontSize: 13}}>
@@ -1070,7 +1070,7 @@ export default function LoansScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#f8fafc' },
   addButton: { backgroundColor: '#3b82f6', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold' },

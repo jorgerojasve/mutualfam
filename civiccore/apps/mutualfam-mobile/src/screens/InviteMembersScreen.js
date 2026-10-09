@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
-import MutualHeader from '../components/MutualHeader';
+import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 
 export default function InviteMembersScreen() {
@@ -120,7 +120,7 @@ export default function InviteMembersScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <MutualHeader title="Familia Mutual" />
+      <ScreenTitle title="Familia Mutual" />
       
       <View style={[styles.card, { marginBottom: 20 }]}>
         <Text style={styles.cardTitle}>Miembros Actuales</Text>
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f172a',
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 20,
   },
   centerContainer: {
     flex: 1,

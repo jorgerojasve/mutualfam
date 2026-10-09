@@ -1,0 +1,5 @@
+En el dashboard web al hacer las propuestas no aparecen las categorías de "Implementación Automática" y "Acción humana". Esto debería estar también en el framework.
+
+La salida voluntaria aparece demasiado prominente, con un botón rojo en un lugar que llama la atención. Sugiero que se ubique en un lugar menos visible o que se cambie el diseño para que no sea tan llamativo. En otras plataformas he visto que se coloca dentro de una opción de configuración, creo que podríamos aplicar esto. Realiza una investigación sobre cómo se implementa en otras plataformas y haz una sugerencia para esto.
+
+En salida voluntaria sale el mensaje: "No withdrawal request found", esto debería salir en todo caso en un log o por consola no en la interfaz de usuario.

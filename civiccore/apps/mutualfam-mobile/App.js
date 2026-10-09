@@ -17,6 +17,7 @@ import CreateMutualScreen from './src/screens/CreateMutualScreen';
 import JoinMutualScreen from './src/screens/JoinMutualScreen';
 import InviteMembersScreen from './src/screens/InviteMembersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import MutualSwitcherBar from './src/components/MutualSwitcherBar';
 import { OrgProvider } from './src/context/OrgContext';
 
 const Stack = createStackNavigator();
@@ -27,7 +28,9 @@ function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: false,
+        // Barra global: el selector de mutual afecta a toda la app, no a una pestaña
+        headerShown: true,
+        header: () => <MutualSwitcherBar />,
         tabBarStyle: {
           backgroundColor: '#1e293b',
           borderTopColor: 'rgba(255,255,255,0.1)',

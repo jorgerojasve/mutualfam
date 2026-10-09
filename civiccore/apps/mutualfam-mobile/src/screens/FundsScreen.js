@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { fundsApi } from '../api/client';
-import MutualHeader from '../components/MutualHeader';
+import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 
 export default function FundsScreen() {
@@ -83,12 +83,14 @@ export default function FundsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <MutualHeader title="Fondos Comunes" />
-        {activeOrg?.role === 'founder' && (
-          <TouchableOpacity style={styles.headerAddButton} onPress={() => setShowModal(true)}>
-            <Text style={styles.headerAddButtonText}>Crear Fondo</Text>
-          </TouchableOpacity>
-        )}
+        <ScreenTitle
+          title="Fondos Comunes"
+          right={activeOrg?.role === 'founder' && (
+            <TouchableOpacity style={styles.headerAddButton} onPress={() => setShowModal(true)}>
+              <Text style={styles.headerAddButtonText}>Crear Fondo</Text>
+            </TouchableOpacity>
+          )}
+        />
       </View>
 
       {loading ? (
@@ -136,7 +138,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 20,
     paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -213,8 +215,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginTop: -10,
   },
   headerAddButtonText: {
     color: '#fff',

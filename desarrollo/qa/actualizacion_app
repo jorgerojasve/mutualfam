@@ -1,0 +1,2 @@
+Investiga cómo podemos manejar las actualizaciones de la app. Lo ideal sería notificarle al usuario que hay actualizaciones disposnibles. Podemos distinguir entre actualizaciones que son obligatorias y opcionales. Las obligatorias no permitirían el uso de la app hasta que se actualice. Otra cosa ¿podemos automatizar el lanzamiento de releases en github con las versiones de la apk?
+

@@ -11,6 +11,7 @@ services:
     environment:
       DATABASE_URL: sqlite:////app/data/${APP_NAME:-mutualfam}.db
       PORT: 8080
+      PYTHONPATH: /civiccore_backend
     ports:
       - "8000:8080"
     volumes:
