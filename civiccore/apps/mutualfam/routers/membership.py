@@ -283,9 +283,13 @@ class PushTokenRequest(BaseModel):
 @router.post("/push-token")
 def register_push_token(request: PushTokenRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     from models import UserPushToken
-    # Buscar si el usuario ya tiene este token
-    existing = db.query(UserPushToken).filter(UserPushToken.user_id == current_user.id, UserPushToken.token == request.token).first()
-    if not existing:
+    # Si el token ya existe (ej. otro usuario en el mismo dispositivo o re-registro), actualizar dueño
+    existing = db.query(UserPushToken).filter(UserPushToken.token == request.token).first()
+    if existing:
+        if existing.user_id != current_user.id:
+            existing.user_id = current_user.id
+            db.commit()
+    else:
         new_token = UserPushToken(user_id=current_user.id, token=request.token)
         db.add(new_token)
         db.commit()

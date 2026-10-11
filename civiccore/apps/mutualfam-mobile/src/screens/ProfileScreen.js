@@ -3,13 +3,17 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { unregisterPushNotificationsAsync } from '../services/notifications';
 
 export default function ProfileScreen({ navigation }) {
   const { activeOrg, clearOrg } = useContext(OrgContext);
 
   const handleLogout = async () => {
+    try {
+      await unregisterPushNotificationsAsync();
+    } catch (_) {}
     await clearOrg();
-    await AsyncStorage.removeItem('jwt_token');
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
     // Navegamos al stack principal a la pantalla de Login
     navigation.reset({
       index: 0,
