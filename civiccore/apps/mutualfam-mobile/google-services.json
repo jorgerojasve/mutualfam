@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "833486393039",
+    "project_id": "mutualfam",
+    "storage_bucket": "mutualfam.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:833486393039:android:452c1bd61f9024de04f1ba",
+        "android_client_info": {
+          "package_name": "com.jorgerojasve.mutualfammobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdzqFMotGJCMK_Zn-LcR-CdLCfEcHThu0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

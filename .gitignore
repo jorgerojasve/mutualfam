@@ -38,3 +38,7 @@ backups/
 # Archivos de usuario
 uploads/
 .vercel
+
+# Claves privadas de Firebase Admin SDK
+*firebase-adminsdk*.json
+*-service-account*.json

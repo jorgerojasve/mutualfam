@@ -9,7 +9,8 @@
     "sdkVersion": "57.0.0",
     "android": {
       "package": "com.jorgerojasve.mutualfammobile",
-      "versionCode": 4
+      "versionCode": 4,
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-notifications"
