@@ -103,10 +103,18 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.aboutRow}>
-          <Text style={styles.aboutLabel}>Autor</Text>
+          <Text style={styles.aboutLabel}>Desarrollador</Text>
           <View style={styles.authorBadge}>
-            <Ionicons name="person-circle-outline" size={16} color="#60a5fa" style={{ marginRight: 5 }} />
+            <Ionicons name="code-slash-outline" size={16} color="#60a5fa" style={{ marginRight: 5 }} />
             <Text style={styles.authorText}>Jorge Rojas</Text>
+          </View>
+        </View>
+
+        <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Analista de calidad</Text>
+          <View style={styles.authorBadge}>
+            <Ionicons name="checkmark-done-circle-outline" size={16} color="#34d399" style={{ marginRight: 5 }} />
+            <Text style={styles.authorText}>Maira Salazar</Text>
           </View>
         </View>
 
