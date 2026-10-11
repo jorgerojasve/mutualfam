@@ -9,7 +9,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 
-const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", "Zelle", "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
+const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
 export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
@@ -617,13 +617,25 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {AVAILABLE_PAYMENT_METHODS.map(method => {
                   const isSelected = acceptedMethods.includes(method);
+                  const isDisabled = method !== "Pago Móvil";
                   return (
                     <TouchableOpacity 
                       key={method} 
-                      style={[styles.methodChip, isSelected && styles.methodChipSelected]}
-                      onPress={() => toggleMethod(method)}
+                      style={[
+                        styles.methodChip, 
+                        isSelected && styles.methodChipSelected,
+                        isDisabled && { opacity: 0.5, backgroundColor: '#334155', borderColor: 'transparent' }
+                      ]}
+                      onPress={() => {
+                        if (isDisabled) {
+                          Alert.alert("En desarrollo", "Esta opción de pago aún no está implementada.");
+                          return;
+                        }
+                        toggleMethod(method);
+                      }}
+                      activeOpacity={isDisabled ? 1 : 0.7}
                     >
-                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}]}>{method}</Text>
+                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}, isDisabled && {color: '#94a3b8'}]}>{method}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -652,13 +664,21 @@ export default function LoansScreen() {
                   
                   {AVAILABLE_PAYMENT_METHODS.map(method => {
                     const isConfigured = !!paymentConfig[method];
+                    const isDisabled = method !== "Pago Móvil";
                     return (
                       <TouchableOpacity 
                         key={method} 
-                        style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                        onPress={() => setSelectedConfigMethod(method)}
+                        style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, isDisabled && { opacity: 0.5 }]}
+                        onPress={() => {
+                          if (isDisabled) {
+                            Alert.alert("En desarrollo", "Esta opción de pago aún no está implementada.");
+                            return;
+                          }
+                          setSelectedConfigMethod(method);
+                        }}
+                        activeOpacity={isDisabled ? 1 : 0.7}
                       >
-                        <Text style={{color: '#fff'}}>{method}</Text>
+                        <Text style={[{color: '#fff'}, isDisabled && {color: '#94a3b8'}]}>{method}</Text>
                         {isConfigured && <Text style={{color: '#10b981', fontSize: 12}}>✓ Configurado</Text>}
                       </TouchableOpacity>
                     );
@@ -817,13 +837,25 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
+                  const isDisabled = method !== "Pago Móvil";
                   return (
                     <TouchableOpacity 
                       key={method} 
-                      style={[styles.methodChip, isSelected && styles.methodChipSelected]}
-                      onPress={() => setNotifyMethod(method)}
+                      style={[
+                        styles.methodChip, 
+                        isSelected && styles.methodChipSelected,
+                        isDisabled && { opacity: 0.5, backgroundColor: '#334155', borderColor: 'transparent' }
+                      ]}
+                      onPress={() => {
+                        if (isDisabled) {
+                          Alert.alert("En desarrollo", "Esta opción de pago aún no está implementada.");
+                          return;
+                        }
+                        setNotifyMethod(method);
+                      }}
+                      activeOpacity={isDisabled ? 1 : 0.7}
                     >
-                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}]}>{method}</Text>
+                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}, isDisabled && {color: '#94a3b8'}]}>{method}</Text>
                     </TouchableOpacity>
                   );
                 })}

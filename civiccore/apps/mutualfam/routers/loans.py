@@ -255,13 +255,27 @@ def contribute_to_loan(
     if loan.status in [LoanStatus.FUNDED, LoanStatus.REPAID, LoanStatus.CANCELLED]:
         raise HTTPException(status_code=400, detail="Este préstamo ya no acepta aportes")
         
-    new_contrib = LoanContribution(
-        loan_request_id=loan.id,
-        funder_id=org_member["user"].id,
-        amount_usd=contrib.amount_usd,
-        status=ContributionStatus.PLEDGED
-    )
-    db.add(new_contrib)
+    existing_contrib = db.query(LoanContribution).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.funder_id == org_member["user"].id,
+        LoanContribution.status == ContributionStatus.PLEDGED
+    ).first()
+
+    if existing_contrib:
+        existing_contrib.amount_usd += contrib.amount_usd
+        new_contrib = existing_contrib
+        db.commit()
+        db.refresh(new_contrib)
+    else:
+        new_contrib = LoanContribution(
+            loan_request_id=loan.id,
+            funder_id=org_member["user"].id,
+            amount_usd=contrib.amount_usd,
+            status=ContributionStatus.PLEDGED
+        )
+        db.add(new_contrib)
+        db.commit()
+        db.refresh(new_contrib)
     
     # Validar sumatoria de aportes
     from sqlalchemy import func
@@ -279,7 +293,6 @@ def contribute_to_loan(
         loan.status = LoanStatus.PARTIAL
         
     db.commit()
-    db.refresh(new_contrib)
     
     msg = f"✅ <b>¡Nuevo Aporte Prometido!</b>\n\n👤 {org_member['user'].first_name} se comprometió a aportar <b>${contrib.amount_usd}</b> al préstamo de {loan.motive}."
     send_telegram_notification(msg)
