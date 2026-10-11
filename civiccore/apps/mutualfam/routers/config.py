@@ -31,8 +31,55 @@ def update_user_payment_methods(data: PaymentMethodsUpdate, org_member: dict = D
 
 import urllib.request
 import json
-
 import datetime
+import os
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+_release_cache = {
+    "timestamp": 0,
+    "data": None
+}
+
+def get_latest_release_info():
+    """
+    Obtiene la última versión disponible de la app desde GitHub Releases (con cache de 5 minutos).
+    Retorna latest_version, min_version, download_url y release_notes.
+    """
+    now = time.time()
+    if _release_cache["data"] and (now - _release_cache["timestamp"] < 300):
+        return _release_cache["data"]
+
+    backend_base = os.getenv("BACKEND_PUBLIC_URL", "https://mutualfam-backend.fly.dev/api/v1")
+    download_url = f"{backend_base}/config/latest-apk"
+
+    info = {
+        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.9"),
+        "min_version": os.getenv("MIN_APP_VERSION", "1.0.0"),
+        "download_url": download_url,
+        "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones."
+    }
+
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/jorgerojasve/mutualfam/releases/latest",
+            headers={'User-Agent': 'MutualFam-Backend'}
+        )
+        with urllib.request.urlopen(req, timeout=4.0) as response:
+            data = json.loads(response.read().decode())
+            tag_name = data.get("tag_name", "").lstrip("v")
+            if tag_name:
+                info["latest_version"] = tag_name
+            if data.get("body"):
+                info["release_notes"] = data.get("body").strip()
+    except Exception as e:
+        logger.warning(f"No se pudo consultar GitHub Releases para la última versión: {e}")
+
+    _release_cache["timestamp"] = now
+    _release_cache["data"] = info
+    return info
 
 @router.get("/")
 def get_config():
@@ -85,8 +132,14 @@ def get_config():
         "features": {
             "loans_enabled": True,
             "funds_enabled": True
-        }
+        },
+        "app_version": get_latest_release_info()
     }
+
+@router.get("/version")
+def get_app_version():
+    """Retorna información sobre la última versión de la app y requerimiento mínimo"""
+    return get_latest_release_info()
 
 @router.get("/latest-apk")
 def redirect_to_latest_apk():
@@ -111,3 +164,4 @@ def redirect_to_latest_apk():
     except Exception as e:
         print(f"Error fetching latest release from github: {e}")
         return RedirectResponse(url=fallback_url, status_code=302)
+
