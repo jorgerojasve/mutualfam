@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
+import { registerForPushNotificationsAsync } from '../services/notifications';
 
 export default function LoginScreen({ route, navigation }) {
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
@@ -78,6 +79,7 @@ export default function LoginScreen({ route, navigation }) {
           ['jwt_token', data.access_token],
           ['refresh_token', data.refresh_token]
         ]);
+        registerForPushNotificationsAsync().catch(() => {});
         
         // Check for pending join token first
         const pendingToken = await AsyncStorage.getItem('pending_join_token');
@@ -94,6 +96,7 @@ export default function LoginScreen({ route, navigation }) {
           ['jwt_token', data.access_token],
           ['refresh_token', data.refresh_token]
         ]);
+        registerForPushNotificationsAsync().catch(() => {});
         
         // Check for pending join token first
         const pendingToken = await AsyncStorage.getItem('pending_join_token');

@@ -448,7 +448,9 @@ export default function LoansScreen() {
                   <Text style={styles.contribName}>{c.funder_name} - ${c.amount_usd}</Text>
                   <Text style={styles.contribStatus}>
                     {c.status === 'pledged' ? '⏳ Prometido (Por pagar)' : 
-                     c.status === 'paid' ? '🟡 Pagado (Por validar)' : '✅ Validado'}
+                     c.status === 'paid' ? '🟡 Pagado (Por validar)' : 
+                     c.status === 'repay_notified' ? '🔄 Devolución notificada (Por validar)' :
+                     c.status === 'repaid' ? '🎉 Devuelto' : '✅ Validado'}
                   </Text>
                   {c.status === 'paid' && c.payment_method && (
                     <Text style={{color: '#94a3b8', fontSize: 12}}>Vía {c.payment_method}</Text>
@@ -505,7 +507,7 @@ export default function LoansScreen() {
                       <Text style={styles.smallActionText}>Validar</Text>
                     </TouchableOpacity>
                   )}
-                  {isMine && (c.status === 'verified' || c.status === 'repay_notified') && (
+                  {isMine && c.status === 'verified' && (
                     <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#f59e0b'}]} onPress={() => {
                         setSelectedContrib(c);
                         setSelectedLoan(item);
@@ -515,6 +517,11 @@ export default function LoansScreen() {
                     }}>
                       <Text style={styles.smallActionText}>Devolver</Text>
                     </TouchableOpacity>
+                  )}
+                  {isMine && c.status === 'repay_notified' && (
+                    <View style={[styles.smallActionBtn, {backgroundColor: 'rgba(234, 179, 8, 0.15)', borderWidth: 1, borderColor: '#eab308'}]}>
+                      <Text style={{color: '#eab308', fontSize: 12, fontWeight: '600'}}>⏳ Devolución en validación</Text>
+                    </View>
                   )}
                 </View>
               </View>

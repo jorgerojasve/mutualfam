@@ -276,3 +276,26 @@ def get_organization_members(org_member: dict = Depends(get_current_org_member),
                 "joined_at": str(m.joined_at) if m.joined_at else None
             })
     return result
+
+class PushTokenRequest(BaseModel):
+    token: str
+
+@router.post("/push-token")
+def register_push_token(request: PushTokenRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from models import UserPushToken
+    # Buscar si el usuario ya tiene este token
+    existing = db.query(UserPushToken).filter(UserPushToken.user_id == current_user.id, UserPushToken.token == request.token).first()
+    if not existing:
+        new_token = UserPushToken(user_id=current_user.id, token=request.token)
+        db.add(new_token)
+        db.commit()
+    return {"message": "Token registrado exitosamente"}
+
+@router.delete("/push-token")
+def delete_push_token(token: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from models import UserPushToken
+    existing = db.query(UserPushToken).filter(UserPushToken.user_id == current_user.id, UserPushToken.token == token).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+    return {"message": "Token eliminado"}

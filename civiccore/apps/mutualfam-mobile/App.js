@@ -7,6 +7,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
+import { registerForPushNotificationsAsync } from './src/services/notifications';
+
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -103,6 +105,7 @@ export default function App() {
         if (token) {
           const orgId = await AsyncStorage.getItem('active_org_id');
           setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
+          await registerForPushNotificationsAsync();
         }
       } catch (e) {
         console.warn(e);
@@ -113,6 +116,7 @@ export default function App() {
     
     checkToken();
   }, []);
+
 
   if (loading) {
     return (

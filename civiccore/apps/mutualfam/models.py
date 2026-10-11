@@ -118,3 +118,9 @@ class LoanRepayment(Base):
     status = Column(Enum(RepaymentStatus), default=RepaymentStatus.PAID)
     created_at = Column(DateTime, default=utcnow)
     verified_at = Column(DateTime, nullable=True)
+
+class UserPushToken(Base):
+    __tablename__ = "mutualfam_user_push_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    token = Column(String(255), unique=True, index=True)
