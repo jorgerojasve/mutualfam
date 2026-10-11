@@ -1,6 +1,7 @@
 import os
+import asyncio
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -40,6 +41,53 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 @app.get("/")
 def read_root():
     return {"message": "Mutual Familiar API is running"}
+
+
+@app.websocket("/api/v1/ws")
+async def websocket_endpoint(websocket: WebSocket, token: str = None, org_id: str = None):
+    """Canal de eventos en tiempo real. Cada cliente se suscribe a su mutual activa."""
+    from jose import JWTError, jwt
+    from civiccore.core.config import settings
+    from civiccore.core.database import SessionLocal
+    from civiccore.core.websockets import manager
+    from civiccore.modules.membership.models import OrganizationMembership
+    from services import realtime
+
+    if not token or not org_id or not org_id.isdigit():
+        await websocket.close(code=1008)
+        return
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id = payload.get("sub")
+    except JWTError:
+        user_id = None
+    if not user_id:
+        await websocket.close(code=1008)
+        return
+
+    db = SessionLocal()
+    try:
+        is_member = db.query(OrganizationMembership).filter(
+            OrganizationMembership.user_id == int(user_id),
+            OrganizationMembership.organization_id == int(org_id),
+        ).first() is not None
+    finally:
+        db.close()
+    if not is_member:
+        await websocket.close(code=1008)
+        return
+
+    realtime.set_loop(asyncio.get_running_loop())
+    await manager.connect(websocket, str(user_id), org_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "PONG"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(websocket, str(user_id), org_id)
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8002, reload=True)

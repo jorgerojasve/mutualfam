@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authApi } from './api.js';
 import { getConfig } from './config.js';
+import { wsClient } from './wsClient.js';
 
 export const useAuthStore = create((set) => ({
   isAuthenticated: false,
@@ -15,6 +16,10 @@ export const useAuthStore = create((set) => ({
         const rawUser = await authApi.me();
         const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
         set({ isAuthenticated: true, user, isLoading: false });
+        
+        // Conectar WS
+        const orgId = await storage.getItem('organizationId');
+        wsClient.connect(token, orgId);
       } else {
         set({ isLoading: false });
       }
@@ -38,6 +43,9 @@ export const useAuthStore = create((set) => ({
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
+
+    const orgId = await storage.getItem('organizationId');
+    wsClient.connect(tokenResponse.access_token, orgId);
   },
 
   loginBiometric: async () => {
@@ -50,6 +58,9 @@ export const useAuthStore = create((set) => ({
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
+
+    const orgId = await storage.getItem('organizationId');
+    wsClient.connect(tokenResponse.access_token, orgId);
   },
 
   register: async (userData) => {
@@ -62,6 +73,9 @@ export const useAuthStore = create((set) => ({
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
     set({ isAuthenticated: true, user });
+
+    const orgId = await storage.getItem('organizationId');
+    wsClient.connect(tokenResponse.access_token, orgId);
   },
 
   logout: async () => {
@@ -70,5 +84,7 @@ export const useAuthStore = create((set) => ({
     await storage.removeItem('biometric_email');
     await storage.removeItem('biometric_password');
     set({ isAuthenticated: false, user: null });
+    
+    wsClient.disconnect();
   },
 }));

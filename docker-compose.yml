@@ -8,6 +8,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ${APP_NAME:-mutualfam}_api
+    env_file:
+      - ./civiccore/apps/${APP_NAME:-mutualfam}/.env
     environment:
       DATABASE_URL: sqlite:////app/data/${APP_NAME:-mutualfam}.db
       PORT: 8080

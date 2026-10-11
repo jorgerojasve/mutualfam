@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/client';
+import { connectRealtime, disconnectRealtime } from '../utils/realtime';
 
 export const OrgContext = createContext();
 
@@ -62,6 +63,12 @@ export const OrgProvider = ({ children }) => {
     // pero podemos cargarlo inicialmente
     loadActiveOrg();
   }, []);
+
+  // Canal en tiempo real: una conexión por mutual activa
+  useEffect(() => {
+    if (activeOrg?.id) connectRealtime(activeOrg.id);
+    else disconnectRealtime();
+  }, [activeOrg?.id]);
 
   return (
     <OrgContext.Provider value={{

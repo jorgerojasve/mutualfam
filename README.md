@@ -52,6 +52,9 @@ cp civiccore/backend/.env.example civiccore/backend/.env
 # La API estará disponible en:
 # http://localhost:8000
 # Documentación: http://localhost:8000/docs
+
+# Para detener el entorno cuando finalices
+./stop.sh
 ```
 
 ### Frontend (App Android)

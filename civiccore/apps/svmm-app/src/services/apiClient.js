@@ -10,6 +10,10 @@ export const apiClient = {
       
       const response = await fetch(`${BASE_URL}${endpoint}`, { headers });
       if (!response.ok) {
+        if (response.status === 401) {
+          const { useAuthStore } = require('@civiccore/sdk');
+          useAuthStore.getState().logout();
+        }
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
       return await response.json();
@@ -33,6 +37,10 @@ export const apiClient = {
         body: JSON.stringify(data),
       });
       if (!response.ok) {
+        if (response.status === 401) {
+          const { useAuthStore } = require('@civiccore/sdk');
+          useAuthStore.getState().logout();
+        }
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
       return await response.json();

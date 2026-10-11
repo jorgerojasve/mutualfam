@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .auth import create_access_token, create_refresh_token, decode_access_token
 from ..modules.membership.service import MembershipService
+from .websockets import manager
+from fastapi import WebSocket, WebSocketDisconnect
 
 router = APIRouter()
 
@@ -55,3 +57,29 @@ def get_me(db: Session = Depends(get_db), token: str = Depends(OAuth2PasswordBea
     if not member:
         raise HTTPException(status_code=404, detail="User not found")
     return member
+
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, token: str = None, org_id: str = None):
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+        
+    payload = decode_access_token(token)
+    if not payload:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+        
+    email = payload.get("sub")
+    if not email:
+        await websocket.close(code=1008, reason="Invalid token payload")
+        return
+        
+    await manager.connect(websocket, email, org_id)
+    try:
+        while True:
+            # We keep the connection open and can receive simple pings or actions
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "PONG"})
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, email, org_id)

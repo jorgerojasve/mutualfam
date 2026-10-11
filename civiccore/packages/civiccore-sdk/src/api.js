@@ -31,6 +31,11 @@ const request = async (endpoint, options = {}) => {
     const data = JSON.parse(rawText);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Redirección forzosa cerrando sesión a nivel global
+        const { useAuthStore } = require('./authStore.js');
+        useAuthStore.getState().logout();
+      }
       const message = data?.detail || 'Ocurrió un error en el servidor.';
       throw new Error(message);
     }

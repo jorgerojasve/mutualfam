@@ -22,6 +22,8 @@ if (!baseURL) {
 
 console.log("baseURL final en client.js:", baseURL);
 
+export { baseURL };
+
 const apiClient = axios.create({
   baseURL,
   headers: {
@@ -71,6 +73,14 @@ apiClient.interceptors.response.use(
         if (!refreshToken) {
           // No hay refresh token, forzamos cierre de sesión lógico
           await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
+          
+          const { navigationRef } = require('../../App');
+          if (navigationRef.isReady()) {
+            navigationRef.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
+          }
           return Promise.reject(error);
         }
         

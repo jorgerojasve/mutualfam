@@ -7,6 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { subscribeRealtime } from '../utils/realtime';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", "Zelle", "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -100,6 +101,23 @@ export default function LoansScreen() {
       if (activeOrg?.id) fetchLoans();
     }, [activeOrg?.id])
   );
+
+  // Actualización en tiempo real vía WebSocket (refresco silencioso, sin spinner)
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    const refresh = async () => {
+      try {
+        setLoans(await loansApi.getLoans());
+      } catch (e) {
+        console.warn('[RT] no se pudo refrescar préstamos', e?.message);
+      }
+    };
+    const unsubs = [
+      subscribeRealtime('LOANS_CHANGED', refresh),
+      subscribeRealtime('RECONNECTED', refresh),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [activeOrg?.id]);
 
   const handleOpenConfig = async () => {
     try {

@@ -4,22 +4,25 @@
 
 Para levantar los diferentes entornos de esta aplicación (Backend, Web y Móvil), puedes ejecutar los siguientes comandos desde sus respectivos directorios:
 
-### Backend
-Ubícate en el directorio del backend (`mutualfam`) y activa el entorno virtual de `civiccore/backend`.
-El comando de ejecución depende de dónde pruebes la app móvil:
+### Backend (API + Base de Datos)
+La forma recomendada de levantar el backend en desarrollo local es utilizando Docker, ya que encapsula todas las dependencias automáticamente.
 
-**Opción A: Emulador en tu PC**
+Ubícate en la **raíz del repositorio** (donde se encuentra `start.sh`) y ejecuta el script:
+
 ```bash
-source ../../backend/venv/bin/activate
-uvicorn app:app --reload
+cd ../../../
+./start.sh
 ```
 
-**Opción B: Teléfono Físico (vía WiFi)**
+El script interactivo te preguntará qué aplicación levantar. Selecciona `1` para `mutualfam`. 
+Esto levantará el contenedor Docker exponiendo la API en la red local en el puerto `8000`.
+
+*(Recuerda poner tu IP WiFi local o `10.0.2.2` para emuladores en el archivo `.env` de la app móvil, ej: `EXPO_PUBLIC_API_URL=http://<TU_IP>:8000/api/v1`).*
+
+Para detener el servidor cuando termines de desarrollar, ejecuta en la misma raíz:
 ```bash
-source ../../backend/venv/bin/activate
-uvicorn app:app --host 0.0.0.0 --reload
+./stop.sh
 ```
-*(Recuerda poner tu IP WiFi local en el archivo `.env` de la app móvil).*
 
 ### Frontend (Sitio Web)
 Ubícate en el directorio de la web (`mutualfam-web`), instala las dependencias y ejecuta:

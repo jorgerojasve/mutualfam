@@ -80,7 +80,7 @@ export default function InviteMembersScreen() {
       });
       
       let inviteUrl = '';
-      if (process.env.EXPO_PUBLIC_INVITE_URL_BASE) {
+      if (!__DEV__ && process.env.EXPO_PUBLIC_INVITE_URL_BASE) {
         inviteUrl = `${process.env.EXPO_PUBLIC_INVITE_URL_BASE}${data.token}`;
       } else {
         // Fallback nativo para desarrollo (Expo Go)
@@ -88,7 +88,7 @@ export default function InviteMembersScreen() {
       }
       
       const code = data.code || data.token;
-      const shareMessage = process.env.EXPO_PUBLIC_INVITE_URL_BASE
+      const shareMessage = (!__DEV__ && process.env.EXPO_PUBLIC_INVITE_URL_BASE)
         ? `¡Únete a nuestra Mutual Familiar! 🤝\n\n1️⃣ Abre este enlace y sigue los pasos para instalar la app:\n${inviteUrl}\n\n2️⃣ Si la app te pide un código de invitación, usa:\n*${code}*`
         : inviteUrl;
       

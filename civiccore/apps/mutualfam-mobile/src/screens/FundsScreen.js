@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { fundsApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { subscribeRealtime } from '../utils/realtime';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
@@ -55,6 +56,18 @@ export default function FundsScreen() {
       if (activeOrg?.id) fetchFunds();
     }, [activeOrg?.id])
   );
+
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    const refresh = async () => {
+      try { setFunds(await fundsApi.getFunds()); } catch (e) {}
+    };
+    const unsubs = [
+      subscribeRealtime('FUNDS_CHANGED', refresh),
+      subscribeRealtime('RECONNECTED', refresh),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [activeOrg?.id]);
 
   const renderFundCard = ({ item }) => (
     <View style={styles.card}>

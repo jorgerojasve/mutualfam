@@ -10,6 +10,7 @@ import json
 from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig, RepaymentStatus, LoanRepayment
 from routers.membership import get_current_org_member
 from services.telegram_bot import send_telegram_notification, send_telegram_photo
+from services.realtime import notify_org
 
 router = APIRouter()
 
@@ -92,6 +93,7 @@ def create_loan_request(
     msg = f"🚨 <b>Nueva solicitud de préstamo</b>\n\n👤 {org_member['user'].first_name} solicitó <b>${loan.amount_usd}</b>\n📝 Motivo: {loan.motive}{time_text}"
     send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     requester_config = db.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == org_member["user"].id).first()
     
     return {
@@ -221,6 +223,7 @@ def cancel_loan_request(
     msg = f"❌ <b>Solicitud Cancelada</b>\n\n👤 {org_member['user'].first_name} ha cancelado su solicitud de ${loan.amount_usd}."
     send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Préstamo cancelado exitosamente"}
 
 class ContributionCreate(BaseModel):
@@ -281,6 +284,7 @@ def contribute_to_loan(
     msg = f"✅ <b>¡Nuevo Aporte Prometido!</b>\n\n👤 {org_member['user'].first_name} se comprometió a aportar <b>${contrib.amount_usd}</b> al préstamo de {loan.motive}."
     send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Aporte prometido exitosamente", "contribution_id": new_contrib.id}
 
 @router.delete("/contributions/{contrib_id}")
@@ -325,6 +329,7 @@ def cancel_contribution(
     msg = f"❌ <b>Aporte Cancelado</b>\n\n👤 {org_member['user'].first_name} ha cancelado su promesa de aporte de <b>${amount}</b>."
     send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Aporte cancelado exitosamente"}
 
 @router.post("/contributions/{contrib_id}/notify_payment")
@@ -367,6 +372,7 @@ def notify_payment(
     else:
         send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Pago notificado exitosamente"}
 
 @router.post("/contributions/{contrib_id}/verify_payment")
@@ -395,6 +401,7 @@ def verify_payment(
     msg = f"👍 <b>¡Pago Verificado!</b>\n\n👤 {org_member['user'].first_name} confirmó recibir el aporte de <b>${contrib.amount_usd}</b>."
     send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Pago verificado exitosamente"}
 
 class RepaymentNotify(BaseModel):
@@ -453,6 +460,7 @@ def notify_return_payment(
     else:
         send_telegram_notification(msg)
     
+    notify_org(org_member["organization"].id, "LOANS_CHANGED")
     return {"message": "Devolución notificada exitosamente"}
 
 @router.post("/repayments/{repay_id}/verify")
@@ -516,4 +524,5 @@ def verify_return_payment(
         msg = f"👍 <b>¡Devolución Verificada!</b>\n\n👤 {org_member['user'].first_name} confirmó recibir <b>${repay.amount_usd}</b>."
         send_telegram_notification(msg)
     
+    notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
     return {"message": "Devolución verificada exitosamente"}

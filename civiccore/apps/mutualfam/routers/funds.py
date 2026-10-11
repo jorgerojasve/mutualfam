@@ -7,6 +7,7 @@ from civiccore.core.database import get_db
 from models import Fund, FundType, FundContribution, ContributionStatus
 from routers.membership import get_current_org_member
 from services.telegram_bot import send_telegram_notification
+from services.realtime import notify_org
 
 router = APIRouter()
 
@@ -49,6 +50,7 @@ def create_fund(
     msg = f"🏦 <b>¡Nuevo Fondo Creado!</b>\n\n👤 {org_member['user'].first_name} ha creado el fondo <i>{new_fund.name}</i> para la mutual."
     send_telegram_notification(msg)
     
+    notify_org(new_fund.organization_id, "FUNDS_CHANGED")
     return new_fund
 
 @router.get("/", response_model=List[FundResponse])
@@ -103,4 +105,5 @@ def contribute_to_fund(
     msg = f"💰 <b>¡Nuevo Aporte al Fondo!</b>\n\n👤 {org_member['user'].first_name} aportó <b>${contrib.amount_usd}</b> a <i>{fund.name}</i>."
     send_telegram_notification(msg)
     
+    notify_org(fund.organization_id, "FUNDS_CHANGED")
     return {"message": "Aporte al fondo registrado exitosamente", "contribution_id": new_contrib.id}

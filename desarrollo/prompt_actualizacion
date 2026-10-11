@@ -1,0 +1,3 @@
+Cuando se solicitan préstamos, se notifican, etc, en general cuando se generan eventos, la aplicación no actualiza la información sino cuando cambia de pestaña, inicia sesión,etc. Investiga qué mecanismos existen para que la actualización se desencadene automáticamente con estos eventos, de manera de poder reflejar los cambios sin necesidad de que el usuario realice una acción. Esto además deberíamos enlazarlo a notificaciones de websocket para que nos pueda avisar de los eventos que van ocurriendo.
+
+Analiza esto y proponme un plan de acción. No implementes nada todavía, solo analiza y planifica.
