@@ -391,7 +391,11 @@ def notify_payment(
         
     if notify.receipt_url:
         import os
-        photo_path = f".{notify.receipt_url}"
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(notify.receipt_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{notify.receipt_url}"
         if os.path.exists(photo_path):
             send_telegram_photo(msg, photo_path)
         else:
@@ -487,7 +491,11 @@ def notify_return_payment(
         
     if repay.receipt_url:
         import os
-        photo_path = f".{repay.receipt_url}"
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(repay.receipt_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{repay.receipt_url}"
         if os.path.exists(photo_path):
             send_telegram_photo(msg, photo_path)
         else:

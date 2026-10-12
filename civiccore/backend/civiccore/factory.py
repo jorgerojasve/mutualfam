@@ -82,7 +82,7 @@ def create_app(
         app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
         
     import os
-    if os.getenv("CIVICCORE_ENV") == "sandbox" or True: # Force enable for testing phase
+    if os.getenv("CIVICCORE_ENV") == "sandbox":
         from .testing.sandbox_router import router as sandbox_router
         from .testing.db_manager import router as db_manager_router
         app.include_router(sandbox_router, prefix="/api/v1/sandbox", tags=["Sandbox"])

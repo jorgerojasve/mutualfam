@@ -5,13 +5,14 @@ import uuid
 
 router = APIRouter()
 
-os.makedirs("uploads", exist_ok=True)
+UPLOADS_DIR = os.getenv("UPLOADS_DIR", "/app/data/uploads" if os.path.exists("/app/data") else "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 @router.post("/")
 async def upload_file(file: UploadFile = File(...)):
     ext = file.filename.split(".")[-1]
     filename = f"{uuid.uuid4()}.{ext}"
-    filepath = f"uploads/{filename}"
+    filepath = os.path.join(UPLOADS_DIR, filename)
     
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

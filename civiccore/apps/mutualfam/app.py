@@ -35,8 +35,9 @@ app.include_router(loans.router, prefix="/api/v1/loans", tags=["loans"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["funds"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+from routers.upload import UPLOADS_DIR
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 @app.get("/")
 def read_root():
