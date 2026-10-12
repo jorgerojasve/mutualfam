@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore, useManifest } from '@civiccore/sdk';
 import { LogIn, Mail, Lock } from 'lucide-react';
+import { EnvBadge } from '../../components/Common/EnvBadge';
+import { getEnvironmentConfig } from '../../utils/env';
 
 const Login = () => {
   const { login, isAuthenticated } = useAuthStore();
   const manifest = useManifest();
+  const envConfig = getEnvironmentConfig();
   const navigate = useNavigate();
   const [email, setEmail] = useState('admin@mutualsol.com');
   const [password, setPassword] = useState('admin123');
@@ -43,9 +46,29 @@ const Login = () => {
               <LogIn color="white" size={28} />
             </div>
           )}
-          <h2 className="text-gradient">{manifest.name || 'CivicCore'}</h2>
-          <p className="text-muted">{manifest.tagline || 'Acceso a la Plataforma'}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'center' }}>
+            <h2 className="text-gradient">{manifest.name || 'MutualFam'}</h2>
+            <EnvBadge size="medium" />
+          </div>
+          <p className="text-muted">{envConfig.tagline || manifest.tagline || 'Acceso a la Plataforma'}</p>
         </div>
+
+        {!envConfig.isProd && (
+          <div style={{
+            backgroundColor: envConfig.bgColor,
+            border: `1px solid ${envConfig.borderColor}`,
+            color: envConfig.color,
+            borderRadius: 'var(--radius-md)',
+            padding: '0.6rem 0.9rem',
+            fontSize: '0.8rem',
+            marginBottom: '1.25rem',
+            textAlign: 'center',
+            fontWeight: 500,
+            lineHeight: 1.4,
+          }}>
+            {envConfig.bannerText}
+          </div>
+        )}
 
         {error && (
           <div className="form-group">

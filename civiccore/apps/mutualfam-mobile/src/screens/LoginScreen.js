@@ -4,8 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 import { registerForPushNotificationsAsync } from '../services/notifications';
+import { getMobileEnvironmentConfig } from '../utils/env';
 
 export default function LoginScreen({ route, navigation }) {
+  const envConfig = getMobileEnvironmentConfig();
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -142,7 +144,14 @@ export default function LoginScreen({ route, navigation }) {
       )}
       <View style={styles.card}>
         <View style={styles.iconPlaceholder} />
-        <Text style={styles.title}>Mutual Familiar</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Mutual Familiar</Text>
+          {!envConfig.isProd && (
+            <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+              <Text style={[styles.envBadgeText, { color: envConfig.color }]}>{envConfig.badgeText}</Text>
+            </View>
+          )}
+        </View>
         
         {isRegistering && (
           <TextInput
@@ -271,11 +280,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b82f6',
     marginBottom: 20,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 30,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#f8fafc',
-    marginBottom: 30,
+  },
+  envBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  envBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   input: {
     width: '100%',

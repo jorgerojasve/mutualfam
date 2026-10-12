@@ -15,6 +15,7 @@ import { OrgContext } from '../context/OrgContext';
 import { unregisterPushNotificationsAsync } from '../services/notifications';
 import { getCurrentAppVersion, checkForAppUpdate } from '../services/appUpdates';
 import UpdateModal from '../components/UpdateModal';
+import { getMobileEnvironmentConfig } from '../utils/env';
 
 export default function ProfileScreen({ navigation }) {
   const { activeOrg, clearOrg } = useContext(OrgContext);
@@ -22,6 +23,7 @@ export default function ProfileScreen({ navigation }) {
   const [updateInfo, setUpdateInfo] = useState(null);
 
   const currentVersion = getCurrentAppVersion();
+  const envConfig = getMobileEnvironmentConfig();
 
   const handleLogout = async () => {
     try {
@@ -99,6 +101,13 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.aboutLabel}>Versión</Text>
           <View style={styles.versionPill}>
             <Text style={styles.versionPillText}>v{currentVersion}</Text>
+          </View>
+        </View>
+
+        <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Entorno</Text>
+          <View style={[styles.versionPill, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+            <Text style={[styles.versionPillText, { color: envConfig.color }]}>{envConfig.label}</Text>
           </View>
         </View>
 

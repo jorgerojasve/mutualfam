@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bell, LogOut, Search } from 'lucide-react';
 import { useAuthStore } from '@civiccore/sdk';
+import { EnvBadge } from '../Common/EnvBadge';
 
 const Topbar = () => {
   const { logout } = useAuthStore();
@@ -13,6 +14,8 @@ const Topbar = () => {
       </div>
       
       <div className="topbar-actions">
+        <EnvBadge size="medium" showProd={true} />
+        
         <div className="notification-bell">
           <Bell size={20} className="text-secondary" />
           <span className="notification-dot"></span>

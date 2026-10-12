@@ -5,6 +5,15 @@ import './index.css';
 
 import { initCivicCore } from '@civiccore/sdk';
 import manifest from './manifest.js';
+import { getEnvironmentConfig } from './utils/env.js';
+
+// Título dinámico según el entorno
+const envConfig = getEnvironmentConfig();
+document.title = envConfig.isQA 
+  ? 'MutualFam (QA) - Entorno de Pruebas' 
+  : envConfig.isDev 
+    ? 'MutualFam (Dev) - Desarrollo Local' 
+    : 'MutualFam - Préstamos y Aportes Familiares';
 
 // Adaptador de LocalStorage para la Web
 initCivicCore({

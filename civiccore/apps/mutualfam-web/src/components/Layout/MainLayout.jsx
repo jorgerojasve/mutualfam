@@ -3,6 +3,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { useAuthStore } from '@civiccore/sdk';
+import { EnvTopBanner } from '../Common/EnvBadge';
 
 const MainLayout = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -23,6 +24,7 @@ const MainLayout = () => {
     <div className="app-container">
       <Sidebar />
       <div className="main-content-wrapper">
+        <EnvTopBanner />
         <Topbar />
         <main className="main-content">
           <Outlet />

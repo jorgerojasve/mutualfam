@@ -13,6 +13,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import './InviteLanding.css';
+import { EnvBadge } from '../../components/Common/EnvBadge';
+import { getEnvironmentConfig } from '../../utils/env';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1';
 
@@ -66,12 +68,15 @@ export default function InviteLanding() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
   const toastTimer = useRef(null);
+  const envConfig = getEnvironmentConfig();
 
   useEffect(() => {
-    document.title = 'Invitación a Mutual Familiar | MutualFam';
+    document.title = envConfig.isQA
+      ? 'Invitación a Mutual Familiar (QA) | MutualFam'
+      : 'Invitación a Mutual Familiar | MutualFam';
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute('content', 'Acepta tu invitación a una Mutual Familiar: descarga la app, crea tu cuenta y únete en minutos.');
-  }, []);
+  }, [envConfig.isQA]);
 
   useEffect(() => {
     if (!token) return;
@@ -144,9 +149,29 @@ export default function InviteLanding() {
       <div className="il-bg" aria-hidden="true" />
 
       <section className="il-card">
+        {!envConfig.isProd && (
+          <div style={{
+            backgroundColor: envConfig.bgColor,
+            border: `1px solid ${envConfig.borderColor}`,
+            color: envConfig.color,
+            borderRadius: '12px',
+            padding: '0.65rem 1rem',
+            fontSize: '0.85rem',
+            marginBottom: '1.25rem',
+            textAlign: 'center',
+            fontWeight: 600,
+            lineHeight: 1.4,
+          }}>
+            {envConfig.bannerText}
+          </div>
+        )}
+
         <header className="il-header">
-          <div className="il-badge">
-            <Users aria-hidden="true" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+            <div className="il-badge">
+              <Users aria-hidden="true" />
+            </div>
+            <EnvBadge size="medium" />
           </div>
           <p className="il-eyebrow">Tienes una invitación</p>
           <h1 className="il-title">
@@ -192,7 +217,7 @@ export default function InviteLanding() {
               className="il-btn il-btn--primary"
             >
               <Download aria-hidden="true" />
-              Descargar MutualFam
+              {envConfig.isQA ? 'Descargar MutualFam (QA)' : 'Descargar MutualFam'}
             </a>
             <p className="il-note">
               Si Chrome dice <em>"Este tipo de archivo puede dañar tu dispositivo"</em>, toca{' '}
