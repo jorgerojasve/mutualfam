@@ -377,15 +377,52 @@ export default function LoansScreen() {
     ]);
   };
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled) {
-      setReceiptUri(result.assets[0].uri);
-    }
+  const pickImage = () => {
+    Alert.alert(
+      'Adjuntar Comprobante',
+      '¿Cómo deseas agregar el comprobante?',
+      [
+        {
+          text: '🖼️ Galería (Captura)',
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets?.[0]?.uri) {
+                setReceiptUri(result.assets[0].uri);
+              }
+            } catch (err) {
+              console.warn('Error al abrir galería:', err);
+            }
+          },
+        },
+        {
+          text: '📷 Tomar Foto',
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permiso requerido', 'Se requiere acceso a la cámara para tomar la foto.');
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: false,
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets?.[0]?.uri) {
+                setReceiptUri(result.assets[0].uri);
+              }
+            } catch (err) {
+              console.warn('Error al abrir cámara:', err);
+            }
+          },
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    );
   };
 
   const onDateChange = (event, selectedDate) => {
@@ -956,9 +993,16 @@ export default function LoansScreen() {
 
               <Text style={styles.label}>Comprobante (Opcional)</Text>
               <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}</Text>
+                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
               </TouchableOpacity>
-              {receiptUri && <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />}
+              {receiptUri && (
+                <View style={{ marginBottom: 15 }}>
+                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setShowNotifyModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
@@ -1106,9 +1150,16 @@ export default function LoansScreen() {
 
               <Text style={styles.label}>Comprobante (Opcional)</Text>
               <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}</Text>
+                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
               </TouchableOpacity>
-              {receiptUri && <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />}
+              {receiptUri && (
+                <View style={{ marginBottom: 15 }}>
+                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setShowRepayModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
