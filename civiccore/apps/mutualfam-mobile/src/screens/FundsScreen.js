@@ -5,6 +5,7 @@ import { fundsApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
+import { getErrorMessage } from '../utils/errors';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
@@ -33,7 +34,7 @@ export default function FundsScreen() {
       setNewFundTarget('');
       fetchFunds();
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.detail || 'Error al crear fondo');
+      Alert.alert('Error', getErrorMessage(e, 'Error al crear fondo'));
     } finally {
       setSubmitting(false);
     }

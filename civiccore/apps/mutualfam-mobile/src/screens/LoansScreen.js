@@ -8,6 +8,7 @@ import { loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
+import { getErrorMessage } from '../utils/errors';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -304,7 +305,7 @@ export default function LoansScreen() {
             Alert.alert('Exito', 'Pago verificado correctamente.');
             fetchLoans();
           } catch (e) {
-            Alert.alert('Error', e.response?.data?.detail || 'No se pudo verificar el pago');
+            Alert.alert('Error', getErrorMessage(e, 'No se pudo verificar el pago'));
           }
       }}
     ]);
@@ -319,7 +320,7 @@ export default function LoansScreen() {
             Alert.alert("Cancelado", "Tu aporte ha sido cancelado exitosamente.");
             fetchLoans();
           } catch (error) {
-            Alert.alert('Error', error.response?.data?.detail || error.message);
+            Alert.alert('Error', getErrorMessage(error, 'No se pudo cancelar el aporte'));
           }
       }}
     ]);
@@ -356,7 +357,7 @@ export default function LoansScreen() {
       Alert.alert('¡Notificado!', 'Tu devolución ha sido notificada al aportante.');
       fetchLoans();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || error.message);
+      Alert.alert('Error', getErrorMessage(error, 'No se pudo notificar la devolución'));
     } finally {
       setRepaying(false);
     }
@@ -371,7 +372,7 @@ export default function LoansScreen() {
             Alert.alert('Exito', 'Devolución verificada correctamente.');
             fetchLoans();
           } catch (e) {
-            Alert.alert('Error', e.response?.data?.detail || 'No se pudo verificar la devolución');
+            Alert.alert('Error', getErrorMessage(e, 'No se pudo verificar la devolución'));
           }
       }}
     ]);

@@ -120,7 +120,7 @@ def get_latest_release_info():
     download_url = f"{backend_base}/config/latest-apk"
 
     info = {
-        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.12"),
+        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.13"),
         "min_version": os.getenv("MIN_APP_VERSION", "1.0.0"),
         "download_url": download_url,
         "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones."
