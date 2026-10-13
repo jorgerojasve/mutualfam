@@ -63,7 +63,7 @@ export default function InviteLanding() {
   const token = searchParams.get('token');
 
   const [invite, setInvite] = useState(null); // { organization_name, code }
-  const [status, setStatus] = useState('loading'); // loading | ok | invalid | offline
+  const [status, setStatus] = useState(token ? 'loading' : 'direct'); // direct | loading | ok | invalid | offline
   const [toast, setToast] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
@@ -71,12 +71,18 @@ export default function InviteLanding() {
   const envConfig = getEnvironmentConfig();
 
   useEffect(() => {
-    document.title = envConfig.isQA
-      ? 'Invitación a Mutual Familiar (QA) | MutualFam'
-      : 'Invitación a Mutual Familiar | MutualFam';
+    if (token) {
+      document.title = envConfig.isQA
+        ? 'Invitación a Mutual Familiar (QA) | MutualFam'
+        : 'Invitación a Mutual Familiar | MutualFam';
+    } else {
+      document.title = envConfig.isQA
+        ? 'Descargar MutualFam (QA) - App Oficial Android'
+        : 'Descargar MutualFam - App Oficial Android';
+    }
     const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute('content', 'Acepta tu invitación a una Mutual Familiar: descarga la app, crea tu cuenta y únete en minutos.');
-  }, [envConfig.isQA]);
+    if (meta) meta.setAttribute('content', 'Descarga la app oficial de Mutual Familiar para Android y gestiona préstamos y aportes familiares.');
+  }, [envConfig.isQA, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -107,7 +113,7 @@ export default function InviteLanding() {
 
   const code = invite?.code || token;
   const orgName = invite?.organization_name;
-  const deepLink = `mutualfam://join/${invite?.token || token}`;
+  const deepLink = token ? `mutualfam://join/${invite?.token || token}` : 'mutualfam://';
 
   const handleCopyCode = async () => {
     if (await copyText(code)) {
@@ -118,13 +124,13 @@ export default function InviteLanding() {
   };
 
   const handleDownload = () => {
-    // Capa "portapapeles": copiamos el enlace de invitación para que la app
-    // lo detecte automáticamente al abrirse por primera vez tras instalarla.
-    copyText(window.location.href);
+    if (token) {
+      copyText(window.location.href);
+    }
     setDownloadStarted(true);
   };
 
-  if (!token || status === 'invalid') {
+  if (status === 'invalid') {
     return (
       <main className="il-page">
         <div className="il-bg" aria-hidden="true" />
@@ -132,11 +138,9 @@ export default function InviteLanding() {
           <div className="il-badge il-badge--danger">
             <AlertTriangle aria-hidden="true" />
           </div>
-          <h1 className="il-title">{token ? 'Invitación no válida' : 'Enlace inválido'}</h1>
+          <h1 className="il-title">Invitación no válida</h1>
           <p className="il-lead">
-            {token
-              ? 'Esta invitación ya expiró o fue revocada. Pide a quien te invitó que te envíe una nueva.'
-              : 'El enlace de invitación no contiene un código válido.'}
+            Esta invitación ya expiró o fue revocada. Pide a quien te invitó que te envíe una nueva.
           </p>
         </section>
         <p className="il-footer">Plataforma Cívica Mutual Familiar</p>
@@ -173,36 +177,44 @@ export default function InviteLanding() {
             </div>
             <EnvBadge size="medium" />
           </div>
-          <p className="il-eyebrow">Tienes una invitación</p>
+          <p className="il-eyebrow">{token ? 'Tienes una invitación' : 'Aplicación Oficial Android'}</p>
           <h1 className="il-title">
             {status === 'loading' ? (
               <span className="il-skeleton" />
             ) : orgName ? (
               <>Te invitaron a <span className="il-gradient">{orgName}</span></>
-            ) : (
+            ) : token ? (
               <>Te invitaron a una <span className="il-gradient">Mutual Familiar</span></>
+            ) : (
+              <>Descarga <span className="il-gradient">{envConfig.appName}</span></>
             )}
           </h1>
-          <p className="il-lead">Sigue estos 4 pasos. Te tomará unos 3 minutos.</p>
+          <p className="il-lead">
+            {token
+              ? 'Sigue estos 4 pasos. Te tomará unos 3 minutos.'
+              : 'Sigue estos sencillos pasos para instalar la aplicación en tu dispositivo móvil.'}
+          </p>
         </header>
 
         {/* Código de invitación: respaldo manual si la detección automática falla */}
-        <div className="il-code">
-          <span className="il-code__label">Tu código de invitación</span>
-          <div className="il-code__row">
-            <code className="il-code__value" id="invite-code">{code}</code>
-            <button
-              type="button"
-              id="copy-code-btn"
-              className="il-btn il-btn--ghost il-btn--icon"
-              onClick={handleCopyCode}
-              aria-label="Copiar código de invitación"
-            >
-              {codeCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            </button>
+        {Boolean(token && code) && (
+          <div className="il-code">
+            <span className="il-code__label">Tu código de invitación</span>
+            <div className="il-code__row">
+              <code className="il-code__value" id="invite-code">{code}</code>
+              <button
+                type="button"
+                id="copy-code-btn"
+                className="il-btn il-btn--ghost il-btn--icon"
+                onClick={handleCopyCode}
+                aria-label="Copiar código de invitación"
+              >
+                {codeCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              </button>
+            </div>
+            <span className="il-code__hint">Guárdalo: lo necesitarás si la app te lo pide.</span>
           </div>
-          <span className="il-code__hint">Guárdalo: lo necesitarás si la app te lo pide.</span>
-        </div>
+        )}
 
         <ol className="il-steps">
           <Step number={1} icon={Download} title="Descarga la app" active={!downloadStarted}>
@@ -261,19 +273,27 @@ export default function InviteLanding() {
               Al terminar la instalación toca <strong>Abrir</strong> y luego <strong>Regístrate</strong> con
               tu nombre, correo y una contraseña.
             </p>
-            <p className="il-note il-note--success">
-              La app detectará tu invitación automáticamente{orgName ? ` a ${orgName}` : ''}.
-            </p>
+            {Boolean(token) && (
+              <p className="il-note il-note--success">
+                La app detectará tu invitación automáticamente{orgName ? ` a ${orgName}` : ''}.
+              </p>
+            )}
           </Step>
 
-          <Step number={4} icon={Users} title="Únete a la mutual">
+          <Step number={4} icon={Users} title={token ? "Únete a la mutual" : "Únete o crea tu mutual"}>
             <p className="il-text">
-              Verás el mensaje <em>"Has sido invitado a…"</em>. Toca <strong>Confirmar y Unirme</strong>.
+              {token ? (
+                <>Verás el mensaje <em>"Has sido invitado a…"</em>. Toca <strong>Confirmar y Unirme</strong>.</>
+              ) : (
+                'Dentro de la app podrás crear una nueva mutual familiar o ingresar el código de invitación que te hayan compartido.'
+              )}
             </p>
-            <p className="il-note">
-              ¿No apareció? En la app toca <strong>Tengo un código de invitación</strong> y escribe{' '}
-              <code className="il-inline-code">{code}</code>.
-            </p>
+            {Boolean(token && code) && (
+              <p className="il-note">
+                ¿No apareció? En la app toca <strong>Tengo un código de invitación</strong> y escribe{' '}
+                <code className="il-inline-code">{code}</code>.
+              </p>
+            )}
           </Step>
         </ol>
 
