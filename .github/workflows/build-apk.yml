@@ -105,6 +105,7 @@ jobs:
             const parts = cleanVersion.split('.').map(n => parseInt(n, 10) || 0);
             while (parts.length < 3) parts.push(0);
             const [major, minor, patch] = parts;
+            const computedCode = major * 10000 + minor * 100 + patch;
             const isQa = '${{ steps.env-config.outputs.env_label }}' === 'QA';
             const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
             appJson.expo.name = appName;
