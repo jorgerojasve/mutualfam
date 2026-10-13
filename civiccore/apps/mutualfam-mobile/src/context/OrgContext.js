@@ -24,16 +24,19 @@ export const OrgProvider = ({ children }) => {
   const loadActiveOrg = async () => {
     setLoading(true);
     try {
-      const orgId = await AsyncStorage.getItem('active_org_id');
+      const orgId = (await AsyncStorage.getItem('active_org_id')) || (await AsyncStorage.getItem('org_id'));
       const orgs = await fetchOrganizations();
       
       if (orgId && orgs.length > 0) {
-        const found = orgs.find(o => o.id.toString() === orgId);
+        const found = orgs.find(o => o.id.toString() === orgId.toString());
         if (found) {
           setActiveOrg(found);
+          await AsyncStorage.setItem('active_org_id', found.id.toString());
+          await AsyncStorage.setItem('org_id', found.id.toString());
         } else {
-          // Si el active_org_id no está en la lista, limpiar
+          // Si el ID no está en la lista, limpiar
           await AsyncStorage.removeItem('active_org_id');
+          await AsyncStorage.removeItem('org_id');
           setActiveOrg(null);
         }
       } else {
@@ -48,12 +51,14 @@ export const OrgProvider = ({ children }) => {
 
   const selectOrg = async (org) => {
     await AsyncStorage.setItem('active_org_id', org.id.toString());
+    await AsyncStorage.setItem('org_id', org.id.toString());
     setActiveOrg(org);
     await fetchOrganizations();
   };
 
   const clearOrg = async () => {
     await AsyncStorage.removeItem('active_org_id');
+    await AsyncStorage.removeItem('org_id');
     setActiveOrg(null);
     setOrganizations([]);
   };

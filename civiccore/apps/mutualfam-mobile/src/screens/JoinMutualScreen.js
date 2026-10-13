@@ -10,6 +10,7 @@ import {
   dismissClipboardInvite,
 } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
+import { getErrorMessage } from '../utils/errors';
 
 export default function JoinMutualScreen({ route, navigation }) {
   const [input, setInput] = useState('');
@@ -61,7 +62,7 @@ export default function JoinMutualScreen({ route, navigation }) {
       setToken(data.token || code);
       setMutualInfo(data);
     } catch (e) {
-      Alert.alert('Invitación no encontrada', e.response?.data?.detail || 'El código es inválido o ya expiró. Pide una nueva invitación.');
+      Alert.alert('Invitación no encontrada', getErrorMessage(e, 'El código es inválido o ya expiró. Pide una nueva invitación.'));
       setMutualInfo(null);
       setFromClipboard(false);
     } finally {
@@ -99,6 +100,7 @@ export default function JoinMutualScreen({ route, navigation }) {
       Alert.alert('¡Bienvenido!', data.message || 'Te has unido exitosamente.');
 
       await AsyncStorage.setItem('active_org_id', data.organization_id.toString());
+      await AsyncStorage.setItem('org_id', data.organization_id.toString());
       await loadActiveOrg();
       navigation.replace('MainTabs');
     } catch (e) {
@@ -107,7 +109,7 @@ export default function JoinMutualScreen({ route, navigation }) {
         Alert.alert('Sesión expirada', 'Debes iniciar sesión nuevamente para unirte.');
         navigation.replace('Login');
       } else {
-        Alert.alert('Error', e.response?.data?.detail || 'No se pudo procesar la invitación');
+        Alert.alert('Error', getErrorMessage(e, 'No se pudo procesar la invitación'));
       }
     } finally {
       setLoading(false);

@@ -6,6 +6,7 @@ import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { getErrorMessage } from '../utils/errors';
 
 export default function InviteMembersScreen() {
   const [loading, setLoading] = useState(true);
@@ -65,7 +66,7 @@ export default function InviteMembersScreen() {
       }
     } catch (e) {
       console.warn(e);
-      setErrorMsg(e.message || 'Error de API');
+      setErrorMsg(getErrorMessage(e, 'Error de API'));
     } finally {
       setLoading(false);
     }
@@ -74,9 +75,13 @@ export default function InviteMembersScreen() {
   const generateInvite = async () => {
     setGenerating(true);
     try {
-      const orgId = await AsyncStorage.getItem('org_id');
+      const orgId = activeOrg?.id || (await AsyncStorage.getItem('active_org_id')) || (await AsyncStorage.getItem('org_id'));
+      if (!orgId) {
+        Alert.alert('Atención', 'No se encontró la mutual activa. Por favor selecciona tu mutual nuevamente.');
+        return;
+      }
       const { data } = await apiClient.post(`/membership/organizations/${orgId}/invites`, null, {
-        headers: { 'X-Organization-ID': orgId }
+        headers: { 'X-Organization-ID': orgId.toString() }
       });
       
       let inviteUrl = '';
@@ -96,7 +101,8 @@ export default function InviteMembersScreen() {
         message: shareMessage,
       });
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.detail || 'No se pudo generar la invitación');
+      console.error('Error generating invite:', e);
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo generar la invitación'));
     } finally {
       setGenerating(false);
     }

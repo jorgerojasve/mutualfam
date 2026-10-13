@@ -21,7 +21,7 @@ export const getCurrentAppVersion = () => {
     } catch (_) {}
   }
 
-  return cachedVersion || '1.0.12';
+  return cachedVersion || '1.0.13';
 };
 
 /**

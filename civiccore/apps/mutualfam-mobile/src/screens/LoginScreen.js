@@ -5,6 +5,7 @@ import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 import { registerForPushNotificationsAsync } from '../services/notifications';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import { getErrorMessage } from '../utils/errors';
 
 export default function LoginScreen({ route, navigation }) {
   const envConfig = getMobileEnvironmentConfig();
@@ -110,7 +111,9 @@ export default function LoginScreen({ route, navigation }) {
         const me = await authApi.me();
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {
-             await AsyncStorage.setItem('org_id', me.organizations[0].id.toString());
+             const singleOrgId = me.organizations[0].id.toString();
+             await AsyncStorage.setItem('active_org_id', singleOrgId);
+             await AsyncStorage.setItem('org_id', singleOrgId);
              navigation.replace('MainTabs');
           } else {
              navigation.replace('SelectMutual');
@@ -121,7 +124,7 @@ export default function LoginScreen({ route, navigation }) {
         }
       }
     } catch (error) {
-      Alert.alert(isRegistering ? 'Error al registrar' : 'Error de inicio de sesión', error.response?.data?.detail || error.message);
+      Alert.alert(isRegistering ? 'Error al registrar' : 'Error de inicio de sesión', getErrorMessage(error));
     } finally {
       setLoading(false);
     }
