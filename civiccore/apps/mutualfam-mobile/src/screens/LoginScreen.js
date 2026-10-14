@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
@@ -9,6 +9,9 @@ import { getErrorMessage } from '../utils/errors';
 
 export default function LoginScreen({ route, navigation }) {
   const envConfig = getMobileEnvironmentConfig();
+  const logoSource = envConfig.isQA
+    ? require('../../assets/icon-qa.png')
+    : require('../../assets/icon.png');
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -146,12 +149,19 @@ export default function LoginScreen({ route, navigation }) {
         </View>
       )}
       <View style={styles.card}>
-        <View style={styles.iconPlaceholder} />
+        <Image
+          source={logoSource}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Mutual Familiar</Text>
           {!envConfig.isProd && (
             <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
-              <Text style={[styles.envBadgeText, { color: envConfig.color }]}>{envConfig.badgeText}</Text>
+              <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
+              <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
+                {envConfig.badgeText || 'QA'}
+              </Text>
             </View>
           )}
         </View>
@@ -276,12 +286,13 @@ const styles = StyleSheet.create({
     elevation: 8,
     alignItems: 'center',
   },
-  iconPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    backgroundColor: '#3b82f6',
-    marginBottom: 20,
+  logoImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   titleContainer: {
     flexDirection: 'row',
@@ -295,10 +306,18 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
   },
   envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
+  },
+  envDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
   },
   envBadgeText: {
     fontSize: 12,

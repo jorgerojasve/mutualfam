@@ -1,3 +1,5 @@
+import Constants from 'expo-constants';
+
 /**
  * Utilidad de detección y configuración de entorno para la app móvil Mutual Familiar.
  */
@@ -5,6 +7,14 @@
 export function getMobileEnvironment() {
   const apiUrl = (process.env.EXPO_PUBLIC_API_URL || '').toLowerCase();
   if (apiUrl.includes('-qa') || apiUrl.includes('/qa') || apiUrl.includes('.qa.')) {
+    return 'qa';
+  }
+  const appName = (Constants?.expoConfig?.name || '').toLowerCase();
+  if (appName.includes('(qa)') || appName.includes('qa')) {
+    return 'qa';
+  }
+  const pkg = (Constants?.expoConfig?.android?.package || '').toLowerCase();
+  if (pkg.includes('.qa')) {
     return 'qa';
   }
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -21,6 +31,7 @@ export function getMobileEnvironmentConfig() {
         key: 'qa',
         label: 'Pruebas (QA)',
         badgeText: 'QA',
+        bannerText: '🧪 ENTORNO DE PRUEBAS (QA) • DATOS AISLADOS',
         color: '#f59e0b',
         bgColor: 'rgba(245, 158, 11, 0.15)',
         borderColor: 'rgba(245, 158, 11, 0.4)',

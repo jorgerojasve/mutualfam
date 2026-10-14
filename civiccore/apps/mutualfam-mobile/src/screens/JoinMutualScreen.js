@@ -11,6 +11,7 @@ import {
 } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
 import { getErrorMessage } from '../utils/errors';
+import { getMobileEnvironmentConfig } from '../utils/env';
 
 export default function JoinMutualScreen({ route, navigation }) {
   const [input, setInput] = useState('');
@@ -18,6 +19,7 @@ export default function JoinMutualScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [mutualInfo, setMutualInfo] = useState(null);
   const [fromClipboard, setFromClipboard] = useState(false);
+  const envConfig = getMobileEnvironmentConfig();
   const { loadActiveOrg } = React.useContext(OrgContext);
 
   useEffect(() => {
@@ -136,7 +138,17 @@ export default function JoinMutualScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Unirse a una Mutual</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Unirse a una Mutual</Text>
+        {!envConfig.isProd && (
+          <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+            <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
+            <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
+              {envConfig.badgeText || 'QA'}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {!mutualInfo ? (
         <>
@@ -202,11 +214,34 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#f8fafc',
-    marginBottom: 10,
+  },
+  envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  envDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  envBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   subtitle: {
     fontSize: 16,
