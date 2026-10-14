@@ -16,7 +16,7 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const { activeOrg } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
   
   const serverUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1').replace('/api/v1', '');
   
@@ -95,12 +95,24 @@ export default function LoansScreen() {
     }
   };
 
+  useEffect(() => {
+    if (activeOrg?.id) {
+      fetchLoans();
+    } else if (!orgLoading) {
+      setLoading(false);
+    }
+  }, [activeOrg?.id, orgLoading]);
+
   useFocusEffect(
     useCallback(() => {
       fetchConfig();
       fetchUser();
-      if (activeOrg?.id) fetchLoans();
-    }, [activeOrg?.id])
+      if (activeOrg?.id) {
+        fetchLoans();
+      } else if (!orgLoading) {
+        setLoading(false);
+      }
+    }, [activeOrg?.id, orgLoading])
   );
 
   // Actualización en tiempo real vía WebSocket (refresco silencioso, sin spinner)
@@ -635,7 +647,11 @@ export default function LoansScreen() {
           keyExtractor={item => item.id.toString()}
           renderItem={renderLoanCard}
           contentContainerStyle={{ padding: 15 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No hay préstamos para esta vista</Text>}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>
+              {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
+            </Text>
+          }
         />
       )}
 

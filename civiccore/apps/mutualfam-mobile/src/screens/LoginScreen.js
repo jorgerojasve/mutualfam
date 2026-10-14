@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
@@ -6,8 +6,10 @@ import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } fro
 import { registerForPushNotificationsAsync } from '../services/notifications';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import { getErrorMessage } from '../utils/errors';
+import { OrgContext } from '../context/OrgContext';
 
 export default function LoginScreen({ route, navigation }) {
+  const { selectOrg, loadActiveOrg } = useContext(OrgContext);
   const envConfig = getMobileEnvironmentConfig();
   const logoSource = envConfig.isQA
     ? require('../../assets/icon-qa.png')
@@ -95,6 +97,7 @@ export default function LoginScreen({ route, navigation }) {
         }
 
         // El nuevo usuario no tiene mutual, así que vamos a la selección/creación
+        if (loadActiveOrg) await loadActiveOrg();
         navigation.replace('SelectMutual');
       } else {
         const data = await authApi.login(email, password);
@@ -114,15 +117,21 @@ export default function LoginScreen({ route, navigation }) {
         const me = await authApi.me();
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {
-             const singleOrgId = me.organizations[0].id.toString();
-             await AsyncStorage.setItem('active_org_id', singleOrgId);
-             await AsyncStorage.setItem('org_id', singleOrgId);
+             if (selectOrg) {
+               await selectOrg(me.organizations[0]);
+             } else {
+               const singleOrgId = me.organizations[0].id.toString();
+               await AsyncStorage.setItem('active_org_id', singleOrgId);
+               await AsyncStorage.setItem('org_id', singleOrgId);
+             }
              navigation.replace('MainTabs');
           } else {
+             if (loadActiveOrg) await loadActiveOrg();
              navigation.replace('SelectMutual');
           }
         } else {
           // No tiene organizaciones, debe crear o unirse a una
+          if (loadActiveOrg) await loadActiveOrg();
           navigation.replace('SelectMutual');
         }
       }

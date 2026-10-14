@@ -17,12 +17,24 @@ export default function InviteMembersScreen() {
   const [errorMsg, setErrorMsg] = useState('');
   const [debugOrgId, setDebugOrgId] = useState('');
   const [members, setMembers] = useState([]);
-  const { activeOrg } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+
+  useEffect(() => {
+    if (activeOrg?.id) {
+      fetchOrgInfo();
+    } else if (!orgLoading) {
+      setLoading(false);
+    }
+  }, [activeOrg?.id, orgLoading]);
 
   useFocusEffect(
     useCallback(() => {
-      if (activeOrg?.id) fetchOrgInfo();
-    }, [activeOrg?.id])
+      if (activeOrg?.id) {
+        fetchOrgInfo();
+      } else if (!orgLoading) {
+        setLoading(false);
+      }
+    }, [activeOrg?.id, orgLoading])
   );
 
   useEffect(() => {
@@ -55,6 +67,7 @@ export default function InviteMembersScreen() {
     try {
       if (!activeOrg?.id) {
         setErrorMsg('Tu ID de mutual no coincide con ninguna mutual de tu cuenta.');
+        setOrgData(null);
         return;
       }
       setOrgData(activeOrg);
@@ -119,7 +132,9 @@ export default function InviteMembersScreen() {
   if (!orgData) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={{color: '#fff'}}>No se encontró la información de la mutual.</Text>
+        <Text style={{color: '#94a3b8', fontSize: 16, textAlign: 'center', paddingHorizontal: 20}}>
+          Selecciona una mutual en la barra superior para ver y gestionar sus miembros.
+        </Text>
       </View>
     );
   }

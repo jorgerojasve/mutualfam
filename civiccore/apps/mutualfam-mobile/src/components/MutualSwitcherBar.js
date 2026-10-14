@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,13 @@ export default function MutualSwitcherBar() {
   const isWide = width >= WIDE_BREAKPOINT;
   const [open, setOpen] = useState(false);
   const envConfig = getMobileEnvironmentConfig();
+
+  // Si hay organizaciones disponibles pero ninguna activa en el contexto, seleccionar automáticamente
+  useEffect(() => {
+    if (!activeOrg && organizations && organizations.length > 0) {
+      selectOrg(organizations[0]);
+    }
+  }, [activeOrg, organizations]);
 
   const handleSelect = async (org) => {
     setOpen(false);
