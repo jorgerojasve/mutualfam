@@ -5,10 +5,12 @@ import apiClient, { authApi } from '../api/client';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenTitle from '../components/ScreenTitle';
+import AssemblyScreen from './AssemblyScreen';
 import { OrgContext } from '../context/OrgContext';
 import { getErrorMessage } from '../utils/errors';
 
-export default function InviteMembersScreen() {
+export default function InviteMembersScreen({ navigation }) {
+  const [activeTab, setActiveTab] = useState('miembros'); // 'miembros' | 'asamblea'
   const [loading, setLoading] = useState(true);
   const [orgData, setOrgData] = useState(null);
   const [timeLeft, setTimeLeft] = useState('');
@@ -140,61 +142,96 @@ export default function InviteMembersScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <ScreenTitle title="Familia Mutual" />
       
-      <View style={[styles.card, { marginBottom: 20 }]}>
-        <Text style={styles.cardTitle}>Miembros Actuales</Text>
-        {members.length === 0 ? (
-          <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
-        ) : (
-          members.map(member => (
-            <View key={member.id} style={styles.memberRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>{(member.first_name || 'U')[0]}</Text>
-              </View>
-              <View>
-                <Text style={styles.memberName}>{member.first_name} {member.last_name}</Text>
-                <Text style={styles.memberRole}>{member.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
-              </View>
-            </View>
-          ))
-        )}
+      {/* Selector de sub-pestañas */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'miembros' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('miembros')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'miembros' && styles.tabButtonTextActive]}>
+            👥 Miembros ({members.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'asamblea' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('asamblea')}
+        >
+          <Text style={[styles.tabButtonText, activeTab === 'asamblea' && styles.tabButtonTextActive]}>
+            🏛️ Asamblea
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {orgData.role === 'founder' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
-          <Text style={styles.cardText}>
-            Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
-          </Text>
-          
-          <View style={styles.timerContainer}>
-            <Text style={styles.timerLabel}>Tiempo restante:</Text>
-            <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
-              {timeLeft || 'Calculando...'}
-            </Text>
+      {activeTab === 'asamblea' ? (
+        <View style={{ flex: 1, marginTop: 4 }}>
+          <AssemblyScreen embedded={true} />
+        </View>
+      ) : (
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          <View style={[styles.card, { marginBottom: 20 }]}>
+            <Text style={styles.cardTitle}>Miembros Actuales</Text>
+            {members.length === 0 ? (
+              <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
+            ) : (
+              members.map(member => (
+                <View key={member.id} style={styles.memberRow}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberAvatarText}>{(member.first_name || 'U')[0]}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.memberName}>{member.first_name} {member.last_name}</Text>
+                    <Text style={styles.memberRole}>{member.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
-          
-          {canInvite ? (
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={generateInvite}
-              disabled={generating}
-            >
-              {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.expiredWarning}>
-              <Text style={styles.expiredText}>
-                El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante el módulo de Gobernanza.
+
+          {orgData.role === 'founder' && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
+              <Text style={styles.cardText}>
+                Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
               </Text>
+              
+              <View style={styles.timerContainer}>
+                <Text style={styles.timerLabel}>Tiempo restante:</Text>
+                <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
+                  {timeLeft || 'Calculando...'}
+                </Text>
+              </View>
+              
+              {canInvite ? (
+                <TouchableOpacity 
+                  style={styles.button} 
+                  onPress={generateInvite}
+                  disabled={generating}
+                >
+                  {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.expiredWarning}>
+                  <Text style={styles.expiredText}>
+                    El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante la Asamblea Familiar.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.button, { marginTop: 12, backgroundColor: '#0284c7' }]}
+                    onPress={() => setActiveTab('asamblea')}
+                  >
+                    <Text style={styles.buttonText}>🏛️ Ir a Asamblea</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
-        </View>
+          <View style={{height: 40}} />
+        </ScrollView>
       )}
-      <View style={{height: 40}} />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -202,8 +239,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f172a',
-    padding: 20,
-    paddingTop: 20,
+    padding: 16,
+    paddingTop: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)'
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8
+  },
+  tabButtonActive: {
+    backgroundColor: '#334155'
+  },
+  tabButtonText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  tabButtonTextActive: {
+    color: '#ffffff',
+    fontWeight: '700'
   },
   centerContainer: {
     flex: 1,

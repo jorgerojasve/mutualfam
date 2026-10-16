@@ -14,12 +14,24 @@ def initiate_expulsion(db: Session, proposal_id: int, target_member_id: int) -> 
     """
     Called when an EXPULSION proposal is approved.
     Changes member status to EXPELLED immediately and creates a withdrawal request.
+    Supports both Member (CivicCore standard) and OrganizationMembership/User (MutualFam).
     """
     member = db.query(Member).filter(Member.id == target_member_id).first()
-    if not member:
+    from .models import OrganizationMembership, User
+    user = db.query(User).filter(User.id == target_member_id).first()
+    
+    if not member and not user:
         raise ValueError("Target member not found")
         
-    member.status = MemberStatus.EXPELLED
+    if member:
+        member.status = MemberStatus.EXPELLED
+        
+    # Update organization memberships if target is a user in organizations
+    org_memberships = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == target_member_id
+    ).all()
+    for om in org_memberships:
+        om.status = MemberStatus.EXPELLED
     
     # Create the process record for history
     process = MemberExpulsionProcess(
@@ -30,9 +42,13 @@ def initiate_expulsion(db: Session, proposal_id: int, target_member_id: int) -> 
     )
     db.add(process)
     
-    # Generate automatic withdrawal request (Liquidation)
-    from .withdrawal_service import create_withdrawal_request
-    create_withdrawal_request(db, target_member_id)
+    # Generate automatic withdrawal request (Liquidation) if Member exists
+    if member:
+        try:
+            from .withdrawal_service import create_withdrawal_request
+            create_withdrawal_request(db, target_member_id)
+        except Exception:
+            pass
     
     db.commit()
     db.refresh(process)

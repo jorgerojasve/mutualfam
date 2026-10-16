@@ -277,5 +277,45 @@ export const colectasApi = {
   }
 };
 
+export const governanceApi = {
+  getPropuestas: async () => {
+    const { data } = await apiClient.get('/gobernanza/propuestas');
+    return data;
+  },
+  getPropuesta: async (id) => {
+    const { data } = await apiClient.get(`/gobernanza/propuestas/${id}`);
+    return data;
+  },
+  proponerIngreso: async (payload) => {
+    const { data } = await apiClient.post('/gobernanza/proponer-ingreso', payload);
+    return data;
+  },
+  proponerExpulsion: async (payload) => {
+    const { data } = await apiClient.post('/gobernanza/proponer-expulsion', payload);
+    return data;
+  },
+  votar: async (id, voto) => {
+    const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/votar`, { voto });
+    return data;
+  },
+  publicarDefensa: async (id, defenseText) => {
+    const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/defensa`, { defense_text: defenseText });
+    return data;
+  },
+  cerrarPropuesta: async (id) => {
+    const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/cerrar`);
+    return data;
+  },
+  getCandidatosDisponibles: async (search = '') => {
+    const params = search ? { q: search } : {};
+    const { data } = await apiClient.get('/gobernanza/candidatos-disponibles', { params });
+    return data;
+  },
+  getMiembrosExpulsables: async () => {
+    const { data } = await apiClient.get('/gobernanza/miembros-expulsables');
+    return data;
+  }
+};
+
 export default apiClient;
 

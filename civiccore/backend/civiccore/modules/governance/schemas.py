@@ -15,6 +15,7 @@ class ProposalBase(BaseModel):
     is_anonymous: Optional[bool] = False
     voting_mechanism: Optional[VotingMechanism] = VotingMechanism.SIMPLE
     extra_fields: Optional[Dict[str, Any]] = {}
+    organization_id: Optional[int] = None
 
 class ProposalCreate(ProposalBase):
     pass
@@ -30,6 +31,7 @@ class ProposalDefenseUpdate(BaseModel):
 class ProposalResponse(ProposalBase):
     id: int
     author_id: int
+    organization_id: Optional[int] = None
     status: ProposalStatus
     proposal_type: str
     target_member_id: Optional[int] = None

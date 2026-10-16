@@ -3,6 +3,7 @@ Governance Module Service Logic
 """
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import datetime, timezone, timedelta
 from .models import Proposal, Vote, ProposalStatus, Comment, ProposalVersion, utcnow
 from .schemas import ProposalCreate, VoteCreate, CommentCreate, ProposalUpdate
 from .mechanisms import get_mechanism
@@ -18,15 +19,33 @@ class GovernanceService:
         sistema_gobernanza = ConfigService.get_value(db, "SISTEMA_GOBERNANZA", "DOS_FASES")
         initial_status = ProposalStatus.DEBATE if sistema_gobernanza == "DOS_FASES" else ProposalStatus.VOTING
         
-        from .models import VotingMechanism
+        from .models import VotingMechanism, ProposalType
         
         # Constitutional Lock: Configuration proposals must be SIMPLE
         assigned_mechanism = proposal_in.voting_mechanism
         if proposal_in.category == "configuracion":
             assigned_mechanism = VotingMechanism.SIMPLE
             
+        now = utcnow()
+        voting_starts_at = None
+        voting_ends_at = None
+        
+        if proposal_in.proposal_type == ProposalType.MEMBER_ADMISSION:
+            initial_status = ProposalStatus.DEBATE
+            dias_debate = int(ConfigService.get_value(db, "ADMISION_DIAS_DEBATE", "4"))
+            dias_votacion = int(ConfigService.get_value(db, "ADMISION_DIAS_VOTACION", "3"))
+            voting_starts_at = now + timedelta(days=dias_debate)
+            voting_ends_at = voting_starts_at + timedelta(days=dias_votacion)
+        elif proposal_in.proposal_type == ProposalType.EXPULSION:
+            initial_status = ProposalStatus.DEBATE
+            dias_debate = int(ConfigService.get_value(db, "EXPULSION_DIAS_DEBATE", "10"))
+            dias_votacion = int(ConfigService.get_value(db, "EXPULSION_DIAS_VOTACION", "4"))
+            voting_starts_at = now + timedelta(days=dias_debate)
+            voting_ends_at = voting_starts_at + timedelta(days=dias_votacion)
+
         proposal = Proposal(
             author_id=author_id,
+            organization_id=proposal_in.organization_id,
             title=proposal_in.title,
             content=proposal_in.content,
             category=proposal_in.category,
@@ -35,7 +54,9 @@ class GovernanceService:
             is_anonymous=proposal_in.is_anonymous,
             voting_mechanism=assigned_mechanism,
             extra_fields=proposal_in.extra_fields,
-            status=initial_status
+            status=initial_status,
+            voting_starts_at=voting_starts_at,
+            voting_ends_at=voting_ends_at,
         )
         
         db.add(proposal)
@@ -46,6 +67,13 @@ class GovernanceService:
     @staticmethod
     def _enrich_proposal(db: Session, p: Proposal) -> Proposal:
         if p:
+            # Automatic transition from DEBATE to VOTING if debate period passed
+            if p.status == ProposalStatus.DEBATE and p.voting_starts_at:
+                v_start = p.voting_starts_at.replace(tzinfo=timezone.utc) if p.voting_starts_at.tzinfo is None else p.voting_starts_at
+                if utcnow() >= v_start:
+                    p.status = ProposalStatus.VOTING
+                    db.commit()
+
             votes = db.query(Vote).filter(Vote.proposal_id == p.id).all()
             
             p.votes_yes = 0.0
@@ -81,7 +109,14 @@ class GovernanceService:
             p.votes_delegated = 0.0
             
             # Dynamic quorum calculation
-            total_members = db.query(Member).count()
+            if p.organization_id:
+                from ..membership.models import OrganizationMembership, MemberStatus
+                total_members = db.query(OrganizationMembership).filter(
+                    OrganizationMembership.organization_id == p.organization_id,
+                    OrganizationMembership.status == MemberStatus.ACTIVE
+                ).count()
+            else:
+                total_members = db.query(Member).count()
             total_members = total_members if total_members > 0 else 1
             quorum_percentage = float(ConfigService.get_value(db, "QUORUM_ASAMBLEA", "20"))
             
@@ -190,6 +225,24 @@ class GovernanceService:
 
     @staticmethod
     def cast_vote(db: Session, proposal: Proposal, member_id: int, vote_in: VoteCreate, available_credits: float = 0.0) -> Vote:
+        # Check phase transition if debate period passed
+        if proposal.status == ProposalStatus.DEBATE and proposal.voting_starts_at:
+            v_start = proposal.voting_starts_at.replace(tzinfo=timezone.utc) if proposal.voting_starts_at.tzinfo is None else proposal.voting_starts_at
+            if utcnow() >= v_start:
+                proposal.status = ProposalStatus.VOTING
+                db.commit()
+
+        if proposal.status == ProposalStatus.DEBATE:
+            raise ValueError("La propuesta se encuentra en período de debate. La votación aún no ha comenzado.")
+
+        if proposal.status in (ProposalStatus.APPROVED, ProposalStatus.REJECTED):
+            raise ValueError("La propuesta ya ha sido resuelta.")
+
+        if proposal.status == ProposalStatus.VOTING and proposal.voting_ends_at:
+            v_end = proposal.voting_ends_at.replace(tzinfo=timezone.utc) if proposal.voting_ends_at.tzinfo is None else proposal.voting_ends_at
+            if utcnow() > v_end:
+                raise ValueError("El período de votación ha concluido.")
+
         mechanism = get_mechanism(proposal.voting_mechanism)
         
         if not mechanism.validate_vote(vote_in.vote_value, available_credits=available_credits):
@@ -344,7 +397,14 @@ class GovernanceService:
         # Meta-Governance rule checking
         sistema_gobernanza = ConfigService.get_value(db, "SISTEMA_GOBERNANZA", "DOS_FASES")
         
-        total_members = db.query(Member).count()
+        if proposal.organization_id:
+            from ..membership.models import OrganizationMembership, MemberStatus
+            total_members = db.query(OrganizationMembership).filter(
+                OrganizationMembership.organization_id == proposal.organization_id,
+                OrganizationMembership.status == MemberStatus.ACTIVE
+            ).count()
+        else:
+            total_members = db.query(Member).count()
         total_members = total_members if total_members > 0 else 1
         
         passed = False
@@ -354,6 +414,8 @@ class GovernanceService:
         threshold = 0.50 # Default 50%
         if proposal.proposal_type == ProposalType.EXPULSION:
             threshold = float(ConfigService.get_value(db, "EXPULSION_UMBRAL_APROBACION", "0.75"))
+        elif proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+            threshold = float(ConfigService.get_value(db, "ADMISION_UMBRAL", "0.75"))
         elif proposal.proposal_type == ProposalType.DIVISION:
             threshold = float(ConfigService.get_value(db, "DIVISION_UMBRAL_APROBACION", "0.75"))
         elif proposal.proposal_type == ProposalType.FUSION:
@@ -364,6 +426,23 @@ class GovernanceService:
         if not quorum_reached:
             # Automatic failure if quorum not met
             passed = False
+        elif proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+            veto_habilitado = str(ConfigService.get_value(db, "ADMISION_VETO_HABILITADO", "true")).lower() == "true"
+            veto_activated = veto_habilitado and no_votes > 0
+            # Consenso con Veto (Opción A): ≥75% SÍ del total de miembros y cero NO
+            has_supermajority = yes_votes >= (total_members * threshold)
+            
+            if veto_activated or not has_supermajority:
+                passed = False
+            else:
+                passed = True
+                
+            if veto_activated:
+                vetantes = [v.member_id for v in votes if v.vote_value == -1.0]
+                extra = dict(proposal.extra_fields or {})
+                extra["vetantes_ids"] = vetantes
+                extra["veto_activated"] = True
+                proposal.extra_fields = extra
         elif sistema_gobernanza == "DOS_FASES" and proposal.proposal_type == ProposalType.STANDARD:
             # DOS_FASES standard rule: requires > 50% of ALL members (not just voters) for standard proposals
             if yes_votes > (total_members / 2):
@@ -386,10 +465,13 @@ class GovernanceService:
                     ConfigService.set_value(db, var_key, str(var_val))
             
             # Post-approval hooks for special proposals
-            from ..membership import expulsion_service, organization_service
+            from ..membership import expulsion_service, organization_service, admission_service
             if proposal.proposal_type == ProposalType.EXPULSION:
                 if proposal.target_member_id:
                     expulsion_service.initiate_expulsion(db, proposal.id, proposal.target_member_id)
+            elif proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+                if proposal.target_member_id:
+                    admission_service.activate_proposed_member(db, proposal.id, proposal.target_member_id, proposal.organization_id)
             elif proposal.proposal_type == ProposalType.DIVISION:
                 organization_service.initiate_division(db, proposal.id, proposal.extra_fields)
             elif proposal.proposal_type == ProposalType.FUSION:
@@ -406,6 +488,19 @@ class GovernanceService:
                 RepresentativeService.activate_committee(db, proposal.id)
         else:
             proposal.status = ProposalStatus.REJECTED
+            if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+                from ..membership.models import OrganizationInvite, InviteStatus, OrganizationMembership, MemberStatus
+                inv = db.query(OrganizationInvite).filter(OrganizationInvite.proposal_id == proposal.id).first()
+                if inv:
+                    inv.status = InviteStatus.REVOKED
+                if proposal.target_member_id:
+                    pending_m = db.query(OrganizationMembership).filter(
+                        OrganizationMembership.user_id == proposal.target_member_id,
+                        OrganizationMembership.organization_id == proposal.organization_id,
+                        OrganizationMembership.status == MemberStatus.PENDING
+                    ).first()
+                    if pending_m:
+                        db.delete(pending_m)
             
         db.commit()
         

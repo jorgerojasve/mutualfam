@@ -27,6 +27,7 @@ class VotingMechanism(str, enum.Enum):
 class ProposalType(str, enum.Enum):
     STANDARD = "standard"
     EXPULSION = "expulsion"
+    MEMBER_ADMISSION = "member_admission"
     DIVISION = "division"
     FUSION = "fusion"
     FUSION_CONTACT = "fusion_contact"

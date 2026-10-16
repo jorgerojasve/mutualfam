@@ -67,7 +67,10 @@ def invite_is_expired(invite: OrganizationInvite, db: Session) -> bool:
     if expires_at is None and invite.proposal_id is None:
         org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
         expires_at = org.grace_period_ends_at if org else None
-    return bool(expires_at and utcnow() > expires_at.replace(tzinfo=timezone.utc))
+    if not expires_at:
+        return False
+    exp = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
+    return utcnow() > exp
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(status_code=401, detail="No se pudo validar las credenciales")
@@ -202,22 +205,87 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
         OrganizationMembership.organization_id == invite.organization_id
     ).first()
     
-    if existing_membership:
-        raise HTTPException(status_code=400, detail="Ya perteneces a esta mutual")
-        
-    invite.uses_count += 1
+    if existing_membership and existing_membership.status == MemberStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Ya perteneces a esta mutual como miembro activo")
+
+    # Si la invitación está vinculada a una propuesta de ingreso de asamblea
+    if invite.proposal_id:
+        from civiccore.modules.governance.models import Proposal, ProposalStatus
+        proposal = db.query(Proposal).filter(Proposal.id == invite.proposal_id).first()
+        if not proposal:
+            raise HTTPException(status_code=400, detail="Propuesta de admisión asociada no encontrada")
+            
+        if proposal.status in [ProposalStatus.REJECTED]:
+            raise HTTPException(status_code=400, detail="Esta invitación pertenece a una propuesta que fue rechazada en la asamblea familiar.")
+            
+        if proposal.status == ProposalStatus.APPROVED:
+            # La asamblea ya aprobó el ingreso; activar inmediatamente
+            invite.uses_count = (invite.uses_count or 0) + 1
+            proposal.target_member_id = current_user.id
+            if existing_membership:
+                existing_membership.status = MemberStatus.ACTIVE
+                existing_membership.role = "member"
+            else:
+                membership = OrganizationMembership(
+                    user_id=current_user.id,
+                    organization_id=invite.organization_id,
+                    role="member",
+                    status=MemberStatus.ACTIVE,
+                    invited_by_token=invite.token
+                )
+                db.add(membership)
+            db.commit()
+            return {
+                "message": "¡Bienvenido a la mutual! Tu ingreso ha sido aprobado por la asamblea familiar.",
+                "organization_id": invite.organization_id,
+                "status": "ACTIVE"
+            }
+        elif proposal.status in [ProposalStatus.DEBATE, ProposalStatus.VOTING]:
+            # La propuesta sigue en asamblea; registrar como PENDING y vincular cuenta del candidato
+            invite.uses_count = (invite.uses_count or 0) + 1
+            proposal.target_member_id = current_user.id
+            extra = dict(proposal.extra_fields or {})
+            extra["redeemed_by_user_id"] = current_user.id
+            extra["redeemed_by_name"] = f"{current_user.first_name} {current_user.last_name}".strip()
+            extra["redeemed_at"] = utcnow().isoformat()
+            proposal.extra_fields = extra
+            
+            if not existing_membership:
+                membership = OrganizationMembership(
+                    user_id=current_user.id,
+                    organization_id=invite.organization_id,
+                    role="member",
+                    status=MemberStatus.PENDING,
+                    invited_by_token=invite.token
+                )
+                db.add(membership)
+            else:
+                existing_membership.status = MemberStatus.PENDING
+                
+            db.commit()
+            return {
+                "message": "Tu cuenta ha sido vinculada a la propuesta de asamblea. Cuando la asamblea apruebe la votación, tu membresía se activará automáticamente.",
+                "organization_id": invite.organization_id,
+                "status": "PENDING"
+            }
+
+    # Flujo regular de invitación directa (período de gracia)
+    invite.uses_count = (invite.uses_count or 0) + 1
     
-    membership = OrganizationMembership(
-        user_id=current_user.id,
-        organization_id=invite.organization_id,
-        role="member",
-        status=MemberStatus.ACTIVE,
-        invited_by_token=invite.token
-    )
-    db.add(membership)
+    if existing_membership:
+        existing_membership.status = MemberStatus.ACTIVE
+    else:
+        membership = OrganizationMembership(
+            user_id=current_user.id,
+            organization_id=invite.organization_id,
+            role="member",
+            status=MemberStatus.ACTIVE,
+            invited_by_token=invite.token
+        )
+        db.add(membership)
     db.commit()
     
-    return {"message": "Te has unido exitosamente a la mutual", "organization_id": invite.organization_id}
+    return {"message": "Te has unido exitosamente a la mutual", "organization_id": invite.organization_id, "status": "ACTIVE"}
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
