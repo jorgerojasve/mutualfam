@@ -30,9 +30,10 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(membership.router, prefix="/api/v1/membership", tags=["membership"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["config"])
 
-from routers import loans, funds, upload
+from routers import loans, funds, upload, colectas
 app.include_router(loans.router, prefix="/api/v1/loans", tags=["loans"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["funds"])
+app.include_router(colectas.router, prefix="/api/v1/colectas", tags=["colectas"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 
 from routers.upload import UPLOADS_DIR

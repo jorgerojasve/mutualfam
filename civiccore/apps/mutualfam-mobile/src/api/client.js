@@ -232,4 +232,50 @@ export const fundsApi = {
   }
 };
 
+export const colectasApi = {
+  getColectas: async (estado = null) => {
+    const params = estado ? { estado } : {};
+    const { data } = await apiClient.get('/colectas/', { params });
+    return data;
+  },
+  getColecta: async (id) => {
+    const { data } = await apiClient.get(`/colectas/${id}`);
+    return data;
+  },
+  getRates: async (tasaFija = null) => {
+    const params = tasaFija ? { tasa_fija: tasaFija } : {};
+    const { data } = await apiClient.get('/colectas/tasas', { params });
+    return data;
+  },
+  createColecta: async (payload) => {
+    const { data } = await apiClient.post('/colectas/', payload);
+    return data;
+  },
+  pledgeCommitment: async (colectaId, montoUsd) => {
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos`, { monto_usd: montoUsd });
+    return data;
+  },
+  cancelCommitment: async (colectaId, compromisoId) => {
+    const { data } = await apiClient.delete(`/colectas/${colectaId}/compromisos/${compromisoId}`);
+    return data;
+  },
+  triggerPaymentNotifications: async (colectaId) => {
+    const { data } = await apiClient.post(`/colectas/${colectaId}/notificar-cobro`);
+    return data;
+  },
+  confirmPayment: async (colectaId, compromisoId, paymentData) => {
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, paymentData);
+    return data;
+  },
+  validateExpense: async (colectaId, expenseData) => {
+    const { data } = await apiClient.post(`/colectas/${colectaId}/validar-gasto`, expenseData);
+    return data;
+  },
+  cancelColecta: async (colectaId) => {
+    const { data } = await apiClient.patch(`/colectas/${colectaId}/cancelar`);
+    return data;
+  }
+};
+
 export default apiClient;
+

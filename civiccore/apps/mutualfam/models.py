@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Date, Enum, ForeignKey, Text
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import enum
 from civiccore.core.database import Base
+from civiccore.modules.membership.models import User
 
 def utcnow():
     return datetime.now(timezone.utc)
@@ -124,3 +126,121 @@ class UserPushToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, index=True)
     token = Column(String(255), unique=True, index=True)
+
+
+# ==========================================
+# MODELOS DE COLECTAS SOLIDARIAS ("VACAS")
+# ==========================================
+
+class EstadoColecta(str, enum.Enum):
+    PROPUESTA = "propuesta"       # Creada, esperando alcanzar el 100% de la meta en promesas
+    ACTIVA = "activa"             # Quorum alcanzado (100%+ prometido), lista para pagos
+    CERRADA = "cerrada"           # Aportes completados, en espera de validación de gasto
+    COMPLETADA = "completada"     # Gasto validado por el beneficiario (con o sin comprobante)
+    CANCELADA = "cancelada"       # Cancelada por el proponente
+
+
+class TipoTasaColecta(str, enum.Enum):
+    BCV = "bcv"                   # Tasa oficial BCV (por defecto)
+    USDT = "usdt"                 # Tasa USDT / Binance P2P
+    EURO = "euro"                 # Tasa Euro BCV
+    PARALELO = "paralelo"         # Monitor paralelo
+    FIJA = "fija"                 # Tasa fija numérica acordada al crear
+
+
+class EstadoCompromiso(str, enum.Enum):
+    PROMETIDO = "prometido"       # Socio prometió aportar
+    NOTIFICADO = "notificado"     # Notificado con monto en Bs
+    PAGADO = "pagado"             # Pago confirmado con comprobante
+    CANCELADO = "cancelado"       # Cancelado antes del pago
+
+
+class Colecta(Base):
+    """
+    Propuesta de colecta solidaria ('vaca') para un fin específico.
+    Financiada mediante aportes voluntarios de los socios de la mutual.
+    """
+    __tablename__ = "colectas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    proponente_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Información básica
+    titulo = Column(String(200), nullable=False)
+    proposito = Column(Text, nullable=False)
+
+    # Metas financieras (Base USD)
+    monto_meta_usd = Column(Float, nullable=False)
+    monto_prometido_usd = Column(Float, default=0.0)
+    monto_recaudado_usd = Column(Float, default=0.0)
+
+    # Tasa de cambio acordada
+    tipo_tasa = Column(Enum(TipoTasaColecta), default=TipoTasaColecta.BCV, nullable=False)
+    tasa_fija_valor = Column(Float, nullable=True)  # Solo si tipo_tasa == FIJA
+
+    # Datos del beneficiario (por defecto el proponente; extensible a externos)
+    beneficiario_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    beneficiario_nombre = Column(String(200), nullable=True)
+    beneficiario_datos_pago = Column(Text, default="{}")  # JSON string con datos bancarios/pago móvil
+
+    # Validación de gasto por el beneficiario (obligatoria para COMPLETADA, comprobante adjunto opcional)
+    gasto_validado = Column(Boolean, default=False)
+    descripcion_gasto = Column(Text, nullable=True)
+    comprobante_gasto_url = Column(String(500), nullable=True)
+
+    # Fechas
+    fecha_pago = Column(Date, nullable=False)
+    fecha_limite_aportes = Column(Date, nullable=True)
+
+    # Parámetros preparados para futuros Smart Contracts
+    limite_cancelacion_horas = Column(Integer, nullable=True, default=None)
+
+    # Estado general
+    estado = Column(Enum(EstadoColecta), default=EstadoColecta.PROPUESTA, nullable=False)
+
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    # Relaciones
+    compromisos = relationship("CompromisoColecta", back_populates="colecta", cascade="all, delete-orphan")
+    proponente = relationship("User", foreign_keys=[proponente_id])
+    beneficiario = relationship("User", foreign_keys=[beneficiario_id])
+
+
+class CompromisoColecta(Base):
+    """
+    Compromiso de aporte voluntario de un socio a una colecta.
+    """
+    __tablename__ = "compromisos_colecta"
+
+    id = Column(Integer, primary_key=True, index=True)
+    colecta_id = Column(Integer, ForeignKey("colectas.id"), nullable=False, index=True)
+    socio_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # Monto comprometido (Base USD)
+    monto_usd = Column(Float, nullable=False)
+
+    # Conversión al momento de notificación / cobro en Bs
+    monto_bs = Column(Float, nullable=True)
+    tasa_usada = Column(Float, nullable=True)
+    tipo_tasa_usada = Column(String(50), nullable=True)
+
+    # Comprobante de pago del aportante
+    payment_method = Column(String(50), nullable=True)
+    referencia_pago = Column(String(100), nullable=True)
+    comprobante_url = Column(String(500), nullable=True)
+    nota_pago = Column(Text, nullable=True)
+
+    # Estado del aporte
+    estado = Column(Enum(EstadoCompromiso), default=EstadoCompromiso.PROMETIDO, nullable=False)
+
+    fecha_compromiso = Column(DateTime, default=utcnow)
+    fecha_notificacion = Column(DateTime, nullable=True)
+    fecha_pago = Column(DateTime, nullable=True)
+    fecha_cancelacion = Column(DateTime, nullable=True)
+
+    # Relaciones
+    colecta = relationship("Colecta", back_populates="compromisos")
+    socio = relationship("User", foreign_keys=[socio_id])
+
