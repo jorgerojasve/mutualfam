@@ -3,7 +3,21 @@ name: Lanzamiento Automático (Release) de la APK
 on:
   push:
     tags:
-      - 'v*' # Solo se ejecuta cuando subes un tag como v1.0.0, v2.1.3, etc.
+      - 'v*' # Tags como v1.0.11-qa, v1.0.12, etc.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Entorno de la APK (qa o prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+      version:
+        description: 'Versión manual (ej: 1.0.12). Dejar vacío si se usa desde Tag'
+        required: false
+        default: ''
 
 jobs:
   build-apk:
@@ -15,6 +29,48 @@ jobs:
     steps:
       - name: ⬇️ Descargar Código
         uses: actions/checkout@v4
+
+      - name: ⚙️ Detectar Entorno y Parámetros
+        id: env-config
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          IS_QA="false"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.environment }}" = "qa" ]; then
+              IS_QA="true"
+            fi
+            if [ -n "${{ github.event.inputs.version }}" ]; then
+              RAW_TAG="v${{ github.event.inputs.version }}"
+            else
+              RAW_TAG="v1.0.11"
+            fi
+          else
+            # Si el tag contiene "-qa" (ej: v1.0.11-qa) se compila para QA
+            if [[ "$RAW_TAG" == *"-qa"* ]]; then
+              IS_QA="true"
+            fi
+          fi
+
+          if [ "$IS_QA" = "true" ]; then
+            echo "env_label=QA" >> $GITHUB_OUTPUT
+            echo "app_name=Mutual Familiar (QA)" >> $GITHUB_OUTPUT
+            echo "package_id=com.jorgerojasve.mutualfammobile.qa" >> $GITHUB_OUTPUT
+            echo "api_url=https://mutualfam-qa-backend.fly.dev/api/v1" >> $GITHUB_OUTPUT
+            echo "invite_url=https://mutualfam-qa.vercel.app/invite?token=" >> $GITHUB_OUTPUT
+            echo "apk_prefix=mutualfam-qa" >> $GITHUB_OUTPUT
+          else
+            echo "env_label=Producción" >> $GITHUB_OUTPUT
+            echo "app_name=Mutual Familiar" >> $GITHUB_OUTPUT
+            echo "package_id=com.jorgerojasve.mutualfammobile" >> $GITHUB_OUTPUT
+            echo "api_url=https://mutualfam-backend.fly.dev/api/v1" >> $GITHUB_OUTPUT
+            echo "invite_url=https://mutualfam.vercel.app/invite?token=" >> $GITHUB_OUTPUT
+            echo "apk_prefix=mutualfam" >> $GITHUB_OUTPUT
+          fi
+
+          CLEAN_VERSION=$(echo "$RAW_TAG" | sed -E 's/^v//' | sed -E 's/-qa.*//')
+          echo "raw_tag=$RAW_TAG" >> $GITHUB_OUTPUT
+          echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
 
       - name: 🟢 Configurar Node.js
         uses: actions/setup-node@v4
@@ -37,20 +93,56 @@ jobs:
           rm -rf apps/mutualfam-mobile/node_modules/react-native
           rm -rf apps/mutualfam-mobile/node_modules/react-native-safe-area-context
 
-      - name: 📱 Compilar APK
+      - name: 🏷️ Sincronizar Versión y Metadatos en app.json
         working-directory: civiccore/apps/mutualfam-mobile
-        # Ejecuta el mismo script que usas en tu máquina local
+        run: |
+          node -e "
+            const fs = require('fs');
+            const cleanVersion = '${{ steps.env-config.outputs.clean_version }}';
+            const appName = '${{ steps.env-config.outputs.app_name }}';
+            const packageId = '${{ steps.env-config.outputs.package_id }}';
+
+            const parts = cleanVersion.split('.').map(n => parseInt(n, 10) || 0);
+            while (parts.length < 3) parts.push(0);
+            const [major, minor, patch] = parts;
+            const computedCode = major * 10000 + minor * 100 + patch;
+            const isQa = '${{ steps.env-config.outputs.env_label }}' === 'QA';
+            const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            appJson.expo.name = appName;
+            appJson.expo.version = cleanVersion;
+            appJson.expo.android = appJson.expo.android || {};
+            appJson.expo.android.package = packageId;
+            appJson.expo.android.versionCode = computedCode;
+            if (isQa) {
+              appJson.expo.icon = './assets/icon-qa.png';
+              appJson.expo.android.adaptiveIcon = {
+                foregroundImage: './assets/adaptive-icon-qa.png',
+                backgroundColor: '#071318'
+              };
+            } else {
+              appJson.expo.icon = './assets/icon.png';
+              appJson.expo.android.adaptiveIcon = {
+                foregroundImage: './assets/adaptive-icon.png',
+                backgroundColor: '#071318'
+              };
+            }
+            fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2) + '\n');
+            console.log('✅ app.json sincronizado: name=\"' + appName + '\", package=' + packageId + ', icon=' + appJson.expo.icon + ', version=' + cleanVersion + ', versionCode=' + computedCode);
+          "
+
+      - name: 📱 Compilar APK (${{ steps.env-config.outputs.env_label }})
+        working-directory: civiccore/apps/mutualfam-mobile
         run: npm run build:apk
         env:
-          # Si tienes variables de entorno necesarias para la compilación, ponlas aquí:
-          EXPO_PUBLIC_API_URL: "https://mutualfam-backend.fly.dev/api/v1"
-          EXPO_PUBLIC_INVITE_URL_BASE: "https://mutualfam.vercel.app/invite?token="
+          APK_PREFIX: ${{ steps.env-config.outputs.apk_prefix }}
+          EXPO_PUBLIC_API_URL: ${{ steps.env-config.outputs.api_url }}
+          EXPO_PUBLIC_INVITE_URL_BASE: ${{ steps.env-config.outputs.invite_url }}
 
       - name: 🚀 Crear GitHub Release y Subir APK
         uses: softprops/action-gh-release@v2
         with:
-          files: civiccore/apps/mutualfam-mobile/mutualfam-qa-*.apk
-          name: Versión ${{ github.ref_name }}
+          files: civiccore/apps/mutualfam-mobile/*.apk
+          name: ${{ steps.env-config.outputs.app_name }} v${{ steps.env-config.outputs.clean_version }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
