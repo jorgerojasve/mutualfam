@@ -140,14 +140,14 @@ export default function JoinMutualScreen({ route, navigation }) {
     <View style={styles.container}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Unirse a una Mutual</Text>
-        {!envConfig.isProd && (
+        {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
             <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-              {envConfig.badgeText || 'QA'}
+              {envConfig.badgeText}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       {!mutualInfo ? (

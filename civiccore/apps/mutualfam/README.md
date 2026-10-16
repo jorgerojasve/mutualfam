@@ -17,7 +17,7 @@ cd ../../../
 El script interactivo te preguntará qué aplicación levantar. Selecciona `1` para `mutualfam`. 
 Esto levantará el contenedor Docker exponiendo la API en la red local en el puerto `8000`.
 
-*(Recuerda poner tu IP WiFi local o `10.0.2.2` para emuladores en el archivo `.env` de la app móvil, ej: `EXPO_PUBLIC_API_URL=http://<TU_IP>:8000/api/v1`).*
+*(Nota sobre la app móvil: al ejecutar Expo Go, la app detecta automáticamente la IP local de tu PC a través del bundler de Metro y se conecta al backend local en el puerto `8000`. Si deseas forzar una IP específica o estás usando un emulador Android, puedes definir `EXPO_PUBLIC_API_URL` en `civiccore/apps/mutualfam-mobile/.env`, ej: `EXPO_PUBLIC_API_URL=http://<TU_IP>:8000/api/v1` o `http://10.0.2.2:8000/api/v1`).*
 
 Para detener el servidor cuando termines de desarrollar, ejecuta en la misma raíz:
 ```bash

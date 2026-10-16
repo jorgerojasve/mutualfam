@@ -47,14 +47,14 @@ export default function CreateMutualScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Crear mi Mutual</Text>
-        {!envConfig.isProd && (
+        {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
             <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-              {envConfig.badgeText || 'QA'}
+              {envConfig.badgeText}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
       <Text style={styles.subtitle}>Inicia tu propia familia y administra sus préstamos y fondos.</Text>
       
