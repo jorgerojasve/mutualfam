@@ -1,22 +1,35 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 if (!baseURL) {
   if (__DEV__) {
+    // Entorno de desarrollo local (Docker local en puerto 8000)
     const hostUri = Constants?.expoConfig?.hostUri;
     console.log("hostUri detectado:", hostUri);
     if (hostUri) {
+      // Teléfono físico o emulador vía Expo Go (extrae automáticamente la IP de la PC)
       baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+    } else if (Platform.OS === 'android') {
+      // Emulador Android conectando al localhost de la máquina anfitriona
+      baseURL = 'http://10.0.2.2:8000/api/v1';
     } else {
+      // iOS Simulator o Web
       baseURL = 'http://localhost:8000/api/v1';
     }
   } else {
-    // Producción / QA build: apuntar a Fly.io
-    baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
+    // Compilación Release (APK standalone sin variable EXPO_PUBLIC_API_URL explícita)
+    const pkg = (Constants?.expoConfig?.android?.package || '').toLowerCase();
+    const appName = (Constants?.expoConfig?.name || '').toLowerCase();
+    const isQA = pkg.includes('.qa') || appName.includes('(qa)') || appName.includes('qa');
+    if (isQA) {
+      baseURL = 'https://mutualfam-qa-backend.fly.dev/api/v1';
+    } else {
+      baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
+    }
   }
 }
 

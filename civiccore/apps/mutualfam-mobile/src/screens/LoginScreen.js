@@ -165,14 +165,14 @@ export default function LoginScreen({ route, navigation }) {
         />
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Mutual Familiar</Text>
-          {!envConfig.isProd && (
+          {!envConfig.isProd && envConfig.badgeText ? (
             <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
               <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
               <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-                {envConfig.badgeText || 'QA'}
+                {envConfig.badgeText}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
         
         {isRegistering && (

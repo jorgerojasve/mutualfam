@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import { loansApi, authApi } from '../api/client';
+import { loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
@@ -18,7 +18,7 @@ export default function LoansScreen() {
   const [user, setUser] = useState(null);
   const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
   
-  const serverUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1').replace('/api/v1', '');
+  const serverUrl = baseURL.replace('/api/v1', '');
   
   // Crear préstamo
   const [showModal, setShowModal] = useState(false);

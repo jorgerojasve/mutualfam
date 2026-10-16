@@ -66,14 +66,14 @@ export default function SelectMutualScreen({ navigation }) {
     <View style={styles.container}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Mis Mutuales</Text>
-        {!envConfig.isProd && (
+        {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
             <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-              {envConfig.badgeText || 'QA'}
+              {envConfig.badgeText}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       {organizations.length > 0 ? (
