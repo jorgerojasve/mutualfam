@@ -41,6 +41,8 @@ jobs:
             TARGET_ENV="prod"
           fi
 
+          echo "target_env=$TARGET_ENV" >> $GITHUB_OUTPUT
+
           if [ "$TARGET_ENV" = "prod" ]; then
             echo "config_file=fly.toml" >> $GITHUB_OUTPUT
             echo "app_name=mutualfam-backend" >> $GITHUB_OUTPUT
@@ -58,4 +60,5 @@ jobs:
         run: |
           flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_API_TOKEN: ${{ (steps.env-config.outputs.target_env == 'qa' && secrets.FLY_API_TOKEN_QA) || (steps.env-config.outputs.target_env == 'prod' && secrets.FLY_API_TOKEN_PROD) || secrets.FLY_API_TOKEN }}
+          FLY_ACCESS_TOKEN: ${{ (steps.env-config.outputs.target_env == 'qa' && secrets.FLY_API_TOKEN_QA) || (steps.env-config.outputs.target_env == 'prod' && secrets.FLY_API_TOKEN_PROD) || secrets.FLY_API_TOKEN }}
