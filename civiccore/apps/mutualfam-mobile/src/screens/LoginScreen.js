@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 import { registerForPushNotificationsAsync } from '../services/notifications';
+import { getMobileEnvironmentConfig } from '../utils/env';
+import { getErrorMessage } from '../utils/errors';
+import { OrgContext } from '../context/OrgContext';
 
 export default function LoginScreen({ route, navigation }) {
+  const { selectOrg, loadActiveOrg } = useContext(OrgContext);
+  const envConfig = getMobileEnvironmentConfig();
+  const logoSource = envConfig.isQA
+    ? require('../../assets/icon-qa.png')
+    : require('../../assets/icon.png');
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -89,6 +97,7 @@ export default function LoginScreen({ route, navigation }) {
         }
 
         // El nuevo usuario no tiene mutual, así que vamos a la selección/creación
+        if (loadActiveOrg) await loadActiveOrg();
         navigation.replace('SelectMutual');
       } else {
         const data = await authApi.login(email, password);
@@ -108,18 +117,26 @@ export default function LoginScreen({ route, navigation }) {
         const me = await authApi.me();
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {
-             await AsyncStorage.setItem('org_id', me.organizations[0].id.toString());
+             if (selectOrg) {
+               await selectOrg(me.organizations[0]);
+             } else {
+               const singleOrgId = me.organizations[0].id.toString();
+               await AsyncStorage.setItem('active_org_id', singleOrgId);
+               await AsyncStorage.setItem('org_id', singleOrgId);
+             }
              navigation.replace('MainTabs');
           } else {
+             if (loadActiveOrg) await loadActiveOrg();
              navigation.replace('SelectMutual');
           }
         } else {
           // No tiene organizaciones, debe crear o unirse a una
+          if (loadActiveOrg) await loadActiveOrg();
           navigation.replace('SelectMutual');
         }
       }
     } catch (error) {
-      Alert.alert(isRegistering ? 'Error al registrar' : 'Error de inicio de sesión', error.response?.data?.detail || error.message);
+      Alert.alert(isRegistering ? 'Error al registrar' : 'Error de inicio de sesión', getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -141,8 +158,22 @@ export default function LoginScreen({ route, navigation }) {
         </View>
       )}
       <View style={styles.card}>
-        <View style={styles.iconPlaceholder} />
-        <Text style={styles.title}>Mutual Familiar</Text>
+        <Image
+          source={logoSource}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Mutual Familiar</Text>
+          {!envConfig.isProd && (
+            <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+              <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
+              <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
+                {envConfig.badgeText || 'QA'}
+              </Text>
+            </View>
+          )}
+        </View>
         
         {isRegistering && (
           <TextInput
@@ -264,18 +295,43 @@ const styles = StyleSheet.create({
     elevation: 8,
     alignItems: 'center',
   },
-  iconPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    backgroundColor: '#3b82f6',
-    marginBottom: 20,
+  logoImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 30,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#f8fafc',
-    marginBottom: 30,
+  },
+  envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  envDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  envBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   input: {
     width: '100%',

@@ -4,12 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
+import { getMobileEnvironmentConfig } from '../utils/env';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
   const { selectOrg, loadActiveOrg, clearOrg } = React.useContext(OrgContext);
+  const envConfig = getMobileEnvironmentConfig();
 
   useEffect(() => {
     fetchData();
@@ -62,7 +64,17 @@ export default function SelectMutualScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Mis Mutuales</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Mis Mutuales</Text>
+        {!envConfig.isProd && (
+          <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+            <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
+            <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
+              {envConfig.badgeText || 'QA'}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {organizations.length > 0 ? (
         <FlatList
@@ -139,11 +151,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#f8fafc',
-    marginBottom: 20,
+  },
+  envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  envDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  envBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   orgCard: {
     backgroundColor: '#1e293b',

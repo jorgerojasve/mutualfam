@@ -1,0 +1,31 @@
+# fly.qa.toml app configuration file for mutualfam-qa-backend (Entorno QA)
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'mutualfam-qa-backend'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  DATABASE_URL = 'sqlite:////app/data/mutualfam.db'
+  PORT = '8080'
+
+[[mounts]]
+  source = 'mutualfam_qa_data'
+  destination = '/app/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024

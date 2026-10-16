@@ -391,7 +391,11 @@ def notify_payment(
         
     if notify.receipt_url:
         import os
-        photo_path = f".{notify.receipt_url}"
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(notify.receipt_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{notify.receipt_url}"
         if os.path.exists(photo_path):
             send_telegram_photo(msg, photo_path)
         else:
@@ -487,7 +491,11 @@ def notify_return_payment(
         
     if repay.receipt_url:
         import os
-        photo_path = f".{repay.receipt_url}"
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(repay.receipt_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{repay.receipt_url}"
         if os.path.exists(photo_path):
             send_telegram_photo(msg, photo_path)
         else:
@@ -565,9 +573,12 @@ def verify_return_payment(
         db.commit()
         msg = f"🎉 <b>¡Préstamo Saldado!</b>\n\n👤 El préstamo de {loan.amount_usd} de la mutual ha sido devuelto en su totalidad."
         send_telegram_notification(msg)
+        notify_users(db, [loan.requester_id], "Préstamo saldado", f"Tu préstamo de ${loan.amount_usd} ha sido saldado en su totalidad.")
     else:
         msg = f"👍 <b>¡Devolución Verificada!</b>\n\n👤 {org_member['user'].first_name} confirmó recibir <b>${repay.amount_usd}</b>."
         send_telegram_notification(msg)
+        notify_users(db, [loan.requester_id], "Devolución verificada", f"{org_member['user'].first_name} confirmó recibir tu devolución de ${repay.amount_usd}.")
     
     notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
     return {"message": "Devolución verificada exitosamente"}
+

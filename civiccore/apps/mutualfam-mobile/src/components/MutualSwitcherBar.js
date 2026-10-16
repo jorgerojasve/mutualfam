@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { OrgContext } from '../context/OrgContext';
+import { getMobileEnvironmentConfig } from '../utils/env';
 
 const WIDE_BREAKPOINT = 768;
 
@@ -34,6 +35,14 @@ export default function MutualSwitcherBar() {
   const { width } = useWindowDimensions();
   const isWide = width >= WIDE_BREAKPOINT;
   const [open, setOpen] = useState(false);
+  const envConfig = getMobileEnvironmentConfig();
+
+  // Si hay organizaciones disponibles pero ninguna activa en el contexto, seleccionar automáticamente
+  useEffect(() => {
+    if (!activeOrg && organizations && organizations.length > 0) {
+      selectOrg(organizations[0]);
+    }
+  }, [activeOrg, organizations]);
 
   const handleSelect = async (org) => {
     setOpen(false);
@@ -46,7 +55,15 @@ export default function MutualSwitcherBar() {
   };
 
   return (
-    <View style={[styles.bar, { paddingTop: insets.top + 6 }]}>
+    <View style={[styles.bar, { paddingTop: insets.top + (envConfig.isProd ? 6 : 4) }]}>
+      {!envConfig.isProd && (
+        <View style={[styles.envBannerStrip, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+          <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
+          <Text style={[styles.envBannerText, { color: envConfig.color }]}>
+            {envConfig.bannerText || '🧪 ENTORNO DE PRUEBAS (QA) • DATOS AISLADOS'}
+          </Text>
+        </View>
+      )}
       <TouchableOpacity
         style={styles.trigger}
         activeOpacity={0.7}
@@ -63,7 +80,15 @@ export default function MutualSwitcherBar() {
             {activeOrg ? activeOrg.name : 'Seleccionar mutual'}
           </Text>
         </View>
-        <Ionicons name="swap-vertical" size={20} color="#94a3b8" />
+        {!envConfig.isProd && (
+          <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
+            <View style={[styles.envDotSmall, { backgroundColor: envConfig.color }]} />
+            <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
+              {envConfig.badgeText || 'QA'}
+            </Text>
+          </View>
+        )}
+        <Ionicons name="swap-vertical" size={20} color="#94a3b8" style={{ marginLeft: 4 }} />
       </TouchableOpacity>
 
       <Modal
@@ -223,4 +248,45 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
   manageText: { color: '#3b82f6', fontWeight: '600', fontSize: 14 },
+  envBannerStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginBottom: 6,
+    gap: 6,
+  },
+  envBannerText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  envDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  envDotSmall: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 4,
+  },
+  envBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 2,
+  },
+  envBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });

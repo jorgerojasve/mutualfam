@@ -9,7 +9,7 @@ from ..core.database import get_db
 from .simulator import SimulationEngine
 
 # Critical security guard
-if os.getenv("CIVICCORE_ENV") != "sandbox" and False: # Bypassed for development
+if os.getenv("CIVICCORE_ENV") != "sandbox":
     # If someone tries to import this module without the sandbox env, we explode.
     raise RuntimeError("CRITICAL SECURITY ERROR: Attempted to load sandbox_router outside of sandbox environment.")
 

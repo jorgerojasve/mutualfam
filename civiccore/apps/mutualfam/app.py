@@ -35,12 +35,24 @@ app.include_router(loans.router, prefix="/api/v1/loans", tags=["loans"])
 app.include_router(funds.router, prefix="/api/v1/funds", tags=["funds"])
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+from routers.upload import UPLOADS_DIR
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+if os.getenv("CIVICCORE_ENV") == "sandbox":
+    from civiccore.testing.sandbox_router import router as sandbox_router
+    from civiccore.testing.db_manager import router as db_manager_router
+    app.include_router(sandbox_router, prefix="/api/v1/sandbox", tags=["sandbox"])
+    app.include_router(db_manager_router, prefix="/api/v1/sandbox/db-manager", tags=["db-manager"])
 
 @app.get("/")
 def read_root():
     return {"message": "Mutual Familiar API is running"}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "app": "Mutual Familiar API"}
 
 
 @app.websocket("/api/v1/ws")

@@ -1,0 +1,61 @@
+name: Despliegue Automático Backend (Fly.io)
+
+on:
+  push:
+    branches:
+      - mutualfam/qa
+      - mutualfam/prod
+    paths:
+      - 'civiccore/apps/mutualfam/**'
+      - 'civiccore/backend/**'
+      - 'Dockerfile'
+      - 'fly.toml'
+      - 'fly.qa.toml'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Entorno a desplegar (qa o prod)'
+        required: true
+        default: 'qa'
+        type: choice
+        options:
+          - qa
+          - prod
+
+jobs:
+  deploy:
+    name: Desplegar Backend en Fly.io
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Descargar Código
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Determinar Configuración de Entorno
+        id: env-config
+        run: |
+          TARGET_ENV="qa"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TARGET_ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref_name }}" = "mutualfam/prod" ]; then
+            TARGET_ENV="prod"
+          fi
+
+          if [ "$TARGET_ENV" = "prod" ]; then
+            echo "config_file=fly.toml" >> $GITHUB_OUTPUT
+            echo "app_name=mutualfam-backend" >> $GITHUB_OUTPUT
+            echo "env_label=Producción" >> $GITHUB_OUTPUT
+          else
+            echo "config_file=fly.qa.toml" >> $GITHUB_OUTPUT
+            echo "app_name=mutualfam-qa-backend" >> $GITHUB_OUTPUT
+            echo "env_label=QA" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🪰 Configurar Flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: 🚀 Desplegar en Fly.io (${{ steps.env-config.outputs.env_label }})
+        run: |
+          flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

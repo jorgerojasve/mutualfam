@@ -5,6 +5,20 @@ import './index.css';
 
 import { initCivicCore } from '@civiccore/sdk';
 import manifest from './manifest.js';
+import { getEnvironmentConfig } from './utils/env.js';
+
+// Título y Favicon dinámicos según el entorno
+const envConfig = getEnvironmentConfig();
+document.title = envConfig.isQA 
+  ? 'MutualFam (QA) - Entorno de Pruebas' 
+  : envConfig.isDev 
+    ? 'MutualFam (Dev) - Desarrollo Local' 
+    : 'MutualFam - Préstamos y Aportes Familiares';
+
+const faviconEl = document.getElementById('app-favicon');
+if (faviconEl) {
+  faviconEl.href = envConfig.isQA ? '/favicon-qa.png' : '/favicon.png';
+}
 
 // Adaptador de LocalStorage para la Web
 initCivicCore({

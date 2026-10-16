@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import { registerForPushNotificationsAsync } from './src/services/notifications';
+import { checkForAppUpdate } from './src/services/appUpdates';
+import UpdateModal from './src/components/UpdateModal';
 
 
 // Screens
@@ -86,6 +88,7 @@ const prefix = Linking.createURL('/');
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [initialRoute, setInitialRoute] = useState('Login');
+  const [updateInfo, setUpdateInfo] = useState(null);
 
   const linking = {
     prefixes: [prefix, 'mutualfam://'],
@@ -115,6 +118,13 @@ export default function App() {
     };
     
     checkToken();
+
+    // Verificación en segundo plano de nuevas versiones (obligatorias u opcionales)
+    checkForAppUpdate().then((info) => {
+      if (info?.hasUpdate) {
+        setUpdateInfo(info);
+      }
+    });
   }, []);
 
 
@@ -139,6 +149,10 @@ export default function App() {
             <Stack.Screen name="MainTabs" component={MainTabs} />
           </Stack.Navigator>
         </NavigationContainer>
+        <UpdateModal
+          updateInfo={updateInfo}
+          onDismiss={() => setUpdateInfo(null)}
+        />
       </GestureHandlerRootView>
     </OrgProvider>
   );

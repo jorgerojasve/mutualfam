@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
 import { UserPlus, Mail, Lock, User, FileText } from 'lucide-react';
+import { EnvBadge } from '../../components/Common/EnvBadge';
+import { getEnvironmentConfig } from '../../utils/env';
 
 const Register = () => {
   const { register, isAuthenticated } = useAuthStore();
+  const envConfig = getEnvironmentConfig();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     nombre: '',
@@ -65,9 +68,29 @@ const Register = () => {
           <div className="auth-logo-icon flex items-center justify-center">
             <UserPlus color="white" size={28} />
           </div>
-          <h2 className="text-gradient">MutualSol</h2>
-          <p className="text-muted">Crea tu cuenta y únete a la mutual</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'center' }}>
+            <h2 className="text-gradient">MutualFam</h2>
+            <EnvBadge size="medium" />
+          </div>
+          <p className="text-muted">{envConfig.tagline || 'Crea tu cuenta y únete a la mutual'}</p>
         </div>
+
+        {!envConfig.isProd && (
+          <div style={{
+            backgroundColor: envConfig.bgColor,
+            border: `1px solid ${envConfig.borderColor}`,
+            color: envConfig.color,
+            borderRadius: 'var(--radius-md)',
+            padding: '0.6rem 0.9rem',
+            fontSize: '0.8rem',
+            marginBottom: '1.25rem',
+            textAlign: 'center',
+            fontWeight: 500,
+            lineHeight: 1.4,
+          }}>
+            {envConfig.bannerText}
+          </div>
+        )}
 
         {error && (
           <div className="form-group">

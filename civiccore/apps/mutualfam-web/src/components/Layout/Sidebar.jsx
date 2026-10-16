@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Gavel, Shield, Wallet, Users, Settings, Store, Database, Handshake, ShieldCheck, PiggyBank } from 'lucide-react';
 import { useAuthStore, useConfigStore, useManifest, boardApi } from '@civiccore/sdk';
 import { useState, useEffect } from 'react';
+import { EnvBadge } from '../Common/EnvBadge';
 
 const Sidebar = () => {
   const { user } = useAuthStore();
@@ -41,7 +42,10 @@ const Sidebar = () => {
           ) : (
             <>
               <div className="logo-icon"></div>
-              <h2 className="logo-text text-gradient">{manifest?.shortName || 'CivicCore'}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <h2 className="logo-text text-gradient">{manifest?.shortName || 'MFam'}</h2>
+                <EnvBadge size="small" />
+              </div>
             </>
           )}
         </div>

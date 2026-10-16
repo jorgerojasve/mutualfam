@@ -8,6 +8,7 @@ import { loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
+import { getErrorMessage } from '../utils/errors';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -15,7 +16,7 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const { activeOrg } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
   
   const serverUrl = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8002/api/v1').replace('/api/v1', '');
   
@@ -94,12 +95,24 @@ export default function LoansScreen() {
     }
   };
 
+  useEffect(() => {
+    if (activeOrg?.id) {
+      fetchLoans();
+    } else if (!orgLoading) {
+      setLoading(false);
+    }
+  }, [activeOrg?.id, orgLoading]);
+
   useFocusEffect(
     useCallback(() => {
       fetchConfig();
       fetchUser();
-      if (activeOrg?.id) fetchLoans();
-    }, [activeOrg?.id])
+      if (activeOrg?.id) {
+        fetchLoans();
+      } else if (!orgLoading) {
+        setLoading(false);
+      }
+    }, [activeOrg?.id, orgLoading])
   );
 
   // Actualización en tiempo real vía WebSocket (refresco silencioso, sin spinner)
@@ -304,7 +317,7 @@ export default function LoansScreen() {
             Alert.alert('Exito', 'Pago verificado correctamente.');
             fetchLoans();
           } catch (e) {
-            Alert.alert('Error', e.response?.data?.detail || 'No se pudo verificar el pago');
+            Alert.alert('Error', getErrorMessage(e, 'No se pudo verificar el pago'));
           }
       }}
     ]);
@@ -319,7 +332,7 @@ export default function LoansScreen() {
             Alert.alert("Cancelado", "Tu aporte ha sido cancelado exitosamente.");
             fetchLoans();
           } catch (error) {
-            Alert.alert('Error', error.response?.data?.detail || error.message);
+            Alert.alert('Error', getErrorMessage(error, 'No se pudo cancelar el aporte'));
           }
       }}
     ]);
@@ -356,7 +369,7 @@ export default function LoansScreen() {
       Alert.alert('¡Notificado!', 'Tu devolución ha sido notificada al aportante.');
       fetchLoans();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || error.message);
+      Alert.alert('Error', getErrorMessage(error, 'No se pudo notificar la devolución'));
     } finally {
       setRepaying(false);
     }
@@ -371,21 +384,58 @@ export default function LoansScreen() {
             Alert.alert('Exito', 'Devolución verificada correctamente.');
             fetchLoans();
           } catch (e) {
-            Alert.alert('Error', e.response?.data?.detail || 'No se pudo verificar la devolución');
+            Alert.alert('Error', getErrorMessage(e, 'No se pudo verificar la devolución'));
           }
       }}
     ]);
   };
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled) {
-      setReceiptUri(result.assets[0].uri);
-    }
+  const pickImage = () => {
+    Alert.alert(
+      'Adjuntar Comprobante',
+      '¿Cómo deseas agregar el comprobante?',
+      [
+        {
+          text: '🖼️ Galería (Captura)',
+          onPress: async () => {
+            try {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets?.[0]?.uri) {
+                setReceiptUri(result.assets[0].uri);
+              }
+            } catch (err) {
+              console.warn('Error al abrir galería:', err);
+            }
+          },
+        },
+        {
+          text: '📷 Tomar Foto',
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestCameraPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permiso requerido', 'Se requiere acceso a la cámara para tomar la foto.');
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: false,
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets?.[0]?.uri) {
+                setReceiptUri(result.assets[0].uri);
+              }
+            } catch (err) {
+              console.warn('Error al abrir cámara:', err);
+            }
+          },
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    );
   };
 
   const onDateChange = (event, selectedDate) => {
@@ -597,7 +647,11 @@ export default function LoansScreen() {
           keyExtractor={item => item.id.toString()}
           renderItem={renderLoanCard}
           contentContainerStyle={{ padding: 15 }}
-          ListEmptyComponent={<Text style={styles.emptyText}>No hay préstamos para esta vista</Text>}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>
+              {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
+            </Text>
+          }
         />
       )}
 
@@ -956,9 +1010,16 @@ export default function LoansScreen() {
 
               <Text style={styles.label}>Comprobante (Opcional)</Text>
               <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}</Text>
+                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
               </TouchableOpacity>
-              {receiptUri && <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />}
+              {receiptUri && (
+                <View style={{ marginBottom: 15 }}>
+                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setShowNotifyModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>
@@ -1106,9 +1167,16 @@ export default function LoansScreen() {
 
               <Text style={styles.label}>Comprobante (Opcional)</Text>
               <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "✅ Imagen Seleccionada (Cambiar)" : "📸 Subir Captura / Foto"}</Text>
+                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
               </TouchableOpacity>
-              {receiptUri && <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 100, borderRadius: 8, marginBottom: 15 }} resizeMode="cover" />}
+              {receiptUri && (
+                <View style={{ marginBottom: 15 }}>
+                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancel} onPress={() => setShowRepayModal(false)}><Text style={styles.modalCancelText}>Cancelar</Text></TouchableOpacity>

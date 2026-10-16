@@ -5,11 +5,12 @@ import { fundsApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
+import { getErrorMessage } from '../utils/errors';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { activeOrg } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
   const [showModal, setShowModal] = useState(false);
   const [newFundName, setNewFundName] = useState('');
   const [newFundType, setNewFundType] = useState('emergency');
@@ -33,7 +34,7 @@ export default function FundsScreen() {
       setNewFundTarget('');
       fetchFunds();
     } catch (e) {
-      Alert.alert('Error', e.response?.data?.detail || 'Error al crear fondo');
+      Alert.alert('Error', getErrorMessage(e, 'Error al crear fondo'));
     } finally {
       setSubmitting(false);
     }
@@ -51,10 +52,22 @@ export default function FundsScreen() {
     }
   };
 
+  useEffect(() => {
+    if (activeOrg?.id) {
+      fetchFunds();
+    } else if (!orgLoading) {
+      setLoading(false);
+    }
+  }, [activeOrg?.id, orgLoading]);
+
   useFocusEffect(
     useCallback(() => {
-      if (activeOrg?.id) fetchFunds();
-    }, [activeOrg?.id])
+      if (activeOrg?.id) {
+        fetchFunds();
+      } else if (!orgLoading) {
+        setLoading(false);
+      }
+    }, [activeOrg?.id, orgLoading])
   );
 
   useEffect(() => {
@@ -115,7 +128,9 @@ export default function FundsScreen() {
           renderItem={renderFundCard}
           contentContainerStyle={{ padding: 15 }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No hay fondos creados</Text>
+            <Text style={styles.emptyText}>
+              {!activeOrg ? 'Selecciona una mutual arriba para ver los fondos' : 'No hay fondos creados'}
+            </Text>
           }
         />
       )}

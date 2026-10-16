@@ -24,36 +24,41 @@ export const OrgProvider = ({ children }) => {
   const loadActiveOrg = async () => {
     setLoading(true);
     try {
-      const orgId = await AsyncStorage.getItem('active_org_id');
+      const orgId = (await AsyncStorage.getItem('active_org_id')) || (await AsyncStorage.getItem('org_id'));
       const orgs = await fetchOrganizations();
       
-      if (orgId && orgs.length > 0) {
-        const found = orgs.find(o => o.id.toString() === orgId);
-        if (found) {
-          setActiveOrg(found);
-        } else {
-          // Si el active_org_id no está en la lista, limpiar
-          await AsyncStorage.removeItem('active_org_id');
-          setActiveOrg(null);
+      if (orgs && orgs.length > 0) {
+        let found = null;
+        if (orgId) {
+          found = orgs.find(o => o.id.toString() === orgId.toString());
         }
+        // Fallback: Si no hay orgId o el que estaba guardado ya no existe, auto-seleccionar la primera mutual disponible
+        const targetOrg = found || orgs[0];
+        setActiveOrg(targetOrg);
+        await AsyncStorage.setItem('active_org_id', targetOrg.id.toString());
+        await AsyncStorage.setItem('org_id', targetOrg.id.toString());
       } else {
+        // Solo limpiar si explícitamente se obtuvo una lista vacía confirmada
         setActiveOrg(null);
       }
     } catch (e) {
-      console.warn(e);
+      console.warn("loadActiveOrg error:", e);
     } finally {
       setLoading(false);
     }
   };
 
   const selectOrg = async (org) => {
+    if (!org) return;
     await AsyncStorage.setItem('active_org_id', org.id.toString());
+    await AsyncStorage.setItem('org_id', org.id.toString());
     setActiveOrg(org);
     await fetchOrganizations();
   };
 
   const clearOrg = async () => {
     await AsyncStorage.removeItem('active_org_id');
+    await AsyncStorage.removeItem('org_id');
     setActiveOrg(null);
     setOrganizations([]);
   };

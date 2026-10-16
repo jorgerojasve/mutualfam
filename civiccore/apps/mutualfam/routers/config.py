@@ -31,8 +31,110 @@ def update_user_payment_methods(data: PaymentMethodsUpdate, org_member: dict = D
 
 import urllib.request
 import json
-
 import datetime
+import os
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+_github_releases_cache = {
+    "timestamp": 0,
+    "releases": []
+}
+
+def is_qa_environment() -> bool:
+    """Detecta si el backend está ejecutándose en el entorno de QA/Sandbox."""
+    if os.getenv("CIVICCORE_ENV") == "sandbox":
+        return True
+    fly_app = os.getenv("FLY_APP_NAME", "")
+    if "qa" in fly_app.lower():
+        return True
+    backend_url = os.getenv("BACKEND_PUBLIC_URL", "")
+    if "qa" in backend_url.lower():
+        return True
+    return False
+
+def fetch_github_releases():
+    """Obtiene el listado reciente de releases desde GitHub con cache de 5 minutos."""
+    now = time.time()
+    if _github_releases_cache["releases"] and (now - _github_releases_cache["timestamp"] < 300):
+        return _github_releases_cache["releases"]
+
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/jorgerojasve/mutualfam/releases?per_page=10",
+            headers={'User-Agent': 'MutualFam-Backend'}
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as response:
+            releases = json.loads(response.read().decode())
+            if isinstance(releases, list):
+                _github_releases_cache["releases"] = releases
+                _github_releases_cache["timestamp"] = now
+                return releases
+    except Exception as e:
+        logger.warning(f"No se pudo consultar GitHub Releases: {e}")
+        if _github_releases_cache["releases"]:
+            return _github_releases_cache["releases"]
+
+    return []
+
+def get_target_release_and_apk(is_qa: bool = None):
+    """
+    Encuentra el release y el asset APK correspondiente según el entorno (QA o Producción).
+    """
+    if is_qa is None:
+        is_qa = is_qa_environment()
+
+    releases = fetch_github_releases()
+    for rel in releases:
+        tag = rel.get("tag_name", "").lower()
+        assets = rel.get("assets", [])
+        if is_qa:
+            # En QA buscamos releases con tag -qa o que contengan un APK de QA
+            if "-qa" in tag or any(a.get("name", "").startswith("mutualfam-qa") for a in assets):
+                # Priorizar asset con prefijo mutualfam-qa que termine en .apk
+                for a in assets:
+                    if a.get("name", "").startswith("mutualfam-qa") and a.get("name", "").endswith(".apk"):
+                        return rel, a
+                for a in assets:
+                    if a.get("name", "").endswith(".apk"):
+                        return rel, a
+        else:
+            # En Producción aseguramos que ni el tag ni el asset contengan -qa
+            if "-qa" not in tag:
+                for a in assets:
+                    name = a.get("name", "")
+                    if name.endswith(".apk") and "-qa" not in name:
+                        return rel, a
+    return None, None
+
+def get_latest_release_info():
+    """
+    Obtiene la última versión disponible de la app para el entorno actual.
+    Retorna latest_version, min_version, download_url y release_notes.
+    """
+    is_qa = is_qa_environment()
+    default_base = "https://mutualfam-qa-backend.fly.dev/api/v1" if is_qa else "https://mutualfam-backend.fly.dev/api/v1"
+    backend_base = os.getenv("BACKEND_PUBLIC_URL", default_base)
+    download_url = f"{backend_base}/config/latest-apk"
+
+    info = {
+        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.15"),
+        "min_version": os.getenv("MIN_APP_VERSION", "1.0.0"),
+        "download_url": download_url,
+        "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones."
+    }
+
+    rel, _ = get_target_release_and_apk(is_qa)
+    if rel:
+        tag_name = rel.get("tag_name", "").lstrip("v")
+        if tag_name:
+            info["latest_version"] = tag_name
+        if rel.get("body"):
+            info["release_notes"] = rel.get("body").strip()
+
+    return info
 
 @router.get("/")
 def get_config():
@@ -85,29 +187,26 @@ def get_config():
         "features": {
             "loans_enabled": True,
             "funds_enabled": True
-        }
+        },
+        "app_version": get_latest_release_info()
     }
 
-@router.get("/latest-apk")
+@router.get("/version")
+def get_app_version():
+    """Retorna información sobre la última versión de la app y requerimiento mínimo"""
+    return get_latest_release_info()
+
+@router.api_route("/latest-apk", methods=["GET", "HEAD"])
 def redirect_to_latest_apk():
-    """Redirige automáticamente al usuario al enlace de descarga de la última versión del APK en GitHub"""
+    """Redirige automáticamente al usuario al enlace de descarga de la última versión del APK en GitHub según el entorno"""
     fallback_url = "https://github.com/jorgerojasve/mutualfam/releases"
     try:
-        # Consultamos la API pública de GitHub para obtener el release más reciente
-        req = urllib.request.Request(
-            "https://api.github.com/repos/jorgerojasve/mutualfam/releases/latest",
-            headers={'User-Agent': 'MutualFam-Backend'}
-        )
-        with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode())
-            
-            # Buscamos en los assets el primer archivo que termine en .apk
-            for asset in data.get("assets", []):
-                if asset.get("name", "").endswith(".apk"):
-                    return RedirectResponse(url=asset["browser_download_url"], status_code=302)
-                    
-            # Si no hay assets o no hay apk, volvemos al fallback
-            return RedirectResponse(url=fallback_url, status_code=302)
+        is_qa = is_qa_environment()
+        _, asset = get_target_release_and_apk(is_qa)
+        if asset and asset.get("browser_download_url"):
+            return RedirectResponse(url=asset["browser_download_url"], status_code=302)
     except Exception as e:
-        print(f"Error fetching latest release from github: {e}")
-        return RedirectResponse(url=fallback_url, status_code=302)
+        logger.error(f"Error resolviendo último APK para redirección: {e}")
+
+    return RedirectResponse(url=fallback_url, status_code=302)
+
