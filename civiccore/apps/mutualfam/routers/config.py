@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import json
@@ -120,7 +120,7 @@ def get_latest_release_info():
     download_url = f"{backend_base}/config/latest-apk"
 
     info = {
-        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.16"),
+        "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.17"),
         "min_version": os.getenv("MIN_APP_VERSION", "1.0.0"),
         "download_url": download_url,
         "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones."
@@ -188,25 +188,103 @@ def get_config():
             "loans_enabled": True,
             "funds_enabled": True
         },
-        "app_version": get_latest_release_info()
+        "app_version": get_latest_release_info(),
+        "banks": VENEZUELAN_BANKS
     }
+
+VENEZUELAN_BANKS = [
+    {"code": "0102", "name": "Banco de Venezuela"},
+    {"code": "0104", "name": "Venezolano de Crédito"},
+    {"code": "0105", "name": "Banco Mercantil"},
+    {"code": "0108", "name": "BBVA Provincial"},
+    {"code": "0114", "name": "Bancaribe"},
+    {"code": "0115", "name": "Banco Exterior"},
+    {"code": "0128", "name": "Banco Caroní"},
+    {"code": "0134", "name": "Banesco"},
+    {"code": "0137", "name": "Banco Sofitasa"},
+    {"code": "0138", "name": "Banco Plaza"},
+    {"code": "0146", "name": "Bangente"},
+    {"code": "0151", "name": "BFC Banco Fondo Común"},
+    {"code": "0156", "name": "100% Banco"},
+    {"code": "0157", "name": "DelSur Banco Universal"},
+    {"code": "0163", "name": "Banco del Tesoro"},
+    {"code": "0166", "name": "Banco Agrícola de Venezuela"},
+    {"code": "0168", "name": "Bancrecer"},
+    {"code": "0169", "name": "Mi Banco"},
+    {"code": "0171", "name": "Banco Activo"},
+    {"code": "0172", "name": "Bancamiga"},
+    {"code": "0173", "name": "Banco Internacional de Desarrollo"},
+    {"code": "0174", "name": "Banplus"},
+    {"code": "0175", "name": "Banco Digital de los Trabajadores (BDT)"},
+    {"code": "0177", "name": "BANFANB"},
+    {"code": "0178", "name": "N58 Banco Digital"},
+    {"code": "0191", "name": "Banco Nacional de Crédito (BNC)"},
+    {"code": "0601", "name": "Instituto Municipal de Crédito Popular (IMCP)"},
+]
+
+@router.get("/banks")
+def get_banks():
+    """Retorna la lista oficial de bancos en Venezuela con sus códigos SUDEBAN/BCV para Pago Móvil"""
+    return VENEZUELAN_BANKS
 
 @router.get("/version")
 def get_app_version():
     """Retorna información sobre la última versión de la app y requerimiento mínimo"""
     return get_latest_release_info()
 
+def stream_apk_download(download_url: str):
+    """Generador que transmite el APK por chunks desde GitHub/S3 para evitar redirecciones cross-origin en el cliente."""
+    req = urllib.request.Request(
+        download_url,
+        headers={"User-Agent": "MutualFam-Backend"}
+    )
+    with urllib.request.urlopen(req, timeout=30.0) as resp:
+        while True:
+            chunk = resp.read(64 * 1024)
+            if not chunk:
+                break
+            yield chunk
+
 @router.api_route("/latest-apk", methods=["GET", "HEAD"])
-def redirect_to_latest_apk():
-    """Redirige automáticamente al usuario al enlace de descarga de la última versión del APK en GitHub según el entorno"""
+def download_latest_apk(request: Request, redirect: bool = False):
+    """
+    Entrega el último APK del entorno correspondiente.
+    Por defecto transmite directamente el archivo (StreamingResponse) con cabeceras MIME
+    específicas de Android y Content-Disposition para evitar que Chrome Safe Browsing
+    se quede colgado esperando por redirecciones a dominios externos no verificados.
+    Permite ?redirect=true como opción alternativa o de depuración.
+    """
     fallback_url = "https://github.com/jorgerojasve/mutualfam/releases"
     try:
         is_qa = is_qa_environment()
         _, asset = get_target_release_and_apk(is_qa)
         if asset and asset.get("browser_download_url"):
-            return RedirectResponse(url=asset["browser_download_url"], status_code=302)
+            target_url = asset["browser_download_url"]
+            if redirect:
+                return RedirectResponse(url=target_url, status_code=302)
+
+            filename = asset.get("name") or "mutualfam.apk"
+            size = asset.get("size")
+
+            headers = {
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/vnd.android.package-archive",
+                "Cache-Control": "public, max-age=300",
+            }
+            if size:
+                headers["Content-Length"] = str(size)
+
+            if request.method == "HEAD":
+                return Response(status_code=200, headers=headers, media_type="application/vnd.android.package-archive")
+
+            return StreamingResponse(
+                stream_apk_download(target_url),
+                media_type="application/vnd.android.package-archive",
+                headers=headers
+            )
     except Exception as e:
-        logger.error(f"Error resolviendo último APK para redirección: {e}")
+        logger.error(f"Error sirviendo último APK para descarga directa: {e}")
 
     return RedirectResponse(url=fallback_url, status_code=302)
+
 

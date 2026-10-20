@@ -9,6 +9,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage } from '../utils/errors';
+import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -55,6 +56,9 @@ export default function LoansScreen() {
   const [paymentConfig, setPaymentConfig] = useState({});
   const [savingConfig, setSavingConfig] = useState(false);
   const [selectedConfigMethod, setSelectedConfigMethod] = useState(null);
+  const [banks, setBanks] = useState(VENEZUELAN_BANKS);
+  const [isPickingBank, setIsPickingBank] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
   const [copiedField, setCopiedField] = useState(null);
   const [bcvRate, setBcvRate] = useState(null);
   const [bcvDate, setBcvDate] = useState(null);
@@ -67,6 +71,19 @@ export default function LoansScreen() {
       setBcvRate(data.bcv_rate);
       setBcvDate(data.bcv_date);
       setIsBcvOutdated(data.is_bcv_outdated);
+      if (data.banks && Array.isArray(data.banks) && data.banks.length > 0) {
+        setBanks(data.banks);
+      } else {
+        // Fallback endpoint directo de bancos
+        try {
+          const banksData = await loansApi.getBanks();
+          if (Array.isArray(banksData) && banksData.length > 0) {
+            setBanks(banksData);
+          }
+        } catch {
+          // Usa VENEZUELAN_BANKS por defecto
+        }
+      }
     } catch (e) {
       console.warn("Could not fetch config", e);
     }
@@ -752,6 +769,79 @@ export default function LoansScreen() {
                     </TouchableOpacity>
                   </View>
                 </>
+              ) : isPickingBank ? (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+                    <TouchableOpacity onPress={() => setIsPickingBank(false)} style={{ marginRight: 15 }}>
+                      <Text style={{ color: '#3b82f6', fontSize: 16 }}>← Volver</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Seleccionar Banco</Text>
+                  </View>
+
+                  <TextInput 
+                    style={[styles.input, { marginBottom: 10 }]} 
+                    value={bankSearch}
+                    onChangeText={setBankSearch}
+                    placeholder="Buscar por nombre o código (ej. 0102)..."
+                    placeholderTextColor="#475569"
+                    autoFocus={true}
+                  />
+
+                  <View style={{ maxHeight: 280, borderWidth: 1, borderColor: '#334155', borderRadius: 8, overflow: 'hidden', marginBottom: 15 }}>
+                    <ScrollView nestedScrollEnabled={true}>
+                      {banks
+                        .filter(b => {
+                          if (!bankSearch.trim()) return true;
+                          const q = bankSearch.toLowerCase().trim();
+                          return b.code.includes(q) || b.name.toLowerCase().includes(q);
+                        })
+                        .map(b => {
+                          const isSelected = paymentConfig['Pago Móvil']?.banco === b.code;
+                          return (
+                            <TouchableOpacity
+                              key={b.code}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 12,
+                                paddingHorizontal: 12,
+                                backgroundColor: isSelected ? '#1e293b' : '#0f172a',
+                                borderBottomWidth: 1,
+                                borderBottomColor: '#1e293b',
+                              }}
+                              onPress={() => {
+                                setPaymentConfig({
+                                  ...paymentConfig,
+                                  'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), banco: b.code }
+                                });
+                                setIsPickingBank(false);
+                              }}
+                            >
+                              <View style={{
+                                backgroundColor: '#1e3a8a',
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                borderRadius: 6,
+                                marginRight: 10,
+                              }}>
+                                <Text style={{ color: '#93c5fd', fontWeight: '700', fontSize: 13 }}>{b.code}</Text>
+                              </View>
+                              <Text style={{ color: '#fff', fontSize: 14, flex: 1 }}>{b.name}</Text>
+                              {isSelected && (
+                                <Text style={{ color: '#10b981', fontWeight: 'bold', fontSize: 16, marginLeft: 8 }}>✓</Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </ScrollView>
+                  </View>
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity style={[styles.modalCancel, { width: '100%' }]} onPress={() => setIsPickingBank(false)}>
+                      <Text style={styles.modalCancelText}>Cancelar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
               ) : (
                 <>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
@@ -763,19 +853,30 @@ export default function LoansScreen() {
                   
                   {selectedConfigMethod === 'Pago Móvil' ? (
                     <View>
-                      <Text style={styles.label}>Código del banco (ej. 0102)</Text>
-                      <TextInput 
-                        style={styles.input} 
-                        keyboardType="numeric"
-                        maxLength={4}
-                        value={paymentConfig['Pago Móvil']?.banco || ''} 
-                        onChangeText={text => setPaymentConfig({
-                          ...paymentConfig, 
-                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), banco: text }
-                        })}
-                        placeholder="0102"
-                        placeholderTextColor="#475569"
-                      />
+                      <Text style={styles.label}>Banco</Text>
+                      <TouchableOpacity 
+                        style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }]} 
+                        onPress={() => {
+                          setBankSearch('');
+                          setIsPickingBank(true);
+                        }}
+                      >
+                        <Text 
+                          style={{ 
+                            color: paymentConfig['Pago Móvil']?.banco ? '#fff' : '#64748b', 
+                            fontSize: 15,
+                            flex: 1 
+                          }}
+                          numberOfLines={1}
+                        >
+                          {paymentConfig['Pago Móvil']?.banco 
+                            ? getBankLabel(paymentConfig['Pago Móvil']?.banco, banks)
+                            : 'Selecciona tu banco...'}
+                        </Text>
+                        <Text style={{ color: '#60a5fa', fontSize: 13, fontWeight: '600', marginLeft: 8 }}>
+                          Elegir ▼
+                        </Text>
+                      </TouchableOpacity>
                       
                       <Text style={styles.label}>Tipo de documento</Text>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
@@ -969,9 +1070,9 @@ export default function LoansScreen() {
                               </TouchableOpacity>
                             )}
                             <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('banco', safeBanco)}>
-                              <View>
+                              <View style={{ flex: 1, paddingRight: 8 }}>
                                 <Text style={styles.copyDataLabel}>Banco</Text>
-                                <Text style={styles.copyDataValue}>{safeBanco}</Text>
+                                <Text style={styles.copyDataValue}>{getBankLabel(safeBanco, banks)}</Text>
                               </View>
                               <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
                             </TouchableOpacity>
@@ -1126,9 +1227,9 @@ export default function LoansScreen() {
                               </TouchableOpacity>
                             )}
                             <TouchableOpacity style={styles.copyDataRow} onPress={() => copyField('banco', safeBanco)}>
-                              <View>
+                              <View style={{ flex: 1, paddingRight: 8 }}>
                                 <Text style={styles.copyDataLabel}>Banco</Text>
-                                <Text style={styles.copyDataValue}>{safeBanco}</Text>
+                                <Text style={styles.copyDataValue}>{getBankLabel(safeBanco, banks)}</Text>
                               </View>
                               <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
                             </TouchableOpacity>

@@ -175,6 +175,10 @@ export const loansApi = {
     const { data } = await apiClient.get('/config/payment_methods');
     return data;
   },
+  getBanks: async () => {
+    const { data } = await apiClient.get('/config/banks');
+    return data;
+  },
   getAppConfig: async () => {
     const { data } = await apiClient.get('/config/');
     return data;
