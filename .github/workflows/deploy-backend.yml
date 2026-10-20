@@ -58,7 +58,16 @@ jobs:
 
       - name: 🚀 Desplegar en Fly.io (${{ steps.env-config.outputs.env_label }})
         run: |
-          flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
+          TOKEN="${FLY_TOKEN_QA:-$FLY_TOKEN_GLOBAL}"
+          if [ "${{ steps.env-config.outputs.target_env }}" = "prod" ]; then
+            TOKEN="${FLY_TOKEN_PROD:-$FLY_TOKEN_GLOBAL}"
+          fi
+          if [ -z "$TOKEN" ]; then
+            echo "❌ Error: No se encontró ningún token de Fly.io configurado en los secrets"
+            exit 1
+          fi
+          FLY_API_TOKEN="$TOKEN" FLY_ACCESS_TOKEN="$TOKEN" flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
         env:
-          FLY_API_TOKEN: ${{ (steps.env-config.outputs.target_env == 'qa' && secrets.FLY_API_TOKEN_QA) || (steps.env-config.outputs.target_env == 'prod' && secrets.FLY_API_TOKEN_PROD) || secrets.FLY_API_TOKEN }}
-          FLY_ACCESS_TOKEN: ${{ (steps.env-config.outputs.target_env == 'qa' && secrets.FLY_API_TOKEN_QA) || (steps.env-config.outputs.target_env == 'prod' && secrets.FLY_API_TOKEN_PROD) || secrets.FLY_API_TOKEN }}
+          FLY_TOKEN_QA: ${{ secrets.FLY_API_TOKEN_QA }}
+          FLY_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_TOKEN_GLOBAL: ${{ secrets.FLY_API_TOKEN }}
