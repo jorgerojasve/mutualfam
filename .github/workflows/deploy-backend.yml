@@ -62,12 +62,37 @@ jobs:
           if [ "${{ steps.env-config.outputs.target_env }}" = "prod" ]; then
             TOKEN="${FLY_TOKEN_PROD:-$FLY_TOKEN_GLOBAL}"
           fi
+          echo "Target env: ${{ steps.env-config.outputs.target_env }}"
+          echo "Config file: ${{ steps.env-config.outputs.config_file }}"
+          echo "App name: ${{ steps.env-config.outputs.app_name }}"
+          echo "Token QA presente: $([ -n "$FLY_TOKEN_QA" ] && echo 'SI' || echo 'NO')"
+          echo "Token Prod presente: $([ -n "$FLY_TOKEN_PROD" ] && echo 'SI' || echo 'NO')"
+          echo "Token Global presente: $([ -n "$FLY_TOKEN_GLOBAL" ] && echo 'SI' || echo 'NO')"
+
           if [ -z "$TOKEN" ]; then
             echo "❌ Error: No se encontró ningún token de Fly.io configurado en los secrets"
             exit 1
           fi
-          FLY_API_TOKEN="$TOKEN" FLY_ACCESS_TOKEN="$TOKEN" flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
+
+          export FLY_API_TOKEN="$TOKEN"
+          export FLY_ACCESS_TOKEN="$TOKEN"
+          flyctl auth whoami 2>&1 | tee -a /tmp/fly_deploy.log || true
+          flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only 2>&1 | tee -a /tmp/fly_deploy.log
         env:
           FLY_TOKEN_QA: ${{ secrets.FLY_API_TOKEN_QA }}
           FLY_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_TOKEN_GLOBAL: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: 📢 Reportar Log de Despliegue en Commit Comment si falla
+        if: failure()
+        run: |
+          LOG_CONTENT=$(cat /tmp/fly_deploy.log 2>/dev/null | tail -n 40 || echo "Sin log")
+          BODY="### ❌ Error al desplegar en Fly.io (${{ steps.env-config.outputs.env_label }}):
+\`\`\`text
+${LOG_CONTENT}
+\`\`\`"
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
+            -d "$(jq -n --arg b "$BODY" '{"body": $b}')" || true

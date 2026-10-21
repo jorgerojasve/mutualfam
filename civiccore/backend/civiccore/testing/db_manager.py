@@ -63,3 +63,30 @@ def restore_backup(filename: str):
         return {"status": "success", "message": f"Restored {filename}. You may need to restart the server if you encounter locked database errors."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/reset")
+def reset_database():
+    """Vacía completamente todas las tablas de la base de datos SQLite."""
+    import sqlite3
+    try:
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF;")
+            tables = [row[0] for row in cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';").fetchall()]
+            for table in tables:
+                cursor.execute(f"DELETE FROM {table};")
+            try:
+                cursor.execute("DELETE FROM sqlite_sequence;")
+            except Exception:
+                pass
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            conn.commit()
+            cursor.execute("VACUUM;")
+            conn.close()
+            return {"status": "success", "message": "Base de datos reseteada a 0", "tables_cleared": tables}
+        else:
+            return {"status": "success", "message": "Archivo de base de datos no encontrado"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

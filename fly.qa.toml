@@ -10,6 +10,7 @@ primary_region = 'iad'
   dockerfile = 'Dockerfile'
 
 [env]
+  CIVICCORE_ENV = 'sandbox'
   DATABASE_URL = 'sqlite:////app/data/mutualfam.db'
   PORT = '8080'
 
