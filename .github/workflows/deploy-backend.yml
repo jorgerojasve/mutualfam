@@ -27,9 +27,13 @@ jobs:
   deploy:
     name: Desplegar Backend en Fly.io
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: ⬇️ Descargar Código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: ⚙️ Determinar Configuración de Entorno
         id: env-config
@@ -58,6 +62,7 @@ jobs:
 
       - name: 🚀 Desplegar en Fly.io (${{ steps.env-config.outputs.env_label }})
         run: |
+          set -o pipefail
           TOKEN="${FLY_TOKEN_QA:-$FLY_TOKEN_GLOBAL}"
           if [ "${{ steps.env-config.outputs.target_env }}" = "prod" ]; then
             TOKEN="${FLY_TOKEN_PROD:-$FLY_TOKEN_GLOBAL}"
@@ -83,14 +88,13 @@ jobs:
           FLY_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_TOKEN_GLOBAL: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: 📊 Resumen de Despliegue en GitHub Actions
+      - name: 📝 Guardar Log de Despliegue en rama ci-deploy-log
         if: always()
         run: |
-          echo "### 🚀 Resultado de Despliegue Backend (${{ steps.env-config.outputs.env_label }})" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          if [ -f /tmp/fly_deploy.log ]; then
-            tail -n 60 /tmp/fly_deploy.log >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No se generó archivo de log." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-deploy-log
+          cp /tmp/fly_deploy.log ./latest-deploy.log 2>/dev/null || echo "No log file found" > ./latest-deploy.log
+          git add ./latest-deploy.log
+          git commit -m "ci: deploy log for ${{ github.sha }}" || true
+          git push origin ci-deploy-log --force || true
