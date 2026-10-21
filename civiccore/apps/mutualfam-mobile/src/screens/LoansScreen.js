@@ -59,6 +59,7 @@ export default function LoansScreen() {
   const [banks, setBanks] = useState(VENEZUELAN_BANKS);
   const [isPickingBank, setIsPickingBank] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
+  const [pmErrors, setPmErrors] = useState({});
   const [copiedField, setCopiedField] = useState(null);
   const [bcvRate, setBcvRate] = useState(null);
   const [bcvDate, setBcvDate] = useState(null);
@@ -153,10 +154,62 @@ export default function LoansScreen() {
     try {
       const res = await loansApi.getPaymentMethods();
       setPaymentConfig(JSON.parse(res.payment_methods_json || "{}"));
+      setPmErrors({});
+      setIsPickingBank(false);
+      setSelectedConfigMethod(null);
       setShowConfigModal(true);
     } catch (e) {
       Alert.alert("Error", "No se pudo cargar la configuración de pagos.");
     }
+  };
+
+  const handleConfirmConfigMethod = () => {
+    if (selectedConfigMethod === 'Pago Móvil') {
+      const pm = paymentConfig['Pago Móvil'] || {};
+      const banco = (pm.banco || '').trim();
+      const cedula = (pm.cedula || '').trim();
+      const telefono = (pm.telefono || '').trim().replace(/[-\s]/g, '');
+
+      const isEmpty = !banco && !cedula && !telefono;
+      if (isEmpty) {
+        setPmErrors({});
+        const updatedConfig = { ...paymentConfig };
+        delete updatedConfig['Pago Móvil'];
+        setPaymentConfig(updatedConfig);
+        setSelectedConfigMethod(null);
+        return;
+      }
+
+      const errors = {};
+      if (!banco) {
+        errors.banco = 'Debes seleccionar un banco.';
+      }
+      if (!cedula) {
+        errors.cedula = 'Ingresa el número de documento.';
+      } else if (!/^\d{5,10}$/.test(cedula)) {
+        errors.cedula = 'El documento debe tener entre 5 y 10 dígitos numéricos.';
+      }
+      if (!telefono) {
+        errors.telefono = 'Ingresa el número de teléfono.';
+      } else if (!/^04\d{9}$/.test(telefono)) {
+        errors.telefono = 'El teléfono debe comenzar con 04 y tener 11 dígitos (ej. 04141234567).';
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setPmErrors(errors);
+        return;
+      }
+
+      setPmErrors({});
+      setPaymentConfig({
+        ...paymentConfig,
+        'Pago Móvil': { ...(pm || {}), banco, cedula, telefono }
+      });
+      setSelectedConfigMethod(null);
+      return;
+    }
+
+    setSelectedConfigMethod(null);
   };
 
   const handleSaveConfig = async () => {
@@ -814,6 +867,7 @@ export default function LoansScreen() {
                                   ...paymentConfig,
                                   'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), banco: b.code }
                                 });
+                                setPmErrors(prev => ({ ...prev, banco: null }));
                                 setIsPickingBank(false);
                               }}
                             >
@@ -845,7 +899,7 @@ export default function LoansScreen() {
               ) : (
                 <>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-                    <TouchableOpacity onPress={() => setSelectedConfigMethod(null)} style={{ marginRight: 15 }}>
+                    <TouchableOpacity onPress={() => { setPmErrors({}); setSelectedConfigMethod(null); }} style={{ marginRight: 15 }}>
                       <Text style={{ color: '#3b82f6', fontSize: 16 }}>← Volver</Text>
                     </TouchableOpacity>
                     <Text style={[styles.modalTitle, { marginBottom: 0 }]}>{selectedConfigMethod}</Text>
@@ -855,7 +909,11 @@ export default function LoansScreen() {
                     <View>
                       <Text style={styles.label}>Banco</Text>
                       <TouchableOpacity 
-                        style={[styles.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 }]} 
+                        style={[
+                          styles.input, 
+                          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+                          pmErrors.banco && { borderColor: '#ef4444', borderWidth: 1.5, backgroundColor: 'rgba(239, 68, 68, 0.08)' }
+                        ]} 
                         onPress={() => {
                           setBankSearch('');
                           setIsPickingBank(true);
@@ -877,6 +935,11 @@ export default function LoansScreen() {
                           Elegir ▼
                         </Text>
                       </TouchableOpacity>
+                      {pmErrors.banco && (
+                        <Text style={{ color: '#ef4444', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+                          {pmErrors.banco}
+                        </Text>
+                      )}
                       
                       <Text style={styles.label}>Tipo de documento</Text>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
@@ -902,29 +965,51 @@ export default function LoansScreen() {
                       
                       <Text style={styles.label}>Número de documento</Text>
                       <TextInput 
-                        style={styles.input} 
+                        style={[
+                          styles.input,
+                          pmErrors.cedula && { borderColor: '#ef4444', borderWidth: 1.5, backgroundColor: 'rgba(239, 68, 68, 0.08)' }
+                        ]} 
                         keyboardType="numeric"
                         value={paymentConfig['Pago Móvil']?.cedula || ''} 
-                        onChangeText={text => setPaymentConfig({
-                          ...paymentConfig, 
-                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), cedula: text }
-                        })}
+                        onChangeText={text => {
+                          setPaymentConfig({
+                            ...paymentConfig, 
+                            'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), cedula: text }
+                          });
+                          if (pmErrors.cedula) setPmErrors(prev => ({ ...prev, cedula: null }));
+                        }}
                         placeholder="12345678"
                         placeholderTextColor="#475569"
                       />
+                      {pmErrors.cedula && (
+                        <Text style={{ color: '#ef4444', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+                          {pmErrors.cedula}
+                        </Text>
+                      )}
                       
                       <Text style={styles.label}>Teléfono</Text>
                       <TextInput 
-                        style={styles.input} 
+                        style={[
+                          styles.input,
+                          pmErrors.telefono && { borderColor: '#ef4444', borderWidth: 1.5, backgroundColor: 'rgba(239, 68, 68, 0.08)' }
+                        ]} 
                         keyboardType="phone-pad"
                         value={paymentConfig['Pago Móvil']?.telefono || ''} 
-                        onChangeText={text => setPaymentConfig({
-                          ...paymentConfig, 
-                          'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), telefono: text }
-                        })}
+                        onChangeText={text => {
+                          setPaymentConfig({
+                            ...paymentConfig, 
+                            'Pago Móvil': { ...(paymentConfig['Pago Móvil'] || {}), telefono: text }
+                          });
+                          if (pmErrors.telefono) setPmErrors(prev => ({ ...prev, telefono: null }));
+                        }}
                         placeholder="04141234567"
                         placeholderTextColor="#475569"
                       />
+                      {pmErrors.telefono && (
+                        <Text style={{ color: '#ef4444', fontSize: 12, marginTop: -8, marginBottom: 12 }}>
+                          {pmErrors.telefono}
+                        </Text>
+                      )}
                     </View>
                   ) : (
                     <View>
@@ -941,7 +1026,7 @@ export default function LoansScreen() {
                   )}
                   
                   <View style={styles.modalActions}>
-                    <TouchableOpacity style={[styles.modalSubmit, { width: '100%' }]} onPress={() => setSelectedConfigMethod(null)}>
+                    <TouchableOpacity style={[styles.modalSubmit, { width: '100%' }]} onPress={handleConfirmConfigMethod}>
                       <Text style={styles.modalSubmitText}>Confirmar</Text>
                     </TouchableOpacity>
                   </View>
