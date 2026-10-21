@@ -67,6 +67,25 @@ class LoanRequestResponse(BaseModel):
     class Config:
         from_attributes = True
 
+def user_has_payment_methods(user_id: int, db: Session) -> bool:
+    """Verifica si el usuario tiene al menos un método de pago configurado y con datos válidos."""
+    config = db.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == user_id).first()
+    if not config or not config.payment_methods_json:
+        return False
+    try:
+        data = json.loads(config.payment_methods_json)
+        if not isinstance(data, dict):
+            return False
+        for method, val in data.items():
+            if method == "Pago Móvil" and isinstance(val, dict):
+                if val.get("banco") and val.get("cedula") and val.get("telefono"):
+                    return True
+            elif isinstance(val, str) and val.strip():
+                return True
+        return False
+    except Exception:
+        return False
+
 @router.post("/", response_model=LoanRequestResponse)
 def create_loan_request(
     loan: LoanRequestCreate, 
@@ -75,6 +94,12 @@ def create_loan_request(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de pedir prestado o solicitar un préstamo."
+        )
         
     new_loan = LoanRequest(
         organization_id=org_member["organization"].id,
@@ -254,6 +279,12 @@ def contribute_to_loan(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de aportar a un préstamo."
+        )
         
     loan = db.query(LoanRequest).filter(
         LoanRequest.id == loan_id,
@@ -368,6 +399,12 @@ def notify_payment(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de notificar pagos."
+        )
         
     contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
     if not contrib:
@@ -458,6 +495,12 @@ def notify_return_payment(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de devolver un préstamo."
+        )
         
     contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
     if not contrib:
