@@ -83,16 +83,14 @@ jobs:
           FLY_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_TOKEN_GLOBAL: ${{ secrets.FLY_API_TOKEN }}
 
-      - name: 📢 Reportar Log de Despliegue en Commit Comment si falla
-        if: failure()
+      - name: 📊 Resumen de Despliegue en GitHub Actions
+        if: always()
         run: |
-          LOG_CONTENT=$(cat /tmp/fly_deploy.log 2>/dev/null | tail -n 40 || echo "Sin log")
-          BODY="### ❌ Error al desplegar en Fly.io (${{ steps.env-config.outputs.env_label }}):
-\`\`\`text
-${LOG_CONTENT}
-\`\`\`"
-          curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
-            -d "$(jq -n --arg b "$BODY" '{"body": $b}')" || true
+          echo "### 🚀 Resultado de Despliegue Backend (${{ steps.env-config.outputs.env_label }})" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/fly_deploy.log ]; then
+            tail -n 60 /tmp/fly_deploy.log >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No se generó archivo de log." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
