@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView, Linking } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView, Linking, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -65,6 +65,23 @@ export default function LoansScreen() {
   const [bcvDate, setBcvDate] = useState(null);
   const [isBcvOutdated, setIsBcvOutdated] = useState(false);
   const [manualBcvRate, setManualBcvRate] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const configScrollRef = useRef(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Visor de Comprobantes de Pago
   const [receiptViewerVisible, setReceiptViewerVisible] = useState(false);
@@ -915,10 +932,18 @@ export default function LoansScreen() {
       )}
 
       {/* Modal para crear préstamo */}
-      <Modal visible={showModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {maxHeight: '90%'}]}>
-            <ScrollView>
+      <Modal visible={showModal} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowModal(false)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>Solicitar Préstamo</Text>
               
               <Text style={styles.label}>Monto (USD)</Text>
@@ -969,14 +994,38 @@ export default function LoansScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal para Configurar Datos de Pago */}
-      <Modal visible={showConfigModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {maxHeight: '90%'}]}>
-            <ScrollView>
+      <Modal 
+        visible={showConfigModal} 
+        animationType="slide" 
+        transparent={true}
+        statusBarTranslucent={true}
+        onRequestClose={() => {
+          if (isPickingBank) {
+            setIsPickingBank(false);
+          } else if (selectedConfigMethod) {
+            setSelectedConfigMethod(null);
+            setPmErrors({});
+          } else {
+            setShowConfigModal(false);
+          }
+        }}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              ref={configScrollRef}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 40 : 15 }}
+            >
               {!selectedConfigMethod ? (
                 <>
                   <Text style={styles.modalTitle}>Mis Datos de Pago</Text>
@@ -1029,8 +1078,8 @@ export default function LoansScreen() {
                     autoFocus={true}
                   />
 
-                  <View style={{ maxHeight: 280, borderWidth: 1, borderColor: '#334155', borderRadius: 8, overflow: 'hidden', marginBottom: 15 }}>
-                    <ScrollView nestedScrollEnabled={true}>
+                  <View style={{ maxHeight: keyboardVisible ? 180 : 280, borderWidth: 1, borderColor: '#334155', borderRadius: 8, overflow: 'hidden', marginBottom: 15 }}>
+                    <ScrollView nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
                       {banks
                         .filter(b => {
                           if (!bankSearch.trim()) return true;
@@ -1167,6 +1216,11 @@ export default function LoansScreen() {
                           });
                           if (pmErrors.cedula) setPmErrors(prev => ({ ...prev, cedula: null }));
                         }}
+                        onFocus={() => {
+                          setTimeout(() => {
+                            configScrollRef.current?.scrollTo({ y: 120, animated: true });
+                          }, 150);
+                        }}
                         placeholder="12345678"
                         placeholderTextColor="#475569"
                       />
@@ -1191,6 +1245,11 @@ export default function LoansScreen() {
                           });
                           if (pmErrors.telefono) setPmErrors(prev => ({ ...prev, telefono: null }));
                         }}
+                        onFocus={() => {
+                          setTimeout(() => {
+                            configScrollRef.current?.scrollToEnd({ animated: true });
+                          }, 150);
+                        }}
                         placeholder="04141234567"
                         placeholderTextColor="#475569"
                       />
@@ -1208,6 +1267,11 @@ export default function LoansScreen() {
                         multiline
                         value={typeof paymentConfig[selectedConfigMethod] === 'string' ? paymentConfig[selectedConfigMethod] : ''} 
                         onChangeText={text => setPaymentConfig({...paymentConfig, [selectedConfigMethod]: text})}
+                        onFocus={() => {
+                          setTimeout(() => {
+                            configScrollRef.current?.scrollToEnd({ animated: true });
+                          }, 150);
+                        }}
                         placeholder={`Ingresa los datos para ${selectedConfigMethod}...`}
                         placeholderTextColor="#475569"
                       />
@@ -1223,12 +1287,15 @@ export default function LoansScreen() {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal para Prometer Aporte */}
-      <Modal visible={showPledgeModal} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
+      <Modal visible={showPledgeModal} animationType="fade" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowPledgeModal(false)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Prometer Aporte 🤝</Text>
             <Text style={{color: '#94a3b8', marginBottom: 15}}>Vas a prometer un aporte para: {selectedLoan?.requester_name}</Text>
@@ -1243,14 +1310,22 @@ export default function LoansScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal para Notificar Pago */}
-      <Modal visible={showNotifyModal} animationType="fade" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {maxHeight: '90%'}]}>
-            <ScrollView>
+      <Modal visible={showNotifyModal} animationType="fade" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowNotifyModal(false)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>Notificar Pago 💸</Text>
               <Text style={{color: '#94a3b8', marginBottom: 15}}>Notificando pago de ${selectedContrib?.amount_usd}</Text>
 
@@ -1404,14 +1479,22 @@ export default function LoansScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal para Notificar Devolución */}
-      <Modal visible={showRepayModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {maxHeight: '90%'}]}>
-            <ScrollView>
+      <Modal visible={showRepayModal} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowRepayModal(false)}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>Devolver Dinero</Text>
               
               {selectedContrib && selectedLoan && (
@@ -1561,7 +1644,7 @@ export default function LoansScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal Visor de Comprobantes */}
@@ -1762,6 +1845,7 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' },
   cancelButtonText: { color: '#ef4444', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+  modalOverlayShifted: { justifyContent: 'flex-start', paddingTop: Platform.OS === 'android' ? 35 : 55 },
   modalContent: { backgroundColor: '#1e293b', borderRadius: 16, padding: 25 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
