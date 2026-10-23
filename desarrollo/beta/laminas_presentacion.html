@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Presentación Mutual Familiar - Fase Beta</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #3b82f6;
+      --primary-light: #60a5fa;
+      --primary-glow: rgba(59, 130, 246, 0.25);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      background-color: #030712;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Contenedor formato 9:16 para celulares */
+    #deck-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 480px;
+      max-height: 960px;
+      aspect-ratio: 9 / 16;
+      background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 16px;
+    }
+
+    @media (max-width: 500px) {
+      #deck-container {
+        border-radius: 0;
+        max-width: 100%;
+        max-height: 100%;
+      }
+    }
+
+    /* Barras de progreso superiores estilo Stories de Instagram / WhatsApp */
+    .progress-bar-container {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      gap: 4px;
+      z-index: 50;
+    }
+
+    .progress-segment {
+      height: 3px;
+      flex: 1;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #fff;
+      transition: width 0.25s ease-out;
+    }
+
+    .progress-fill.active {
+      width: 100%;
+      background: var(--primary-light);
+    }
+
+    .progress-fill.completed {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    /* Slides */
+    .slide-wrapper {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      padding: 36px 20px 70px 20px;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    .slide-wrapper.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Header del Slide */
+    .slide-header {
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      border: 1px solid transparent;
+    }
+
+    .badge-primary { background: rgba(59, 130, 246, 0.15); color: #93c5fd; border-color: rgba(59, 130, 246, 0.3); }
+    .badge-success { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+    .badge-warning { background: rgba(245, 158, 11, 0.15); color: #fde68a; border-color: rgba(245, 158, 11, 0.3); }
+
+    .slide-title {
+      font-size: 26px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #fff;
+      margin-bottom: 6px;
+      letter-spacing: -0.5px;
+    }
+
+    .slide-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* Contenido central del slide */
+    .slide-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+      margin: 10px 0;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .card-icon {
+      font-size: 22px;
+      line-height: 1;
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      flex-shrink: 0;
+    }
+
+    .card-content h4 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 3px;
+    }
+
+    .card-content p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    /* Stepper / Timeline */
+    .stepper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 13px;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .step-num.done {
+      background: var(--success);
+    }
+
+    .step-text {
+      flex: 1;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+
+    .step-text strong {
+      color: #fff;
+      display: block;
+    }
+
+    /* Footer del Slide */
+    .slide-footer {
+      font-size: 12px;
+      color: var(--text-dim);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Controles de navegación inferiores */
+    .nav-controls {
+      position: absolute;
+      bottom: 12px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 40;
+    }
+
+    .nav-btn {
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+
+    .nav-btn:active {
+      transform: scale(0.97);
+      background: var(--primary);
+    }
+
+    .slide-counter {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Áreas táctiles transparentes a los lados (Tocar izquierda = atrás, tocar derecha = adelante) */
+    .tap-zone {
+      position: absolute;
+      top: 50px;
+      bottom: 70px;
+      width: 25%;
+      z-index: 30;
+      cursor: pointer;
+    }
+    .tap-left { left: 0; }
+    .tap-right { right: 0; }
+
+    /* Estilos específicos para la portada */
+    .hero-box {
+      text-align: center;
+      padding: 24px 10px;
+    }
+    .hero-icon {
+      font-size: 54px;
+      margin-bottom: 14px;
+      display: inline-block;
+      filter: drop-shadow(0 10px 15px var(--primary-glow));
+    }
+    .hero-title {
+      font-size: 32px;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    .hero-desc {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .highlight-card {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+    .highlight-card p {
+      font-size: 14px;
+      color: #e2e8f0;
+      line-height: 1.4;
+      font-style: italic;
+    }
+    /* Estilos de impresión para generar PDF diapositiva por diapositiva */
+    @media print {
+      body {
+        background: #0f172a !important;
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+      }
+      #deck-container {
+        max-width: 100% !important;
+        max-height: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        aspect-ratio: auto !important;
+      }
+      .progress-bar-container,
+      .tap-zone,
+      .nav-controls,
+      .action-dock {
+        display: none !important;
+      }
+      .slide-wrapper {
+        display: flex !important;
+        page-break-after: always;
+        break-after: page;
+        min-height: 100vh;
+        height: 100vh;
+        box-sizing: border-box;
+        padding: 40px 30px !important;
+      }
+    }
+
+    /* Barra de herramientas flotante discreta (Pantalla completa y PDF) */
+    .action-dock {
+      position: absolute;
+      top: 24px;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+      z-index: 60;
+    }
+
+    .dock-btn {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: all 0.2s;
+    }
+
+    .dock-btn:hover {
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="deck-container">
+    <!-- Barra de utilidades flotante -->
+    <div class="action-dock">
+      <button class="dock-btn" onclick="toggleFullScreen()" title="Pantalla completa">⛶ Pantalla Completa</button>
+      <button class="dock-btn" onclick="window.print()" title="Imprimir o Guardar en PDF">🖨️ PDF</button>
+    </div>
+
+    <!-- Barras superiores de progreso -->
+    <div class="progress-bar-container" id="progressBar"></div>
+
+    <!-- Zonas táctiles para pasar láminas -->
+    <div class="tap-zone tap-left" onclick="prevSlide()"></div>
+    <div class="tap-zone tap-right" onclick="nextSlide()"></div>
+
+    <!-- ==================== LÁMINA 1 ==================== -->
+    <div class="slide-wrapper active" id="slide-0">
+      <div class="slide-header" style="text-align: center;">
+        <span class="badge badge-primary">Fase Beta • Lanzamiento Oficial</span>
+      </div>
+      <div class="slide-body">
+        <div class="hero-box">
+          <div class="hero-icon">🤝</div>
+          <h1 class="hero-title">Mutual Familiar</h1>
+          <p class="hero-desc">Presentación de nuestra primera mutual real en producción.</p>
+        </div>
+        <div class="highlight-card">
+          <p>"Unidos para protegernos, apoyarnos mutuamente y hacer crecer lo nuestro con total transparencia."</p>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Septiembre - Octubre 2026</span>
+        <span>MutualSol / CivicCore</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 2 ==================== -->
+    <div class="slide-wrapper" id="slide-1">
+      <div class="slide-header">
+        <span class="badge badge-primary">Visión de Futuro</span>
+        <h2 class="slide-title">Una Visión Democrática Global</h2>
+        <p class="slide-subtitle">Construyendo tecnología libre para organizaciones humanas.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">🏠</div>
+          <div class="card-content">
+            <h4>1. Familias y Hogares</h4>
+            <p>Fondos de contingencia y préstamos justos sin usura ni bancos intermediarios.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">⚖️</div>
+          <div class="card-content">
+            <h4>2. Cooperativas y Gremios</h4>
+            <p>Decisiones colectivas con votaciones democráticas transparentes.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🌐</div>
+          <div class="card-content">
+            <h4>3. Mutuales Mayores</h4>
+            <p>Financiamiento productivo solidario entre comunidades hermanadas.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Base tecnológica: CivicCore</span>
+        <span>Lámina 2 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 3 ==================== -->
+    <div class="slide-wrapper" id="slide-2">
+      <div class="slide-header">
+        <span class="badge badge-warning">Ingeniería</span>
+        <h2 class="slide-title">Ciclo de Vida del Software</h2>
+        <p class="slide-subtitle">¿Cómo nace una tecnología sólida y segura?</p>
+      </div>
+      <div class="slide-body">
+        <div class="stepper">
+          <div class="step-item">
+            <div class="step-num done">✓</div>
+            <div class="step-text"><strong>1. Conceptualización</strong>Detectar el problema real en las familias.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num done">✓</div>
+            <div class="step-text"><strong>2. Diseño y Estatutos</strong>Reglas claras, matemática cambiaria y flujos.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num done">✓</div>
+            <div class="step-text"><strong>3. Desarrollo</strong>Construir el backend y la app móvil Android.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num done">✓</div>
+            <div class="step-text"><strong>4. Laboratorio (QA)</strong>Meses de pruebas de estrés y ciberseguridad.</div>
+          </div>
+          <div class="step-item" style="border-color: rgba(59, 130, 246, 0.5); background: rgba(59, 130, 246, 0.1);">
+            <div class="step-num">5</div>
+            <div class="step-text"><strong style="color: #93c5fd;">5. Fase Beta (HOY)</strong>Pruebas reales en producción con nosotros.</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Del laboratorio a la realidad</span>
+        <span>Lámina 3 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 4 ==================== -->
+    <div class="slide-wrapper" id="slide-3">
+      <div class="slide-header">
+        <span class="badge badge-success">Grupo Pionero</span>
+        <h2 class="slide-title">¿Qué Es un "Usuario Beta"?</h2>
+        <p class="slide-subtitle">Ustedes son los co-fundadores de esta experiencia.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">🚀</div>
+          <div class="card-content">
+            <h4>Los Primeros en el Mundo</h4>
+            <p>Tendrán en sus manos antes que nadie una herramienta diseñada para protegernos.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🛡️</div>
+          <div class="card-content">
+            <h4>Segura y Comprobada</h4>
+            <p>Toda la lógica financiera ya fue verificada técnicamente antes de llegar a ustedes.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💡</div>
+          <div class="card-content">
+            <h4>Su Opinión Vale Oro</h4>
+            <p>Con su uso real descubriremos qué es fácil, qué se puede simplificar y qué sumar.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Construyendo juntos</span>
+        <span>Lámina 4 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 5 ==================== -->
+    <div class="slide-wrapper" id="slide-4">
+      <div class="slide-header">
+        <span class="badge badge-primary">Principio de Confianza</span>
+        <h2 class="slide-title">Tu Dinero No Pasa por Extraños</h2>
+        <p class="slide-subtitle">Cero intermediarios y cero riesgo de custodia.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card" style="border-left: 4px solid #ef4444;">
+          <div class="card-icon">🏦</div>
+          <div class="card-content">
+            <h4>Apps tradicionales y Bancos</h4>
+            <p>Retienen tu plata, cobran comisiones y deciden cuándo te la entregan.</p>
+          </div>
+        </div>
+        <div class="card" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.08);">
+          <div class="card-icon">📲</div>
+          <div class="card-content">
+            <h4>Mutual Familiar (Pago Móvil Directo)</h4>
+            <p>El dinero va <strong>directo de tu cuenta a la de tu familiar</strong>. La app nunca toca tus fondos.</p>
+          </div>
+        </div>
+        <div class="card" style="border-left: 4px solid #3b82f6;">
+          <div class="card-icon">📖</div>
+          <div class="card-content">
+            <h4>El Rol de la Aplicación</h4>
+            <p>Es nuestro <strong>libro contable digital</strong>: audita, calcula la tasa justa y registra comprobantes.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Transparencia absoluta</span>
+        <span>Lámina 5 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 6 ==================== -->
+    <div class="slide-wrapper" id="slide-5">
+      <div class="slide-header">
+        <span class="badge badge-success">Escudo Cambiario</span>
+        <h2 class="slide-title">Protección Contra la Inflación</h2>
+        <p class="slide-subtitle">Contabilidad indexada en USD con la Tasa Oficial BCV.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">📉</div>
+          <div class="card-content">
+            <h4>El problema de prestar en Bolívares</h4>
+            <p>Si prestas 1000 Bs hoy, en dos meses no compras ni la mitad. Prestar genera pérdidas o roces.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💵</div>
+          <div class="card-content">
+            <h4>Cuentas Claras en Dólares</h4>
+            <p>El préstamo se registra en <strong>USD</strong>. El valor real de lo prestado no se devalúa en el tiempo.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🏛️</div>
+          <div class="card-content">
+            <h4>Tasa Oficial del Día</h4>
+            <p>Se paga y se devuelve en Bolívares por Pago Móvil al valor oficial BCV de la fecha de pago.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Justicia patrimonial</span>
+        <span>Lámina 6 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 7 ==================== -->
+    <div class="slide-wrapper" id="slide-6">
+      <div class="slide-header">
+        <span class="badge badge-primary">Módulo de Préstamos</span>
+        <h2 class="slide-title">Préstamos Directos (1 a 1)</h2>
+        <p class="slide-subtitle">Rápido, sin papeleos ni intereses de usura.</p>
+      </div>
+      <div class="slide-body">
+        <div class="stepper">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>Solicitud</strong>Pides el monto en USD, indicas el motivo y la fecha estimada de devolución.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-text"><strong>Aporte Familiar</strong>Un miembro acepta financiarlo y te transfiere por Pago Móvil.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-text"><strong>Comprobante</strong>Sube la captura del pago; tú confirmas recepción en la app.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-text"><strong>Reintegro</strong>Cuando devuelves el dinero, el prestamista valida y la deuda se salda.</div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Simple y transparente</span>
+        <span>Lámina 7 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 8 ==================== -->
+    <div class="slide-wrapper" id="slide-7">
+      <div class="slide-header">
+        <span class="badge badge-success">Ahorro y Solidaridad</span>
+        <h2 class="slide-title">Fondos Comunes Familiares</h2>
+        <p class="slide-subtitle">Un fondo colectivo para emergencias y metas.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">🩺</div>
+          <div class="card-content">
+            <h4>Fondo de Emergencia y Salud</h4>
+            <p>Un colchón para medicinas, exámenes o imprevistos de cualquier familiar.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🛠️</div>
+          <div class="card-content">
+            <h4>Fondo de Mantenimiento</h4>
+            <p>Reparaciones del hogar, repuestos de vehículos o proyectos de la familia.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <div class="card-content">
+            <h4>Monitoreo en Tiempo Real</h4>
+            <p>Todos ven cuánto dinero hay acumulado y quiénes han aportado su cuota.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Fuerza en equipo</span>
+        <span>Lámina 8 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 9 ==================== -->
+    <div class="slide-wrapper" id="slide-8">
+      <div class="slide-header" style="text-align: center;">
+        <span class="badge badge-warning">Demostración en Vivo</span>
+        <h2 class="slide-title" style="margin-top: 10px;">¡Veámoslo en la App!</h2>
+        <p class="slide-subtitle">3 minutos para verla funcionando en vivo.</p>
+      </div>
+      <div class="slide-body" style="align-items: center; justify-content: center;">
+        <div style="font-size: 60px; margin-bottom: 10px;">📱</div>
+        <div class="card" style="width: 100%;">
+          <div class="card-content" style="text-align: left;">
+            <p style="margin-bottom: 8px;">🔹 Ver la mutual activa y miembros.</p>
+            <p style="margin-bottom: 8px;">🔹 Cómo registrar tus datos de Pago Móvil en segundos.</p>
+            <p>🔹 Cómo se ve una solicitud de préstamo y su comprobante.</p>
+          </div>
+        </div>
+        <p style="font-size: 13px; color: var(--primary-light); margin-top: 14px; font-weight: bold;">
+          (El expositor compartirá la pantalla de la app)
+        </p>
+      </div>
+      <div class="slide-footer">
+        <span>Demostración práctica</span>
+        <span>Lámina 9 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 10 ==================== -->
+    <div class="slide-wrapper" id="slide-9">
+      <div class="slide-header">
+        <span class="badge badge-primary">Decisiones de la Asamblea</span>
+        <h2 class="slide-title">Primeros Acuerdos Familiares</h2>
+        <p class="slide-subtitle">Nuestra mutual, nuestras propias reglas.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">🏷️</div>
+          <div class="card-content">
+            <h4>1. Nombre Oficial</h4>
+            <p>¿Cómo nos identificamos? (ej. <em>Familia Rojas Salazar</em>).</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💳</div>
+          <div class="card-content">
+            <h4>2. Datos de Pago Móvil</h4>
+            <p>Que todos carguen su banco, teléfono y cédula al terminar la llamada.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🎯</div>
+          <div class="card-content">
+            <h4>3. Montos Iniciales Prudenciales</h4>
+            <p>Acordar un límite sugerido para préstamos de prueba (ej. $10 - $30).</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Gobernanza inicial</span>
+        <span>Lámina 10 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 11 ==================== -->
+    <div class="slide-wrapper" id="slide-10">
+      <div class="slide-header">
+        <span class="badge badge-warning">Próximos Pasos</span>
+        <h2 class="slide-title">Lo Que Viene en el Futuro</h2>
+        <p class="slide-subtitle">Funciones que se sumarán según madure el sistema.</p>
+      </div>
+      <div class="slide-body">
+        <div class="card">
+          <div class="card-icon">🐮</div>
+          <div class="card-content">
+            <h4>Colectas Compartidas ("Vacas")</h4>
+            <p>Préstamos más grandes donde varios miembros aportan fracciones para completarlo juntos.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🗳️</div>
+          <div class="card-content">
+            <h4>Módulo de Gobernanza y Voto</h4>
+            <p>Votaciones formales con puntos de votación para cambiar reglas y estatutos.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🌿</div>
+          <div class="card-content">
+            <h4>Creación de Nuevas Mutuales</h4>
+            <p>Poder abrir sub-mutuales para amigos, emprendimientos o familiares lejanos.</p>
+          </div>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>Evolución continua</span>
+        <span>Lámina 11 / 12</span>
+      </div>
+    </div>
+
+    <!-- ==================== LÁMINA 12 ==================== -->
+    <div class="slide-wrapper" id="slide-11">
+      <div class="slide-header" style="text-align: center;">
+        <span class="badge badge-success">¡Comencemos!</span>
+        <h2 class="slide-title" style="margin-top: 10px;">Próximos Pasos</h2>
+        <p class="slide-subtitle">Cómo unirte hoy mismo a la mutual.</p>
+      </div>
+      <div class="slide-body">
+        <div class="stepper">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>Descarga la aplicación</strong>Te enviaremos el enlace del instalador APK oficial por WhatsApp.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-text"><strong>Únete con tu invitación</strong>Usa el código corto de 8 caracteres generado por el fundador.</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-text"><strong>Configura tu Pago Móvil</strong>Ve a la pestaña Perfil y carga tu banco y teléfono.</div>
+          </div>
+        </div>
+        <div class="highlight-card" style="margin-top: 10px;">
+          <p>📧 Soporte directo: <strong>mutualfam@gmail.com</strong><br>o por nuestro grupo familiar de WhatsApp.</p>
+        </div>
+      </div>
+      <div class="slide-footer">
+        <span>¡Gracias por ser parte!</span>
+        <span>Lámina 12 / 12</span>
+      </div>
+    </div>
+
+    <!-- Barra de navegación inferior -->
+    <div class="nav-controls">
+      <button class="nav-btn" onclick="prevSlide()">◀ Anterior</button>
+      <span class="slide-counter" id="slideCounter">1 / 12</span>
+      <button class="nav-btn" onclick="nextSlide()">Siguiente ▶</button>
+    </div>
+  </div>
+
+  <script>
+    const totalSlides = 12;
+    let currentSlide = 0;
+
+    // Generar barras superiores de progreso
+    const progressContainer = document.getElementById('progressBar');
+    for (let i = 0; i < totalSlides; i++) {
+      const seg = document.createElement('div');
+      seg.className = 'progress-segment';
+      const fill = document.createElement('div');
+      fill.className = 'progress-fill';
+      fill.id = `fill-${i}`;
+      seg.appendChild(fill);
+      progressContainer.appendChild(seg);
+    }
+
+    function updateSlide() {
+      // Ocultar todos y mostrar el actual
+      document.querySelectorAll('.slide-wrapper').forEach((el, index) => {
+        el.classList.toggle('active', index === currentSlide);
+      });
+
+      // Actualizar barras de progreso
+      for (let i = 0; i < totalSlides; i++) {
+        const fill = document.getElementById(`fill-${i}`);
+        fill.className = 'progress-fill';
+        if (i < currentSlide) {
+          fill.classList.add('completed');
+        } else if (i === currentSlide) {
+          fill.classList.add('active');
+        }
+      }
+
+      // Contador
+      document.getElementById('slideCounter').textContent = `${currentSlide + 1} / ${totalSlides}`;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    // Teclas de flecha
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+        prevSlide();
+      }
+    });
+
+    // Soporte táctil básico (swipe)
+    let touchStartX = 0;
+    document.getElementById('deck-container').addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, false);
+
+    document.getElementById('deck-container').addEventListener('touchend', (e) => {
+      let touchEndX = e.changedTouches[0].screenX;
+      let diff = touchEndX - touchStartX;
+      if (Math.abs(diff) > 40) {
+        if (diff < 0) nextSlide(); // Swipe izquierda = avanzar
+        else prevSlide(); // Swipe derecha = retroceder
+      }
+    }, false);
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.log(`Error al activar pantalla completa: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    updateSlide();
+  </script>
+</body>
+</html>
