@@ -1,0 +1,1 @@
+No llegan notificaciones, antes llegaban. Revisa los logs, primero se implementaron las notificaciones y luego se corrigieron algunas fallas. El commit 03413ab1627f87646a612bc1c4d5a01054793cd6 corresponde a la última versión probada que funcionó.
