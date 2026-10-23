@@ -67,6 +67,8 @@ export default function InviteLanding() {
   const [toast, setToast] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const downloadCooldownRef = useRef(false);
   const toastTimer = useRef(null);
   const envConfig = getEnvironmentConfig();
 
@@ -123,11 +125,24 @@ export default function InviteLanding() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (e) => {
+    if (downloadCooldownRef.current) {
+      if (e) e.preventDefault();
+      return;
+    }
+    downloadCooldownRef.current = true;
+    setIsDownloading(true);
+
     if (token) {
       copyText(window.location.href);
     }
     setDownloadStarted(true);
+
+    // Evita doble activación por toques rápidos o reintentos inmediatos
+    window.setTimeout(() => {
+      downloadCooldownRef.current = false;
+      setIsDownloading(false);
+    }, 5000);
   };
 
   if (status === 'invalid') {
@@ -224,13 +239,16 @@ export default function InviteLanding() {
             </p>
             <a
               id="download-apk-btn"
-              href={DOWNLOAD_APK_LINK}
+              href={isDownloading ? undefined : DOWNLOAD_APK_LINK}
               onClick={handleDownload}
-              className="il-btn il-btn--primary"
-              download="mutualfam.apk"
+              className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
             >
               <Download aria-hidden="true" />
-              {envConfig.isQA ? 'Descargar MutualFam (QA)' : 'Descargar MutualFam'}
+              {isDownloading
+                ? 'Iniciando descarga...'
+                : envConfig.isQA
+                ? 'Descargar MutualFam (QA)'
+                : 'Descargar MutualFam'}
             </a>
             <p className="il-note">
               Si Chrome dice <em>"Este tipo de archivo puede dañar tu dispositivo"</em>, toca{' '}

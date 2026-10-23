@@ -106,16 +106,23 @@ export default function FundsScreen() {
     </View>
   );
 
+  const handleCreateFundPress = () => {
+    Alert.alert(
+      'En Construcción',
+      'La creación y propuesta de fondos comunes se encuentra actualmente en desarrollo y estará disponible en una próxima versión.'
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <ScreenTitle
           title="Fondos Comunes"
-          right={activeOrg?.role === 'founder' && (
-            <TouchableOpacity style={styles.headerAddButton} onPress={() => setShowModal(true)}>
+          right={
+            <TouchableOpacity style={styles.headerAddButton} onPress={handleCreateFundPress}>
               <Text style={styles.headerAddButtonText}>Crear Fondo</Text>
             </TouchableOpacity>
-          )}
+          }
         />
       </View>
 
