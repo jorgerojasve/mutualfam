@@ -866,22 +866,37 @@ export default function LoansScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <ScreenTitle title="Préstamos" />
-        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-          {bcvRate ? (
-            <Text style={{color: isBcvOutdated ? '#ef4444' : '#94a3b8', fontSize: 13}}>
-              🏦 Tasa BCV: {bcvRate} Bs/USD {isBcvOutdated ? '(⚠️ Desactualizada)' : ''}
+        <ScreenTitle 
+          title="Préstamos" 
+          right={
+            <View style={{flexDirection: 'row', gap: 8, alignItems: 'center'}}>
+              <TouchableOpacity 
+                style={[styles.addButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3b82f6', paddingVertical: 6, paddingHorizontal: 10}]} 
+                onPress={handleOpenConfig}
+              >
+                <Text style={[styles.addButtonText, {color: '#3b82f6', fontSize: 13}]}>⚙️ Datos</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.addButton, {paddingVertical: 6, paddingHorizontal: 12}]} 
+                onPress={handlePressCreateLoan}
+              >
+                <Text style={[styles.addButtonText, {fontSize: 13}]}>Pedir</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+        {bcvRate ? (
+          <View style={styles.bcvRateContainer}>
+            <Text style={[styles.bcvRateText, isBcvOutdated && styles.bcvRateTextOutdated]}>
+              🏦 Tasa BCV: {bcvRate} Bs/USD
             </Text>
-          ) : <View />}
-          <View style={{flexDirection: 'row', gap: 10}}>
-            <TouchableOpacity style={[styles.addButton, {backgroundColor: 'transparent', borderWidth: 1, borderColor: '#3b82f6', paddingVertical: 8, paddingHorizontal: 12}]} onPress={handleOpenConfig}>
-              <Text style={[styles.addButtonText, {color: '#3b82f6', fontSize: 14}]}>⚙️ Datos</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.addButton, {paddingVertical: 8, paddingHorizontal: 12}]} onPress={handlePressCreateLoan}>
-              <Text style={[styles.addButtonText, {fontSize: 14}]}>Pedir</Text>
-            </TouchableOpacity>
+            {isBcvOutdated ? (
+              <View style={styles.bcvOutdatedBadge}>
+                <Text style={styles.bcvOutdatedBadgeText}>⚠️ Desactualizada</Text>
+              </View>
+            ) : null}
           </View>
-        </View>
+        ) : null}
       </View>
 
       {!hasConfiguredPaymentMethods() && (
@@ -1745,6 +1760,35 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: 'bold', color: '#f8fafc' },
   addButton: { backgroundColor: '#3b82f6', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold' },
+  bcvRateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: -8,
+    marginBottom: 4,
+  },
+  bcvRateText: {
+    color: '#94a3b8',
+    fontSize: 13,
+  },
+  bcvRateTextOutdated: {
+    color: '#ef4444',
+    fontWeight: '500',
+  },
+  bcvOutdatedBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  bcvOutdatedBadgeText: {
+    color: '#ef4444',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
   missingPmBanner: {
     marginHorizontal: 15,
     marginTop: 12,

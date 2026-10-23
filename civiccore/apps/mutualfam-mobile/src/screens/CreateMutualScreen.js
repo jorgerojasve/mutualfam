@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { OrgContext } from '../context/OrgContext';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, handleLimitError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
 
 export default function CreateMutualScreen({ navigation }) {
@@ -37,7 +37,9 @@ export default function CreateMutualScreen({ navigation }) {
         navigation.replace('SelectMutual');
       }
     } catch (e) {
-      Alert.alert('Error', getErrorMessage(e, 'No se pudo crear la mutual'));
+      if (!handleLimitError(e, 'Límite de Creación')) {
+        Alert.alert('Error', getErrorMessage(e, 'No se pudo crear la mutual'));
+      }
     } finally {
       setLoading(false);
     }
@@ -58,6 +60,11 @@ export default function CreateMutualScreen({ navigation }) {
       </View>
       <Text style={styles.subtitle}>Inicia tu propia familia y administra sus préstamos y fondos.</Text>
       
+      <View style={styles.policyNotice}>
+        <Text style={styles.policyNoticeText}>
+          📌 Cada miembro de la mutual inicial puede crear hasta 1 mutual adicional. Si deseas desplegar tu propia instancia o bot, contáctanos por soporte.
+        </Text>
+      </View>
       <TextInput
         style={styles.input}
         placeholder="Nombre de la familia (ej. Familia Pérez)"
@@ -132,7 +139,20 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#94a3b8',
-    marginBottom: 30,
+    marginBottom: 16,
+  },
+  policyNotice: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  policyNoticeText: {
+    color: '#93c5fd',
+    fontSize: 13,
+    lineHeight: 18,
   },
   input: {
     backgroundColor: '#1e293b',

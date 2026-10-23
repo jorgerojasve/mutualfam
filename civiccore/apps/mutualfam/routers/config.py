@@ -177,6 +177,8 @@ def get_config():
         except Exception:
             pass
 
+    from services.limits import get_limits_summary, set_limit_override, reset_limit_overrides
+
     return {
         "mutual_name": "Mutual Familiar",
         "currency": "USD",
@@ -188,9 +190,47 @@ def get_config():
             "loans_enabled": True,
             "funds_enabled": True
         },
+        "limits": get_limits_summary(),
         "app_version": get_latest_release_info(),
         "banks": VENEZUELAN_BANKS
     }
+
+class LimitsUpdate(BaseModel):
+    max_members_per_mutual: int = None
+    extra_mutuals_first_mutual: int = None
+    contact_email: str = None
+
+@router.get("/limits")
+def get_limits():
+    """Retorna los límites vigentes del sistema para miembros y mutuales."""
+    from services.limits import get_limits_summary
+    return get_limits_summary()
+
+@router.post("/limits")
+def update_limits_qa(data: LimitsUpdate):
+    """Permite ajustar los límites en tiempo de ejecución (exclusivo para QA/Sandbox)."""
+    from fastapi import HTTPException
+    if not is_qa_environment():
+        raise HTTPException(status_code=403, detail="Modificación de límites en caliente solo disponible en entorno QA")
+    from services.limits import set_limit_override, get_limits_summary
+    if data.max_members_per_mutual is not None:
+        set_limit_override("max_members_per_mutual", data.max_members_per_mutual)
+    if data.extra_mutuals_first_mutual is not None:
+        set_limit_override("extra_mutuals_first_mutual", data.extra_mutuals_first_mutual)
+    if data.contact_email is not None:
+        set_limit_override("contact_email", data.contact_email)
+    return {"message": "Límites actualizados para pruebas en QA", "limits": get_limits_summary()}
+
+@router.delete("/limits")
+def reset_limits_qa():
+    """Restaura los límites a sus valores por defecto / variables de entorno (exclusivo para QA/Sandbox)."""
+    from fastapi import HTTPException
+    if not is_qa_environment():
+        raise HTTPException(status_code=403, detail="Reinicio de límites solo disponible en entorno QA")
+    from services.limits import reset_limit_overrides, get_limits_summary
+    reset_limit_overrides()
+    return {"message": "Límites restaurados a valores por defecto", "limits": get_limits_summary()}
+
 
 VENEZUELAN_BANKS = [
     {"code": "0102", "name": "Banco de Venezuela"},

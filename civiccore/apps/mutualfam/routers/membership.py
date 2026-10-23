@@ -129,12 +129,22 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     
     return {"message": "Usuario registrado exitosamente", "user_id": new_user.id}
 
+from services.limits import (
+    check_can_create_organization,
+    check_can_join_organization,
+    check_can_create_invite,
+    get_max_members_per_mutual,
+)
+
 class CreateOrgRequest(BaseModel):
     name: str
     description: str = ""
 
 @router.post("/organizations/create")
 def create_organization(req: CreateOrgRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Regla 1: Validar si el usuario puede crear una nueva mutual
+    check_can_create_organization(db, current_user)
+
     org = Organization(
         name=req.name, 
         description=req.description,
@@ -166,6 +176,9 @@ def create_invite(org_id: int, current_org_member: dict = Depends(get_current_or
         
     if not org.grace_period_ends_at or utcnow() > org.grace_period_ends_at.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=403, detail="El período de gracia de 24 horas ha expirado. Debe proponerse en asamblea.")
+
+    # Regla 2: Validar si la mutual ya llegó a su capacidad máxima antes de emitir invitación
+    check_can_create_invite(db, org.id)
         
     token = generate_invite_code(db)
     invite = OrganizationInvite(
@@ -204,6 +217,9 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
     
     if existing_membership:
         raise HTTPException(status_code=400, detail="Ya perteneces a esta mutual")
+
+    # Regla 2: Validar si la mutual ya alcanzó su límite máximo de miembros
+    check_can_join_organization(db, invite.organization_id)
         
     invite.uses_count += 1
     
@@ -251,11 +267,21 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
         
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     
+    # Validar si la mutual está llena
+    check_can_join_organization(db, invite.organization_id)
+
+    active_count = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == invite.organization_id,
+        OrganizationMembership.status == MemberStatus.ACTIVE
+    ).count()
+
     return {
         "organization_name": org.name,
         "organization_id": org.id,
         "token": invite.token,
-        "code": format_invite_code(invite.token)
+        "code": format_invite_code(invite.token),
+        "member_count": active_count,
+        "max_members": get_max_members_per_mutual()
     }
 
 @router.get("/members")

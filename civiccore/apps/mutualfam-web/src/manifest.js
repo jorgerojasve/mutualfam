@@ -36,7 +36,7 @@ const manifest = {
     label: "Estable"
   },
 
-  supportEmail: "soporte@mutualfam.com",
+  supportEmail: "mutualfam@gmail.com",
 };
 
 export default manifest;
