@@ -2,7 +2,7 @@
 
 > **Documento de Trabajo para la Primera Asamblea / Videollamada de Lanzamiento**  
 > **Formato de Láminas:** Vertical 9:16 (Optimizado para teléfonos celulares y videollamadas de WhatsApp)  
-> **Archivo Interactivo:** [`desarrollo/beta/laminas_presentacion.html`](file:///home/caracas2025/Documentos/mutual-qa/desarrollo/beta/laminas_presentacion.html)  
+> **Archivo Interactivo:** [`desarrollo/beta/laminas_presentacion.html`](file:///home/caracas2025/Documentos/mutual-qa/desarrollo/beta/laminas_presentacion.html) (11 Láminas)  
 > **Audiencia:** Miembros fundadores de la primera mutual familiar en producción (Usuarios Beta)  
 > **Duración sugerida:** 25 a 35 minutos (15 min láminas + 5 min demo app en vivo + 10 min acuerdos y preguntas)
 
@@ -19,8 +19,8 @@
 ### 1.2. Dinámica de la presentación (Láminas + App en vivo)
 - **Paso 1 (Láminas):** Abre [`laminas_presentacion.html`](file:///home/caracas2025/Documentos/mutual-qa/desarrollo/beta/laminas_presentacion.html) en el navegador de tu celular (Chrome / Firefox) o en tu PC si haces la llamada desde WhatsApp Web/Desktop. Toca el botón `⛶ Pantalla Completa` para ocultar barras del navegador.
 - **Paso 2 (Navegación):** Avanza tocando el lado derecho de la pantalla, deslizando el dedo (swipe) o con los botones inferiores `◀ Anterior` / `Siguiente ▶`.
-- **Paso 3 (Transición a la App):** Al llegar a la **Lámina 9**, minimiza el navegador y abre directamente la aplicación **Mutual Familiar** en tu celular. Los participantes verán la app funcionando en tiempo real sin desconectar la llamada.
-- **Paso 4 (Retorno a acuerdos):** Vuelve al navegador en la **Lámina 10** para cerrar los acuerdos de la familia.
+- **Paso 3 (Transición a la App):** Al llegar a la **Lámina 8**, minimiza el navegador y abre directamente la aplicación **Mutual Familiar** en tu celular. Los participantes verán la app funcionando en tiempo real sin desconectar la llamada.
+- **Paso 4 (Retorno a acuerdos):** Vuelve al navegador en la **Lámina 9** para cerrar los acuerdos de la familia.
 
 > [!TIP]
 > **Modo No Molestar:** Antes de iniciar la llamada, activa en tu celular el modo *No Molestar* o silencia notificaciones personales para que no aparezcan mensajes privados en la pantalla compartida.
@@ -40,7 +40,7 @@
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"¡Hola a todos, gracias por conectarse! Hoy damos un paso muy especial como familia. Les quiero presentar un proyecto en el que hemos venido trabajando durante meses: nuestra propia **Mutual Familiar**.  
-> El objetivo es muy sencillo: tener una herramienta propia, segura y transparente para ayudarnos económicamente, hacer frente a emergencias médicas o familiares, y prestarnos dinero entre nosotros sin bancos de por medio y sin usura ni enredos.  
+> El objetivo es muy sencillo: tener una herramienta propia, segura y transparente para ayudarnos económicamente y prestarnos dinero entre nosotros sin bancos de por medio y sin usura ni enredos.  
 > Esta reunión es breve: les mostraré cómo funciona, veremos la app en vivo y al final tomaremos juntos las primeras decisiones de nuestra mutual."*
 
 ---
@@ -53,7 +53,7 @@
   1. **🏠 Familias y Hogares:** Fondos de contingencia y préstamos justos sin usura ni bancos intermediarios.
   2. **⚖️ Cooperativas y Gremios:** Decisiones colectivas con votaciones democráticas transparentes.
   3. **🌐 Mutuales Mayores:** Financiamiento productivo solidario entre comunidades hermanadas.
-- **Pie:** Base tecnológica: CivicCore • Lámina 2 / 12
+- **Pie:** Base tecnológica: CivicCore • Lámina 2 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Quiero que sepan que esto no es un experimento improvisado ni una aplicación aislada. Mutual Familiar nace de una visión mayor llamada **CivicCore / MutualSol**, un proyecto de software libre para que las comunidades se organicen de forma democrática.  
@@ -71,14 +71,16 @@
   - `✓ 3. Desarrollo:` Construir el sistema central (backend) y la app móvil Android.
   - `✓ 4. Laboratorio (QA):` Meses de pruebas técnicas de estrés, límites y ciberseguridad.
   - `👉 5. Fase Beta (HOY):` Pruebas reales en producción con nosotros.
-- **Pie:** Del laboratorio a la realidad • Lámina 3 / 12
+  - `⏳ 6. Estabilización y Versión Estable:` Lanzamiento oficial definitivo y actualizaciones continuas.
+- **Pie:** Del laboratorio a la realidad • Lámina 3 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"A veces uno descarga una app y no imagina todo lo que hay detrás. Todo software profesional pasa por fases muy rigurosas:  
 > Primero, **Conceptualización y Diseño**, donde pensamos cada regla y cómo proteger el dinero de la inflación.  
 > Luego, la etapa de **Desarrollo**, donde se programó el servidor y la aplicación Android.  
 > Después vinieron meses de **Laboratorio y Pruebas QA**, donde simulamos miles de operaciones, comprobamos la seguridad de los datos y afinamos los detalles.  
-> Y hoy entramos formalmente en la **Fase Beta**, que es el momento en que la app sale del laboratorio y pasa a la vida real con un grupo selecto de personas de máxima confianza."*
+> Hoy entramos formalmente en la **Fase Beta**, que es el momento en que la app sale del laboratorio y pasa a la vida real con un grupo selecto de personas de máxima confianza.  
+> Y el paso siguiente será la **Estabilización**, donde con la experiencia acumulada lanzaremos la versión final y continuaremos agregando mejoras constantes."*
 
 ---
 
@@ -90,7 +92,7 @@
   - 🚀 **Los Primeros en el Mundo:** Tendrán en sus manos antes que nadie una herramienta diseñada para protegernos.
   - 🛡️ **Segura y Comprobada:** Toda la lógica financiera ya fue verificada técnicamente antes de llegar a ustedes.
   - 💡 **Su Opinión Vale Oro:** Con su uso real descubriremos qué se puede simplificar, qué dudas surgen y qué sumar.
-- **Pie:** Construyendo juntos • Lámina 4 / 12
+- **Pie:** Construyendo juntos • Lámina 4 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"En el mundo de la tecnología, un 'Usuario Beta' es alguien privilegiado pero también con una misión: ustedes son los pioneros.  
@@ -107,7 +109,7 @@
   - 🏦 **Apps tradicionales y Bancos:** Retienen tu dinero en cuentas intermedias, cobran comisiones y deciden cuándo te lo liberan.
   - 📲 **Mutual Familiar (Pago Móvil Directo):** El dinero va **directo de tu cuenta bancaria a la de tu familiar**. La aplicación NUNCA toca tus fondos.
   - 📖 **El Rol de la Aplicación:** Es nuestro **libro contable digital**: audita, calcula la tasa justa oficial y archiva comprobantes.
-- **Pie:** Transparencia absoluta • Lámina 5 / 12
+- **Pie:** Transparencia absoluta • Lámina 5 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Este es el punto más importante de todos y quiero que les quede muy claro: **la aplicación nunca toca ni custodia un solo céntimo de nuestro dinero**.  
@@ -125,7 +127,7 @@
   - 📉 **El problema de prestar en Bolívares:** Si prestas 1.000 Bs hoy, en dos meses no compras ni la mitad. Prestar en bolívares fijos genera pérdidas para quien presta o tensiones familiares.
   - 💵 **Cuentas Claras en Dólares:** El préstamo se registra y pacta en **USD**. El valor real de lo prestado no se devalúa con el tiempo.
   - 🏛️ **Tasa Oficial del Día:** Se transfiere y se devuelve en Bolívares por Pago Móvil, calculado automáticamente según la tasa oficial publicada por el BCV al momento del pago.
-- **Pie:** Justicia patrimonial • Lámina 6 / 12
+- **Pie:** Justicia patrimonial • Lámina 6 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Todos sabemos lo que pasa en Venezuela con la inflación: si alguien pide prestado 1.000 Bolívares hoy y los devuelve en dos meses, quien prestó perdió dinero, y eso a veces genera que la gente evite prestar por miedo a perder.  
@@ -143,7 +145,7 @@
   2. **Aporte Familiar:** Un miembro de la mutual acepta financiarlo y te transfiere por Pago Móvil.
   3. **Comprobante:** Sube la captura o referencia del pago; tú confirmas la recepción en la app.
   4. **Reintegro:** Cuando devuelves el dinero, el prestamista valida la recepción bancaria y la deuda se salda.
-- **Pie:** Simple y transparente • Lámina 7 / 12
+- **Pie:** Simple y transparente • Lámina 7 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Veamos cómo funciona un préstamo en la práctica:  
@@ -154,23 +156,7 @@
 
 ---
 
-### LÁMINA 8: Fondos Comunes Familiares
-- **Etiqueta superior:** `AHORRO Y SOLIDARIDAD`
-- **Título:** Fondos Comunes Familiares
-- **Subtítulo:** Un fondo colectivo para emergencias y metas compartidas
-- **Puntos clave en pantalla:**
-  - 🩺 **Fondo de Emergencia y Salud:** Un colchón para medicinas urgentes, consultas o imprevistos de cualquier integrante.
-  - 🛠️ **Fondo de Mantenimiento:** Para reparaciones del hogar, repuestos de vehículos o proyectos de la casa.
-  - 📊 **Monitoreo en Tiempo Real:** Todos los miembros ven cuánto saldo hay acumulado y quiénes han aportado su cuota.
-- **Pie:** Fuerza en equipo • Lámina 8 / 12
-
-#### 🎙️ Guión del Orador (Qué decir):
-> *"Además de prestarnos entre personas, la mutual nos permite tener **Fondos Comunes**.  
-> Por ejemplo, podemos crear un fondo de salud familiar: si cada uno aporta una pequeña cuota mensual, el día que a un abuelo, a un niño o a cualquiera de nosotros le haga falta una medicina cara o un examen de laboratorio de urgencia, no salimos corriendo desesperados: el dinero ya está previsto en el fondo familiar."*
-
----
-
-### LÁMINA 9: Demostración en Vivo
+### LÁMINA 8: Demostración en Vivo
 - **Etiqueta superior:** `DEMOSTRACIÓN EN VIVO`
 - **Título:** ¡Veámoslo en la App!
 - **Subtítulo:** 3 minutos para verla funcionando en vivo
@@ -178,7 +164,7 @@
   - 🔹 Ver la mutual activa y su lista de miembros.
   - 🔹 Cómo registrar tus datos de Pago Móvil en segundos (en el perfil).
   - 🔹 Cómo se ve una solicitud de préstamo, la tasa BCV y el comprobante.
-- **Pie:** Demostración práctica • Lámina 9 / 12
+- **Pie:** Demostración práctica • Lámina 8 / 11
 
 #### 🎙️ Guión del Orador (Qué decir y hacer):
 > *(En este momento, minimiza el navegador y abre la app Mutual Familiar en tu celular compartiendo pantalla)*  
@@ -189,7 +175,7 @@
 
 ---
 
-### LÁMINA 10: Primeros Acuerdos Familiares
+### LÁMINA 9: Primeros Acuerdos Familiares
 - **Etiqueta superior:** `DECISIONES DE LA ASAMBLEA`
 - **Título:** Primeros Acuerdos Familiares
 - **Subtítulo:** Nuestra mutual, nuestras propias reglas
@@ -197,7 +183,7 @@
   - 🏷️ **1. Nombre Oficial:** ¿Cómo nos identificaremos en la app? (Ej: *Mutual Familia Pérez*, *Familia García*, etc.).
   - 💳 **2. Datos de Pago Móvil:** Compromiso de que todos carguen sus datos bancarios hoy mismo al terminar la llamada.
   - 🎯 **3. Montos Iniciales Prudenciales:** Acordar un tope sugerido para las primeras pruebas (por ejemplo, préstamos pequeños de $5 a $20 para familiarizarnos con el flujo).
-- **Pie:** Gobernanza inicial • Lámina 10 / 12
+- **Pie:** Gobernanza inicial • Lámina 9 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Como toda mutual, las reglas no las impone una empresa: las decidimos nosotros como asamblea.  
@@ -208,24 +194,26 @@
 
 ---
 
-### LÁMINA 11: Lo Que Viene en el Futuro
+### LÁMINA 10: Lo Que Viene en el Futuro
 - **Etiqueta superior:** `PRÓXIMOS PASOS`
 - **Título:** Lo Que Viene en el Futuro
 - **Subtítulo:** Funciones que se sumarán según madure el sistema
 - **Puntos en pantalla (claridad de alcance):**
+  - 🩺 **Fondos Comunes Familiares:** Ahorro colectivo para emergencias médicas, reparaciones del hogar o proyectos compartidos.
   - 🐮 **Colectas Compartidas ("Vacas"):** Préstamos más grandes donde varios miembros aportan fracciones de dinero para completarlo entre varios.
-  - 🗳️ **Módulo de Gobernanza y Voto:** Votaciones formales dentro de la app con puntos de votación para cambiar reglas o estatutos.
-  - 🌿 **Creación de Nuevas Mutuales:** Poder abrir mutuales adicionales para grupos de amigos, compañeros de trabajo o emprendimientos.
-- **Pie:** Evolución continua • Lámina 11 / 12
+  - 🗳️ **Asamblea Digital y Nuevas Mutuales:** Votaciones democráticas de acuerdos y apertura de mutuales adicionales para amigos o emprendimientos.
+- **Pie:** Evolución continua • Lámina 10 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
-> *"Es importante que sepan que lo que tenemos hoy es la base sólida y probada: préstamos persona a persona y fondos familiares.  
-> Más adelante, en las próximas fases del proyecto, se habilitarán las **Colectas o 'Vacas'**, donde si alguien necesita una suma más grande, tres o cuatro miembros pueden aportar una parte cada uno para completarla.  
-> También vendrá el **Módulo de Votación Democrática**, para votar decisiones formalmente con el teléfono, y la posibilidad de abrir nuevas mutuales para otros grupos. Esas funciones vendrán paso a paso."*
+> *"Es muy importante que sepan que lo que tenemos activo hoy es lo fundamental y probado: préstamos persona a persona con protección contra la inflación.  
+> En las próximas fases del proyecto incorporaremos:  
+> 1. Los **Fondos Comunes Familiares**, para tener un fondo de ahorro para emergencias de salud o reparaciones.  
+> 2. Las **Colectas o 'Vacas'**, para montos mayores financiados entre varios integrantes.  
+> 3. El **Módulo de Votación Democrática**, para votar decisiones formalmente desde el teléfono, y la opción de crear nuevas mutuales para otros grupos. Esas funciones vendrán paso a paso."*
 
 ---
 
-### LÁMINA 12: Pasos para Instalar y Comenzar
+### LÁMINA 11: Pasos para Instalar y Comenzar
 - **Etiqueta superior:** `¡COMENCEMOS!`
 - **Título:** Próximos Pasos
 - **Subtítulo:** Cómo unirte hoy mismo a la mutual
@@ -235,7 +223,7 @@
   - `3.` **Configura tu Pago Móvil:** Ve a la pestaña Perfil y guarda tu banco y teléfono.
 - **Recuadro de contacto:**  
   📧 Soporte directo: `mutualfam@gmail.com` o por el grupo familiar de WhatsApp.
-- **Pie:** ¡Gracias por ser parte! • Lámina 12 / 12
+- **Pie:** ¡Gracias por ser parte! • Lámina 11 / 11
 
 #### 🎙️ Guión del Orador (Qué decir):
 > *"Para terminar: apenas colguemos la videollamada, les enviaré por el grupo de WhatsApp el archivo instalador de la app y el código de invitación de nuestra mutual.  
