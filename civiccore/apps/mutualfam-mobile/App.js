@@ -10,6 +10,7 @@ import * as Linking from 'expo-linking';
 import { registerForPushNotificationsAsync } from './src/services/notifications';
 import { checkForAppUpdate } from './src/services/appUpdates';
 import UpdateModal from './src/components/UpdateModal';
+import { authApi } from './src/api/client';
 
 
 // Screens
@@ -106,9 +107,23 @@ export default function App() {
       try {
         const token = await AsyncStorage.getItem('jwt_token');
         if (token) {
-          const orgId = await AsyncStorage.getItem('active_org_id');
-          setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
-          await registerForPushNotificationsAsync();
+          try {
+            // Validar sesión contra el backend antes de navegar optimísticamente
+            await authApi.me();
+            const orgId = await AsyncStorage.getItem('active_org_id');
+            setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
+            await registerForPushNotificationsAsync();
+          } catch (authError) {
+            // Si el servidor confirma que el usuario o sesión no es válida (401 o 404)
+            if (authError?.response?.status === 401 || authError?.response?.status === 404) {
+              await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'active_org_id', 'org_id']);
+              setInitialRoute('Login');
+            } else {
+              // Si fue fallo de red/conexión temporal, permitimos navegación tentativa según lo guardado
+              const orgId = await AsyncStorage.getItem('active_org_id');
+              setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
+            }
+          }
         }
       } catch (e) {
         console.warn(e);
