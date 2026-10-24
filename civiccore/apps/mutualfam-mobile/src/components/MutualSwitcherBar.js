@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { OrgContext } from '../context/OrgContext';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import BetaBadge from './BetaBadge';
 
 const WIDE_BREAKPOINT = 768;
 
@@ -80,6 +81,7 @@ export default function MutualSwitcherBar() {
             {activeOrg ? activeOrg.name : 'Seleccionar mutual'}
           </Text>
         </View>
+        <BetaBadge orgName={activeOrg?.name} style={{ marginRight: 6 }} />
         {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDotSmall, { backgroundColor: envConfig.color }]} />

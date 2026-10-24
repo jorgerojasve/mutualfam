@@ -134,6 +134,12 @@ def get_latest_release_info():
         if rel.get("body"):
             info["release_notes"] = rel.get("body").strip()
 
+    from services.limits import get_app_phase_summary
+    phase_summary = get_app_phase_summary()
+    info["is_beta"] = phase_summary["is_beta"]
+    info["phase_label"] = phase_summary["phase_label"]
+    info["app_phase"] = phase_summary
+
     return info
 
 @router.get("/")
@@ -177,7 +183,7 @@ def get_config():
         except Exception:
             pass
 
-    from services.limits import get_limits_summary, set_limit_override, reset_limit_overrides
+    from services.limits import get_limits_summary, get_app_phase_summary, set_limit_override, reset_limit_overrides
 
     return {
         "mutual_name": "Mutual Familiar",
@@ -191,6 +197,7 @@ def get_config():
             "funds_enabled": True
         },
         "limits": get_limits_summary(),
+        "app_phase": get_app_phase_summary(),
         "app_version": get_latest_release_info(),
         "banks": VENEZUELAN_BANKS
     }
@@ -199,6 +206,26 @@ class LimitsUpdate(BaseModel):
     max_members_per_mutual: int = None
     extra_mutuals_first_mutual: int = None
     contact_email: str = None
+    is_beta: bool = None
+
+class PhaseUpdate(BaseModel):
+    is_beta: bool
+
+@router.get("/phase")
+def get_phase():
+    """Retorna la fase actual de la aplicación (Beta vs Estable) y directivas asociadas."""
+    from services.limits import get_app_phase_summary
+    return get_app_phase_summary()
+
+@router.post("/phase")
+def update_phase_qa(data: PhaseUpdate):
+    """Permite conmutar la fase de la aplicación en caliente (exclusivo para QA/Sandbox)."""
+    from fastapi import HTTPException
+    if not is_qa_environment():
+        raise HTTPException(status_code=403, detail="Modificación de fase en caliente solo disponible en entorno QA")
+    from services.limits import set_limit_override, get_app_phase_summary
+    set_limit_override("is_beta", data.is_beta)
+    return {"message": "Fase de la aplicación actualizada para QA", "app_phase": get_app_phase_summary()}
 
 @router.get("/limits")
 def get_limits():
@@ -219,6 +246,8 @@ def update_limits_qa(data: LimitsUpdate):
         set_limit_override("extra_mutuals_first_mutual", data.extra_mutuals_first_mutual)
     if data.contact_email is not None:
         set_limit_override("contact_email", data.contact_email)
+    if data.is_beta is not None:
+        set_limit_override("is_beta", data.is_beta)
     return {"message": "Límites actualizados para pruebas en QA", "limits": get_limits_summary()}
 
 @router.delete("/limits")

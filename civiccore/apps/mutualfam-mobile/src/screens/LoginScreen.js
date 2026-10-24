@@ -9,6 +9,7 @@ import { getMobileEnvironmentConfig } from '../utils/env';
 import { getErrorMessage } from '../utils/errors';
 import { OrgContext } from '../context/OrgContext';
 import { openSupportEmail } from '../utils/support';
+import BetaBadge from '../components/BetaBadge';
 
 export default function LoginScreen({ route, navigation }) {
   const { selectOrg, loadActiveOrg } = useContext(OrgContext);
@@ -167,6 +168,7 @@ export default function LoginScreen({ route, navigation }) {
         />
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Mutual Familiar</Text>
+          <BetaBadge userEmail={email} />
           {!envConfig.isProd && envConfig.badgeText ? (
             <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
               <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />

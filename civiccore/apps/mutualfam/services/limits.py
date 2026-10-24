@@ -33,12 +33,34 @@ def get_contact_email() -> str:
         return str(_runtime_overrides["contact_email"])
     return os.getenv("LIMIT_CONTACT_EMAIL", "mutualfam@gmail.com")
 
+def get_is_beta() -> bool:
+    """Indica si la aplicación se encuentra en fase Beta o Versión Estable."""
+    if "is_beta" in _runtime_overrides:
+        return bool(_runtime_overrides["is_beta"])
+    # Por defecto true durante la fase de validación con usuarios reales
+    return os.getenv("APP_IS_BETA", "true").lower() in ("true", "1", "yes", "t")
+
+def get_app_phase_summary() -> dict:
+    """Retorna la información y directivas de la fase actual del producto (Beta vs Estable)."""
+    is_beta = get_is_beta()
+    return {
+        "is_beta": is_beta,
+        "phase_label": "Beta" if is_beta else "Estable",
+        "welcome_title": "¡Bienvenido a la Versión Beta!",
+        "welcome_message": (
+            "Estás utilizando la versión preliminar de Mutual Familiar. Gracias por ser parte "
+            "del grupo de familias pioneras que nos ayuda a validar la plataforma con su uso y sugerencias."
+        ),
+        "support_email": get_contact_email(),
+    }
+
 def get_limits_summary() -> dict:
     """Retorna el resumen de configuración de límites actual."""
     return {
         "max_members_per_mutual": get_max_members_per_mutual(),
         "extra_mutuals_first_mutual": get_max_extra_mutuals_first_mutual(),
         "contact_email": get_contact_email(),
+        "is_beta": get_is_beta(),
     }
 
 def check_can_create_organization(db: Session, user: User):

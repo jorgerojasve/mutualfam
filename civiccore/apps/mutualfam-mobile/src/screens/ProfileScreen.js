@@ -19,6 +19,7 @@ import { getCurrentAppVersion, checkForAppUpdate } from '../services/appUpdates'
 import UpdateModal from '../components/UpdateModal';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import { openSupportEmail, showSupportEmailFallback, SUPPORT_EMAIL } from '../utils/support';
+import { useBetaPhase, showBetaInfoAlert } from '../utils/beta';
 
 export default function ProfileScreen({ navigation }) {
   const { activeOrg, clearOrg } = useContext(OrgContext);
@@ -32,6 +33,7 @@ export default function ProfileScreen({ navigation }) {
 
   const currentVersion = getCurrentAppVersion();
   const envConfig = getMobileEnvironmentConfig();
+  const { isBeta, phaseLabel } = useBetaPhase();
 
   const handleLogout = async () => {
     try {
@@ -149,6 +151,29 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.versionPill}>
             <Text style={styles.versionPillText}>v{currentVersion}</Text>
           </View>
+        </View>
+
+        <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Fase</Text>
+          <TouchableOpacity
+            style={[
+              styles.versionPill,
+              isBeta
+                ? { backgroundColor: 'rgba(99, 102, 241, 0.18)', borderColor: 'rgba(129, 140, 248, 0.5)' }
+                : { backgroundColor: 'rgba(16, 185, 129, 0.18)', borderColor: 'rgba(16, 185, 129, 0.5)' },
+            ]}
+            activeOpacity={isBeta ? 0.7 : 1}
+            onPress={isBeta ? () => showBetaInfoAlert(currentUser?.email, activeOrg?.name) : null}
+          >
+            <Text
+              style={[
+                styles.versionPillText,
+                { color: isBeta ? '#a5b4fc' : '#34d399', fontWeight: 'bold' },
+              ]}
+            >
+              {isBeta ? 'Beta (Familias)' : 'Estable (Oficial)'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.aboutRow}>

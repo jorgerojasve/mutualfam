@@ -10,6 +10,8 @@ import * as Linking from 'expo-linking';
 import { registerForPushNotificationsAsync } from './src/services/notifications';
 import { checkForAppUpdate } from './src/services/appUpdates';
 import UpdateModal from './src/components/UpdateModal';
+import BetaWelcomeModal from './src/components/BetaWelcomeModal';
+import { initializeBetaState } from './src/utils/beta';
 import { authApi } from './src/api/client';
 
 
@@ -133,6 +135,7 @@ export default function App() {
     };
     
     checkToken();
+    initializeBetaState().catch(() => {});
 
     // Verificación en segundo plano de nuevas versiones (obligatorias u opcionales)
     checkForAppUpdate().then((info) => {
@@ -168,6 +171,7 @@ export default function App() {
           updateInfo={updateInfo}
           onDismiss={() => setUpdateInfo(null)}
         />
+        <BetaWelcomeModal />
       </GestureHandlerRootView>
     </OrgProvider>
   );

@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import axios from 'axios';
 import { baseURL } from '../api/client';
+import { syncBetaState } from '../utils/beta';
 
 let cachedVersion = null;
 
@@ -59,6 +60,10 @@ export const checkForAppUpdate = async () => {
     const response = await axios.get(`${baseURL}/config/version`, { timeout: 5000 });
     const data = response.data || {};
 
+    if (data.app_phase || typeof data.is_beta === 'boolean') {
+      syncBetaState(data.app_phase || { is_beta: data.is_beta, phase_label: data.phase_label });
+    }
+
     const latestVersion = data.latest_version || currentVersion;
     const minVersion = data.min_version || '1.0.0';
     const downloadUrl = data.download_url || `${baseURL}/config/latest-apk`;
@@ -78,6 +83,8 @@ export const checkForAppUpdate = async () => {
       minVersion,
       releaseNotes,
       downloadUrl,
+      isBeta: data.is_beta,
+      appPhase: data.app_phase,
     };
   } catch (error) {
     console.warn('[appUpdates] No se pudo verificar la actualización:', error?.message || error);
