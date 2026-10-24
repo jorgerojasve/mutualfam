@@ -31,6 +31,10 @@ def create_fund(
     org_member: dict = Depends(get_current_org_member),
     db: Session = Depends(get_db)
 ):
+    raise HTTPException(
+        status_code=400,
+        detail="La creación de fondos comunes se encuentra temporalmente deshabilitada (funcionalidad en desarrollo)."
+    )
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
         

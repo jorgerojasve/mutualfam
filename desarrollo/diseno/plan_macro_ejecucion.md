@@ -64,9 +64,23 @@ Este documento centraliza todos los frentes de trabajo, sub-planes y estrategias
 
 ---
 
-## 6. Próximos Pasos (Roadmap Inmediato)
+## 7. Plan de Resiliencia Cambiaria y Redundancia de Tasa BCV
+*Arquitectura multi-proveedor y extracción directa con fallback*
 
-1. **Puntos de Votación:** Implementar el plan de la Sección 5.
-2. **Panel de Aprobación de Créditos:** Crear la interfaz para el comité revisor (Cambiar estado de `PENDIENTE` a `APROBADO`).
-3. **Módulo de Mercado Solidario:** Conectar el frontend a los endpoints del mercado interno.
-4. **Despliegue de Prueba (Staging):** Montar la API en un servidor local para que los fundadores instalen el APK.
+**Objetivo:** Eliminar la dependencia de una única API externa para la tasa BCV y prevenir desincronizaciones frente a la publicación oficial.
+- **7.1 Arquitectura en Cascada (Fallback Providers):**
+  1. *Primario:* `rates.dolarvzla.com` (API REST rápida).
+  2. *Secundario:* `ve.dolarapi.com` (API alternativa de alta disponibilidad).
+  3. *Terciario (Directo):* Scraping al portal oficial `www.bcv.org.ve` (selector `#dolar strong`, ignorando errores de certificados SSL y usando cabeceras de navegador).
+- **7.2 Actualizador Asíncrono en Background (Cache Worker):** Tarea periódica cada 30-60 minutos que actualiza la tasa en memoria/BD para que las peticiones de los usuarios nunca experimenten latencias del portal bancario.
+- **7.3 Ajuste de la Ventana de Desactualización:** Calibrar la hora límite de alerta a las 18:30 VET para evitar falsas advertencias mientras el BCV procesa su rueda cambiaria vespertina.
+
+---
+
+## 8. Próximos Pasos (Roadmap Inmediato)
+
+1. **Límites de Producción y QA:** Validación en QA de las reglas de 1 mutual adicional por miembro fundador y 15 miembros por mutual (umbral de 5 en QA). *(Completado ✅)*
+2. **Redundancia Tasa BCV:** Implementación del sistema de fuentes en cascada (Sección 7).
+3. **Puntos de Votación:** Implementar el plan de la Sección 5.
+4. **Panel de Aprobación de Créditos:** Crear la interfaz para el comité revisor.
+5. **Módulo de Mercado Solidario:** Conectar el frontend a los endpoints del mercado interno.

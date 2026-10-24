@@ -6,7 +6,7 @@ import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, handleLimitError } from '../utils/errors';
 
 export default function InviteMembersScreen() {
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,9 @@ export default function InviteMembersScreen() {
       });
     } catch (e) {
       console.error('Error generating invite:', e);
-      Alert.alert('Error', getErrorMessage(e, 'No se pudo generar la invitación'));
+      if (!handleLimitError(e, 'Límite de Miembros', { mutualName: activeOrg?.name })) {
+        Alert.alert('Error', getErrorMessage(e, 'No se pudo generar la invitación'));
+      }
     } finally {
       setGenerating(false);
     }
@@ -144,7 +146,7 @@ export default function InviteMembersScreen() {
       <ScreenTitle title="Familia Mutual" />
       
       <View style={[styles.card, { marginBottom: 20 }]}>
-        <Text style={styles.cardTitle}>Miembros Actuales</Text>
+        <Text style={styles.cardTitle}>Miembros Actuales ({members.length})</Text>
         {members.length === 0 ? (
           <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
         ) : (

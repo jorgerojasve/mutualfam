@@ -1,0 +1,6 @@
+La versión actual permite crear nuevas mutuales sin límite. Esto puede generar problemas al realizar el lanzamiento. Inicialmente vamos a establecer los siguientes límites para producción:
+1- Los miembros de la primera mutual solo pueden crear una mutual adicional.
+2- Revisa los análsis previos sobre mayorias y supermayorias para ingreso y expulsión de nuevos miembros. Recuerdo que propusiste unos umbrales en cuanto al número de miembros para las reglas de ingreso y expulsión. Vamos a limitar el número de miembros por mutual al umbral más pequeño que propusiste para las reglas de ingreso y expulsión (me parece recordar que eran 15 personas).
+3- Analiza qué opciones tenemos para notificar al usuario que intente sobrepasar estos límites. A primera vista pienso que podríamos indicarle que se comunique con el equipo de desarrollo por email, para solicitar asistencia para montar su propio entorno de backend (incluyendo su propio bot de telegram, o hasta su propio repositorio).
+
+Todo esto aplica para producción, pero las reglas deben existir en QA para probarlas, con la posibilidad de modificarlas.

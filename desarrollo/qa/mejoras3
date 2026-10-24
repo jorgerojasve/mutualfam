@@ -1,0 +1,3 @@
+Cuando un usuario no tiene sus datos de pago no debería poder aportar o pedir prestado (ninguna acción asociada a pagos). Se le mostrará un mensaje indicándole que debe cargar por lo menos un dato de pago.
+
+Debe poderse ver el comprobante de pago de pagos ya validados  e incluso los del historial. (solo se van a borrar por algún límite de memoria de almacenamiento)

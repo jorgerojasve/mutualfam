@@ -67,6 +67,8 @@ export default function InviteLanding() {
   const [toast, setToast] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const downloadCooldownRef = useRef(false);
   const toastTimer = useRef(null);
   const envConfig = getEnvironmentConfig();
 
@@ -123,11 +125,24 @@ export default function InviteLanding() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (e) => {
+    if (downloadCooldownRef.current) {
+      if (e) e.preventDefault();
+      return;
+    }
+    downloadCooldownRef.current = true;
+    setIsDownloading(true);
+
     if (token) {
       copyText(window.location.href);
     }
     setDownloadStarted(true);
+
+    // Evita doble activación por toques rápidos o reintentos inmediatos
+    window.setTimeout(() => {
+      downloadCooldownRef.current = false;
+      setIsDownloading(false);
+    }, 5000);
   };
 
   if (status === 'invalid') {
@@ -224,17 +239,36 @@ export default function InviteLanding() {
             </p>
             <a
               id="download-apk-btn"
-              href={DOWNLOAD_APK_LINK}
+              href={isDownloading ? undefined : DOWNLOAD_APK_LINK}
               onClick={handleDownload}
-              className="il-btn il-btn--primary"
+              className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
             >
               <Download aria-hidden="true" />
-              {envConfig.isQA ? 'Descargar MutualFam (QA)' : 'Descargar MutualFam'}
+              {isDownloading
+                ? 'Iniciando descarga...'
+                : envConfig.isQA
+                ? 'Descargar MutualFam (QA)'
+                : 'Descargar MutualFam'}
             </a>
             <p className="il-note">
               Si Chrome dice <em>"Este tipo de archivo puede dañar tu dispositivo"</em>, toca{' '}
               <strong>Descargar de todas formas</strong>.
             </p>
+
+            <details className="il-help">
+              <summary>
+                <span>¿La descarga se queda al 100% o no finaliza?</span>
+                <ChevronDown className="il-help__chevron" aria-hidden="true" />
+              </summary>
+              <div className="il-help__content">
+                <p className="il-help__title">Si el círculo de descarga se completó pero nunca termina:</p>
+                <ol className="il-help__list">
+                  <li>En Chrome, toca los <strong>tres puntos (⋮)</strong> arriba a la derecha y entra a <strong>Descargas</strong>.</li>
+                  <li>Si ves el archivo con advertencia, toca <strong>Mantener</strong> o <strong>Descargar de todas formas</strong>.</li>
+                  <li>O abre la app <strong>Archivos / Mis archivos</strong> de tu teléfono en la carpeta <strong>Descargas</strong> para tocar el instalador directamente.</li>
+                </ol>
+              </div>
+            </details>
           </Step>
 
           <Step number={2} icon={ShieldCheck} title="Instálala" active={downloadStarted}>

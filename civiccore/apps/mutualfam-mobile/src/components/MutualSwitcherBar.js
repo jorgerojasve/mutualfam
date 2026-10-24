@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { OrgContext } from '../context/OrgContext';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import BetaBadge from './BetaBadge';
 
 const WIDE_BREAKPOINT = 768;
 
@@ -56,14 +57,14 @@ export default function MutualSwitcherBar() {
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top + (envConfig.isProd ? 6 : 4) }]}>
-      {!envConfig.isProd && (
+      {!envConfig.isProd && envConfig.bannerText ? (
         <View style={[styles.envBannerStrip, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
           <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
           <Text style={[styles.envBannerText, { color: envConfig.color }]}>
-            {envConfig.bannerText || '🧪 ENTORNO DE PRUEBAS (QA) • DATOS AISLADOS'}
+            {envConfig.bannerText}
           </Text>
         </View>
-      )}
+      ) : null}
       <TouchableOpacity
         style={styles.trigger}
         activeOpacity={0.7}
@@ -80,14 +81,15 @@ export default function MutualSwitcherBar() {
             {activeOrg ? activeOrg.name : 'Seleccionar mutual'}
           </Text>
         </View>
-        {!envConfig.isProd && (
+        <BetaBadge orgName={activeOrg?.name} style={{ marginRight: 6 }} />
+        {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDotSmall, { backgroundColor: envConfig.color }]} />
             <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-              {envConfig.badgeText || 'QA'}
+              {envConfig.badgeText}
             </Text>
           </View>
-        )}
+        ) : null}
         <Ionicons name="swap-vertical" size={20} color="#94a3b8" style={{ marginLeft: 4 }} />
       </TouchableOpacity>
 

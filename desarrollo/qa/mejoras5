@@ -1,0 +1,5 @@
+No llegan notificaciones, antes llegaban. Revisa los logs, primero se implementaron las notificaciones y luego se corrigieron algunas fallas. El commit 03413ab1627f87646a612bc1c4d5a01054793cd6 corresponde a la última versión probada que funcionó.
+
+Sesión tras limpieza de BD:
+Al limpiar la BD, la app abría en Préstamos porque AsyncStorage conservaba el token y App.js no verificaba /membership/me contra el backend en el arranque; adicionalmente /auth/refresh emitía nuevos access tokens sin verificar si el usuario existía en BD, y el interceptor de client.js no limpiaba la sesión al recibir 401 tras reintento. Corregido en backend (/auth/refresh verifica User) y frontend (forceLogout tras 401/404 y verificación en App.js).
+

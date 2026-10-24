@@ -1,22 +1,35 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
 if (!baseURL) {
   if (__DEV__) {
+    // Entorno de desarrollo local (Docker local en puerto 8000)
     const hostUri = Constants?.expoConfig?.hostUri;
     console.log("hostUri detectado:", hostUri);
     if (hostUri) {
+      // Teléfono físico o emulador vía Expo Go (extrae automáticamente la IP de la PC)
       baseURL = `http://${hostUri.split(':')[0]}:8000/api/v1`;
+    } else if (Platform.OS === 'android') {
+      // Emulador Android conectando al localhost de la máquina anfitriona
+      baseURL = 'http://10.0.2.2:8000/api/v1';
     } else {
+      // iOS Simulator o Web
       baseURL = 'http://localhost:8000/api/v1';
     }
   } else {
-    // Producción / QA build: apuntar a Fly.io
-    baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
+    // Compilación Release (APK standalone sin variable EXPO_PUBLIC_API_URL explícita)
+    const pkg = (Constants?.expoConfig?.android?.package || '').toLowerCase();
+    const appName = (Constants?.expoConfig?.name || '').toLowerCase();
+    const isQA = pkg.includes('.qa') || appName.includes('(qa)') || appName.includes('qa');
+    if (isQA) {
+      baseURL = 'https://mutualfam-qa-backend.fly.dev/api/v1';
+    } else {
+      baseURL = 'https://mutualfam-backend.fly.dev/api/v1';
+    }
   }
 }
 
@@ -46,11 +59,36 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+const forceLogout = async () => {
+  try {
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'active_org_id', 'org_id']);
+    const { navigationRef } = require('../../App');
+    if (navigationRef.isReady()) {
+      navigationRef.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    }
+  } catch (err) {
+    console.warn("Error forcing logout:", err);
+  }
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     
+    // Manejo de usuario no encontrado (base de datos limpiada o cuenta borrada)
+    if (
+      error.response &&
+      error.response.status === 404 &&
+      (error.response.data?.detail === "User not found" || error.response.data?.detail === "Usuario no encontrado")
+    ) {
+      await forceLogout();
+      return Promise.reject(error);
+    }
+
     // Manejo de Fase 0: Si el usuario ya no pertenece a la mutual seleccionada
     if (error.response && error.response.status === 403 && error.response.data?.detail === "No perteneces a esta mutual") {
       await AsyncStorage.removeItem('active_org_id');
@@ -64,23 +102,21 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
     
-    // Si el error es 401 (Unauthorized) y no hemos intentado refrescar ya
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+    // Si el error es 401 (Unauthorized)
+    if (error.response && error.response.status === 401) {
+      // Si ya se intentó refrescar y volvió a fallar con 401, la sesión es inválida
+      if (originalRequest?._retry) {
+        await forceLogout();
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
       
       try {
         const refreshToken = await AsyncStorage.getItem('refresh_token');
         if (!refreshToken) {
           // No hay refresh token, forzamos cierre de sesión lógico
-          await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
-          
-          const { navigationRef } = require('../../App');
-          if (navigationRef.isReady()) {
-            navigationRef.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
-          }
+          await forceLogout();
           return Promise.reject(error);
         }
         
@@ -97,18 +133,8 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
         
       } catch (refreshError) {
-        // Si el refresh falló (ej. expiró también), limpiamos sesión
-        await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
-        
-        // Importación lazy para evitar ciclos de dependencia con App.js
-        const { navigationRef } = require('../../App');
-        if (navigationRef.isReady()) {
-          navigationRef.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
-        }
-        
+        // Si el refresh falló (expiró, usuario eliminado, etc.), limpiamos sesión completa
+        await forceLogout();
         return Promise.reject(refreshError);
       }
     }
@@ -160,6 +186,10 @@ export const loansApi = {
   },
   getPaymentMethods: async () => {
     const { data } = await apiClient.get('/config/payment_methods');
+    return data;
+  },
+  getBanks: async () => {
+    const { data } = await apiClient.get('/config/banks');
     return data;
   },
   getAppConfig: async () => {

@@ -27,9 +27,13 @@ jobs:
   deploy:
     name: Desplegar Backend en Fly.io
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: ⬇️ Descargar Código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: ⚙️ Determinar Configuración de Entorno
         id: env-config
@@ -40,6 +44,8 @@ jobs:
           elif [ "${{ github.ref_name }}" = "mutualfam/prod" ]; then
             TARGET_ENV="prod"
           fi
+
+          echo "target_env=$TARGET_ENV" >> $GITHUB_OUTPUT
 
           if [ "$TARGET_ENV" = "prod" ]; then
             echo "config_file=fly.toml" >> $GITHUB_OUTPUT
@@ -56,6 +62,39 @@ jobs:
 
       - name: 🚀 Desplegar en Fly.io (${{ steps.env-config.outputs.env_label }})
         run: |
-          flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only
+          set -o pipefail
+          TOKEN="${FLY_TOKEN_QA:-$FLY_TOKEN_GLOBAL}"
+          if [ "${{ steps.env-config.outputs.target_env }}" = "prod" ]; then
+            TOKEN="${FLY_TOKEN_PROD:-$FLY_TOKEN_GLOBAL}"
+          fi
+          echo "Target env: ${{ steps.env-config.outputs.target_env }}"
+          echo "Config file: ${{ steps.env-config.outputs.config_file }}"
+          echo "App name: ${{ steps.env-config.outputs.app_name }}"
+          echo "Token QA presente: $([ -n "$FLY_TOKEN_QA" ] && echo 'SI' || echo 'NO')"
+          echo "Token Prod presente: $([ -n "$FLY_TOKEN_PROD" ] && echo 'SI' || echo 'NO')"
+          echo "Token Global presente: $([ -n "$FLY_TOKEN_GLOBAL" ] && echo 'SI' || echo 'NO')"
+
+          if [ -z "$TOKEN" ]; then
+            echo "❌ Error: No se encontró ningún token de Fly.io configurado en los secrets"
+            exit 1
+          fi
+
+          export FLY_API_TOKEN="$TOKEN"
+          export FLY_ACCESS_TOKEN="$TOKEN"
+          flyctl auth whoami 2>&1 | tee -a /tmp/fly_deploy.log || true
+          flyctl deploy --config ${{ steps.env-config.outputs.config_file }} --remote-only 2>&1 | tee -a /tmp/fly_deploy.log
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_TOKEN_QA: ${{ secrets.FLY_API_TOKEN_QA }}
+          FLY_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_TOKEN_GLOBAL: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: 📝 Guardar Log de Despliegue en rama ci-deploy-log
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-deploy-log
+          cp /tmp/fly_deploy.log ./latest-deploy.log 2>/dev/null || echo "No log file found" > ./latest-deploy.log
+          git add ./latest-deploy.log
+          git commit -m "ci: deploy log for ${{ github.sha }}" || true
+          git push origin ci-deploy-log --force || true

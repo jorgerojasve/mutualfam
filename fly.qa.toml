@@ -4,14 +4,19 @@
 #
 
 app = 'mutualfam-qa-backend'
+# Trigger QA deployment
 primary_region = 'iad'
 
 [build]
   dockerfile = 'Dockerfile'
 
 [env]
+  CIVICCORE_ENV = 'sandbox'
   DATABASE_URL = 'sqlite:////app/data/mutualfam.db'
   PORT = '8080'
+  LIMIT_MAX_MEMBERS_PER_MUTUAL = '5'
+  LIMIT_EXTRA_MUTUALS_FIRST_MUTUAL = '1'
+  LIMIT_CONTACT_EMAIL = 'mutualfam@gmail.com'
 
 [[mounts]]
   source = 'mutualfam_qa_data'

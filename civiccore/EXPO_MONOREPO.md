@@ -90,9 +90,15 @@ npx expo@57 start --clear
 
 ## 4. Variables de Entorno y Conexión de Red
 
-El archivo `.env` controla la URL de la API (`EXPO_PUBLIC_API_URL`).
-- **Emulador en PC:** `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000/api/v1`
-- **Teléfono Físico (WiFi):** `EXPO_PUBLIC_API_URL=http://<TU_IP_LOCAL>:8000/api/v1`
+El archivo `.env` controla la URL de la API (`EXPO_PUBLIC_API_URL`) y enlaces de invitación (`EXPO_PUBLIC_INVITE_URL_BASE`).
+
+- **Detección Automática en Desarrollo (Expo Go):** En modo desarrollo local (`__DEV__`), la app detecta automáticamente la IP de tu PC a través de Metro (`hostUri`) y conecta a `http://<TU_IP_PC>:8000/api/v1`. En emulador Android puro usa fallback a `http://10.0.2.2:8000/api/v1`.
+- **Sobrescritura Manual en `.env` (si se requiere):**
+  - **Emulador Android:** `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000/api/v1`
+  - **Teléfono Físico (WiFi):** `EXPO_PUBLIC_API_URL=http://<TU_IP_LOCAL>:8000/api/v1`
+- **Entornos Remotos (Compilaciones Release / APK):**
+  - **QA (Pruebas):** El workflow de GitHub Actions o la detección por paquete `.qa` asigna `https://mutualfam-qa-backend.fly.dev/api/v1`.
+  - **Producción:** Asigna `https://mutualfam-backend.fly.dev/api/v1`.
 *(Cualquier cambio en el `.env` requiere reiniciar Expo con `--clear`)*.
 
 ---

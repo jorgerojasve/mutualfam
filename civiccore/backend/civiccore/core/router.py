@@ -35,7 +35,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 @router.post("/refresh")
-def refresh_token(token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/auth/login"))):
+def refresh_token(
+    token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")),
+    db: Session = Depends(get_db)
+):
     payload = decode_access_token(token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -43,6 +46,10 @@ def refresh_token(token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/aut
     email = payload.get("sub")
     if email is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token payload")
+
+    member = MembershipService.get_by_email(db, email=email)
+    if not member:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Member not found")
         
     new_access_token = create_access_token(data={"sub": email})
     return {"access_token": new_access_token, "token_type": "bearer"}

@@ -2,11 +2,14 @@ import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
+import { Ionicons } from '@expo/vector-icons';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 import { registerForPushNotificationsAsync } from '../services/notifications';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import { getErrorMessage } from '../utils/errors';
 import { OrgContext } from '../context/OrgContext';
+import { openSupportEmail } from '../utils/support';
+import BetaBadge from '../components/BetaBadge';
 
 export default function LoginScreen({ route, navigation }) {
   const { selectOrg, loadActiveOrg } = useContext(OrgContext);
@@ -165,14 +168,15 @@ export default function LoginScreen({ route, navigation }) {
         />
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Mutual Familiar</Text>
-          {!envConfig.isProd && (
+          <BetaBadge userEmail={email} />
+          {!envConfig.isProd && envConfig.badgeText ? (
             <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
               <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
               <Text style={[styles.envBadgeText, { color: envConfig.color }]}>
-                {envConfig.badgeText || 'QA'}
+                {envConfig.badgeText}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
         
         {isRegistering && (
@@ -243,6 +247,20 @@ export default function LoginScreen({ route, navigation }) {
           <Text style={styles.switchText}>
             {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.helpButton} 
+          onPress={() => openSupportEmail({
+            subject: isRegistering ? 'Problemas al Registrarme' : 'Problemas para Iniciar Sesión',
+            contextNote: isRegistering ? 'Pantalla de Registro' : 'Pantalla de Inicio de Sesión',
+            userEmail: email.trim(),
+          })}
+          disabled={loading}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="help-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
+          <Text style={styles.helpButtonText}>¿Problemas para ingresar? Contactar a soporte</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -384,5 +402,17 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 14,
     textDecorationLine: 'underline',
-  }
+  },
+  helpButton: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  helpButtonText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });

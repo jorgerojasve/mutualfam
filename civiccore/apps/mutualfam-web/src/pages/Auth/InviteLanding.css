@@ -312,6 +312,13 @@
   transform: translateY(-1px);
 }
 
+.il-btn--disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.2);
+}
+
 .il-btn--secondary {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);

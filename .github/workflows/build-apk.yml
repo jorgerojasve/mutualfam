@@ -54,6 +54,7 @@ jobs:
 
           if [ "$IS_QA" = "true" ]; then
             echo "env_label=QA" >> $GITHUB_OUTPUT
+            echo "app_env=qa" >> $GITHUB_OUTPUT
             echo "app_name=Mutual Familiar (QA)" >> $GITHUB_OUTPUT
             echo "package_id=com.jorgerojasve.mutualfammobile.qa" >> $GITHUB_OUTPUT
             echo "api_url=https://mutualfam-qa-backend.fly.dev/api/v1" >> $GITHUB_OUTPUT
@@ -61,6 +62,7 @@ jobs:
             echo "apk_prefix=mutualfam-qa" >> $GITHUB_OUTPUT
           else
             echo "env_label=Producción" >> $GITHUB_OUTPUT
+            echo "app_env=production" >> $GITHUB_OUTPUT
             echo "app_name=Mutual Familiar" >> $GITHUB_OUTPUT
             echo "package_id=com.jorgerojasve.mutualfammobile" >> $GITHUB_OUTPUT
             echo "api_url=https://mutualfam-backend.fly.dev/api/v1" >> $GITHUB_OUTPUT
@@ -135,6 +137,7 @@ jobs:
         run: npm run build:apk
         env:
           APK_PREFIX: ${{ steps.env-config.outputs.apk_prefix }}
+          EXPO_PUBLIC_APP_ENV: ${{ steps.env-config.outputs.app_env }}
           EXPO_PUBLIC_API_URL: ${{ steps.env-config.outputs.api_url }}
           EXPO_PUBLIC_INVITE_URL_BASE: ${{ steps.env-config.outputs.invite_url }}
 
