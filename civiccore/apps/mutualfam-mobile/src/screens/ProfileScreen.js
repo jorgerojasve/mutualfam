@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,20 +7,28 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { authApi } from '../api/client';
 import { unregisterPushNotificationsAsync } from '../services/notifications';
 import { getCurrentAppVersion, checkForAppUpdate } from '../services/appUpdates';
 import UpdateModal from '../components/UpdateModal';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import { openSupportEmail, showSupportEmailFallback, SUPPORT_EMAIL } from '../utils/support';
 
 export default function ProfileScreen({ navigation }) {
   const { activeOrg, clearOrg } = useContext(OrgContext);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    authApi.me().then(setCurrentUser).catch(() => {});
+  }, []);
 
   const currentVersion = getCurrentAppVersion();
   const envConfig = getMobileEnvironmentConfig();
@@ -83,6 +91,45 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.helpText}>
           Si no puedes ver tus datos, es probable que tu sesión haya expirado o la base de datos se haya reiniciado.
         </Text>
+      </View>
+
+      {/* Tarjeta: Soporte y Ayuda Beta */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <Ionicons name="chatbubbles-outline" size={20} color="#10b981" style={{ marginRight: 8 }} />
+          <Text style={styles.cardTitle}>Soporte y Ayuda Beta</Text>
+        </View>
+
+        <Text style={styles.supportDesc}>
+          ¿Tienes dudas, sugerencias o encontraste algún error en la aplicación? Como usuario beta, tu comunicación directa con el equipo es fundamental para mejorar la plataforma.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.supportButton}
+          onPress={() => openSupportEmail({
+            subject: 'Consulta o Reporte Beta',
+            userEmail: currentUser?.email,
+            orgName: activeOrg?.name,
+            contextNote: 'Perfil y Ajustes',
+          })}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="mail-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.supportButtonText}>Contactar a Soporte por Email</Text>
+        </TouchableOpacity>
+
+        <View style={styles.supportEmailRow}>
+          <Ionicons name="at-outline" size={16} color="#94a3b8" style={{ marginRight: 6 }} />
+          <Text style={styles.supportEmailText}>{SUPPORT_EMAIL}</Text>
+          <TouchableOpacity
+            style={styles.copyEmailButton}
+            onPress={() => showSupportEmailFallback()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="copy-outline" size={16} color="#60a5fa" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tarjeta: Acerca de (About) */}
@@ -277,6 +324,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  supportDesc: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669', // Emerald 600
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  supportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  supportEmailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  supportEmailText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginRight: 8,
+  },
+  copyEmailButton: {
+    padding: 4,
   },
 });
 
