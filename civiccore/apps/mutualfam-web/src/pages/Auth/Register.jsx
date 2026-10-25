@@ -29,7 +29,6 @@ const Register = () => {
   const [successInfo, setSuccessInfo] = useState(null);
 
   useEffect(() => {
-    // Solo redirigir si ya estaba autenticado al entrar (no durante el registro activo)
     if (isAuthenticated && !isLoading && !successInfo) {
       navigate('/', { replace: true });
     }
@@ -65,7 +64,6 @@ const Register = () => {
         password: formData.password
       });
 
-      // Si existe un token de invitación, auto-unir a la mutual
       if (inviteToken) {
         try {
           const joinRes = await membershipApi.joinOrganization(inviteToken);
@@ -79,7 +77,6 @@ const Register = () => {
           setSuccessInfo("¡Cuenta creada y unido a tu mutual exitosamente!");
         } catch (joinErr) {
           console.warn("Auto-join error:", joinErr);
-          // Si falló el join (por ej. token vencido), la cuenta igual fue creada
           setSuccessInfo("¡Cuenta creada exitosamente!");
         }
       } else {
@@ -99,17 +96,26 @@ const Register = () => {
 
   return (
     <div className="auth-container">
-      <div className="glass-card auth-card animate-slide-up" style={{ maxWidth: '480px' }}>
-        <div className="auth-logo">
-          <div className="auth-logo-icon flex items-center justify-center">
-            <UserPlus color="white" size={24} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'center' }}>
-            <h2 className="text-gradient" style={{ fontSize: '1.5rem' }}>MutualFam</h2>
+      <div className="glass-card auth-card animate-slide-up" style={{ maxWidth: '460px', padding: '1.25rem 1.15rem' }}>
+        {/* Encabezado ultra compacto para mobile */}
+        <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+            <div style={{
+              width: '2rem',
+              height: '2rem',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <UserPlus color="white" size={16} />
+            </div>
+            <h2 className="text-gradient" style={{ fontSize: '1.35rem', margin: 0 }}>MutualFam</h2>
             <EnvBadge size="small" />
           </div>
-          <p className="text-muted" style={{ fontSize: '0.875rem', textAlign: 'center' }}>
-            {envConfig.tagline || 'Crea tu cuenta y únete a la mutual familiar'}
+          <p className="text-muted" style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
+            {envConfig.tagline || 'Crea tu cuenta y únete a la mutual'}
           </p>
         </div>
 
@@ -118,13 +124,13 @@ const Register = () => {
             backgroundColor: envConfig.bgColor,
             border: `1px solid ${envConfig.borderColor}`,
             color: envConfig.color,
-            borderRadius: 'var(--radius-md)',
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.78rem',
-            marginBottom: '1rem',
+            borderRadius: '6px',
+            padding: '0.35rem 0.6rem',
+            fontSize: '0.72rem',
+            marginBottom: '0.75rem',
             textAlign: 'center',
             fontWeight: 500,
-            lineHeight: 1.35,
+            lineHeight: 1.25,
           }}>
             {envConfig.bannerText}
           </div>
@@ -135,46 +141,46 @@ const Register = () => {
             backgroundColor: 'rgba(56, 189, 248, 0.1)',
             border: '1px solid rgba(56, 189, 248, 0.3)',
             color: '#38bdf8',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.55rem 0.8rem',
-            fontSize: '0.8rem',
-            marginBottom: '1rem',
+            borderRadius: '6px',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.75rem',
+            marginBottom: '0.75rem',
             textAlign: 'center',
             fontWeight: 500,
-            lineHeight: 1.4,
+            lineHeight: 1.3,
           }}>
-            ✨ Invitación detectada: al registrarte te uniremos automáticamente a tu mutual familiar.
+            ✨ Invitación activa: al registrarte entrarás directo a tu mutual.
           </div>
         )}
 
         {successInfo && (
-          <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <div className="badge badge-success w-full justify-center" style={{ padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-              <CheckCircle2 size={18} />
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div className="badge badge-success w-full justify-center" style={{ padding: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
+              <CheckCircle2 size={16} />
               {successInfo}
             </div>
           </div>
         )}
 
         {error && (
-          <div className="form-group" style={{ marginBottom: '1rem' }}>
-            <div className="badge badge-orange w-full justify-center" style={{ padding: '0.75rem', fontSize: '0.85rem', textTransform: 'none' }}>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div className="badge badge-orange w-full justify-center" style={{ padding: '0.6rem', fontSize: '0.8rem', textTransform: 'none' }}>
               {error}
             </div>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="flex gap-3" style={{ marginBottom: '0.85rem' }}>
-            <div className="form-group flex-1" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Nombre</label>
+          <div className="flex gap-2" style={{ marginBottom: '0.65rem' }}>
+            <div className="flex-1">
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Nombre</label>
               <div style={{ position: 'relative' }}>
-                <User className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+                <User className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
                 <input 
                   type="text" 
                   name="nombre"
                   className="form-input" 
-                  style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', fontSize: '16px' }}
+                  style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                   value={formData.nombre}
                   onChange={handleChange}
                   placeholder="Tu nombre"
@@ -183,15 +189,15 @@ const Register = () => {
               </div>
             </div>
 
-            <div className="form-group flex-1" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Apellido</label>
+            <div className="flex-1">
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Apellido</label>
               <div style={{ position: 'relative' }}>
-                <User className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+                <User className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
                 <input 
                   type="text" 
                   name="apellido"
                   className="form-input" 
-                  style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', fontSize: '16px' }}
+                  style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                   value={formData.apellido}
                   onChange={handleChange}
                   placeholder="Tu apellido"
@@ -201,15 +207,15 @@ const Register = () => {
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '0.85rem' }}>
-            <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Cédula de Identidad</label>
+          <div style={{ marginBottom: '0.65rem' }}>
+            <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Cédula de Identidad</label>
             <div style={{ position: 'relative' }}>
-              <FileText className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+              <FileText className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
               <input 
                 type="text" 
                 name="cedula"
                 className="form-input" 
-                style={{ paddingLeft: '2.2rem', fontSize: '16px' }}
+                style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                 value={formData.cedula}
                 onChange={handleChange}
                 placeholder="Ej. V12345678"
@@ -218,15 +224,15 @@ const Register = () => {
             </div>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '0.85rem' }}>
-            <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Correo Electrónico</label>
+          <div style={{ marginBottom: '0.65rem' }}>
+            <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Correo Electrónico</label>
             <div style={{ position: 'relative' }}>
-              <Mail className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+              <Mail className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
               <input 
                 type="email" 
                 name="email"
                 className="form-input" 
-                style={{ paddingLeft: '2.2rem', fontSize: '16px' }}
+                style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="correo@ejemplo.com"
@@ -235,33 +241,33 @@ const Register = () => {
             </div>
           </div>
 
-          <div className="flex gap-3" style={{ marginBottom: '1.25rem' }}>
-            <div className="form-group flex-1" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Contraseña</label>
+          <div className="flex gap-2" style={{ marginBottom: '0.9rem' }}>
+            <div className="flex-1">
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Contraseña</label>
               <div style={{ position: 'relative' }}>
-                <Lock className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+                <Lock className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
                 <input 
                   type="password" 
                   name="password"
                   className="form-input" 
-                  style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', fontSize: '16px' }}
+                  style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Mínimo 6 car."
+                  placeholder="Mín. 6 car."
                   required
                 />
               </div>
             </div>
 
-            <div className="form-group flex-1" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.82rem', marginBottom: '0.35rem' }}>Confirmar</label>
+            <div className="flex-1">
+              <label className="form-label" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>Confirmar</label>
               <div style={{ position: 'relative' }}>
-                <Lock className="text-muted" size={16} style={{ position: 'absolute', top: '12px', left: '10px' }} />
+                <Lock className="text-muted" size={15} style={{ position: 'absolute', top: '10px', left: '10px' }} />
                 <input 
                   type="password" 
                   name="confirmPassword"
                   className="form-input" 
-                  style={{ paddingLeft: '2.2rem', paddingRight: '0.5rem', fontSize: '16px' }}
+                  style={{ padding: '0.55rem 0.5rem 0.55rem 2rem', fontSize: '16px' }}
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   placeholder="Repite pass"
@@ -283,7 +289,8 @@ const Register = () => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
-              boxShadow: '0 4px 14px 0 rgba(59, 130, 246, 0.39)'
+              boxShadow: '0 4px 14px 0 rgba(59, 130, 246, 0.45)',
+              cursor: 'pointer'
             }}
             disabled={isLoading || Boolean(successInfo)}
           >
@@ -292,8 +299,8 @@ const Register = () => {
           </button>
         </form>
 
-        <div className="text-center" style={{ marginTop: '1.25rem' }}>
-          <p className="text-secondary" style={{ fontSize: '0.875rem' }}>
+        <div className="text-center" style={{ marginTop: '0.85rem' }}>
+          <p className="text-secondary" style={{ fontSize: '0.82rem', margin: 0 }}>
             ¿Ya tienes cuenta?{' '}
             <Link to="/login" style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 500 }}>
               Inicia sesión aquí
