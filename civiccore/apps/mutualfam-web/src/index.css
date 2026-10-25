@@ -823,13 +823,14 @@ html, body, #root {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  z-index: 2000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 99999;
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @media (min-width: 769px) {

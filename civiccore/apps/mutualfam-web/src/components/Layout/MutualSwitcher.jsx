@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuthStore, membershipApi } from '@civiccore/sdk';
 import { ChevronsUpDown, Check, Plus, Users, X, Sparkles } from 'lucide-react';
 import { EnvBadge } from '../Common/EnvBadge';
@@ -70,7 +71,7 @@ export default function MutualSwitcher() {
       </button>
 
       {/* Modal / Bottom Sheet para cambiar o unirse a una mutual */}
-      {isOpen && (
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <div className="modal-backdrop" onClick={() => setIsOpen(false)}>
           <div
             className="mutual-modal-content glass-card animate-slide-up"
@@ -162,7 +163,8 @@ export default function MutualSwitcher() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
