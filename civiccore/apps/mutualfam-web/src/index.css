@@ -618,6 +618,22 @@ html, body, #root {
     display: none !important;
   }
 
+  .topbar-left {
+    flex: 1;
+    min-width: 0;
+    margin-right: 0.5rem;
+  }
+
+  .mutual-switcher-trigger {
+    width: 100%;
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .mutual-name {
+    font-size: 13px;
+  }
+
   .topbar-actions {
     gap: 0.85rem;
   }
