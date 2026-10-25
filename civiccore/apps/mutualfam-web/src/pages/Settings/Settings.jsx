@@ -9,13 +9,13 @@ const Settings = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="animate-fade-in max-w-4xl mx-auto p-8 space-y-8">
-      <div className="page-header mb-8">
+    <div className="page-panel animate-fade-in max-w-4xl mx-auto">
+      <div className="page-header mb-6">
         <h1 className="page-title text-2xl font-bold">Configuración de Cuenta</h1>
         <p className="text-secondary">Administra tus preferencias y seguridad.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Menú Lateral de Configuración (Visual) */}
         <div className="col-span-1 space-y-2">

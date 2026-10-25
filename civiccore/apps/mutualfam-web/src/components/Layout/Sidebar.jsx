@@ -25,6 +25,7 @@ const Sidebar = () => {
   const navItems = [
     { to: '/loans', icon: Wallet, label: 'Préstamos Familiares', show: true },
     { to: '/funds', icon: PiggyBank, label: 'Fondo Común', show: true },
+    { to: '/members', icon: Users, label: 'Familia', show: true },
     { to: '/settings', icon: Settings, label: 'Configuración', show: true },
   ].filter(item => item.show);
   

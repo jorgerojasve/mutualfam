@@ -1,22 +1,36 @@
 import React from 'react';
-import { Bell, LogOut, Search } from 'lucide-react';
-import { useAuthStore } from '@civiccore/sdk';
+import { Bell, LogOut, Search, User } from 'lucide-react';
+import { useAuthStore, useManifest } from '@civiccore/sdk';
 import { EnvBadge } from '../Common/EnvBadge';
 
 const Topbar = () => {
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
+  const manifest = useManifest();
 
   return (
     <header className="topbar glass-panel">
+      {/* Mobile Branding (visible only on mobile <= 768px) */}
+      <div className="mobile-brand">
+        <div className="mobile-logo-icon"></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span className="mobile-brand-title text-gradient">{manifest?.shortName || 'MFam'}</span>
+          <EnvBadge size="small" />
+        </div>
+      </div>
+
+      {/* Desktop Search (hidden on mobile <= 768px) */}
       <div className="topbar-search">
         <Search className="search-icon text-muted" size={18} />
-        <input type="text" placeholder="Buscar propuestas, miembros..." className="search-input" />
+        <input type="text" placeholder="Buscar préstamos, miembros..." className="search-input" />
       </div>
       
       <div className="topbar-actions">
-        <EnvBadge size="medium" showProd={true} />
+        {/* Desktop EnvBadge (hidden on mobile) */}
+        <div className="desktop-env-badge">
+          <EnvBadge size="medium" showProd={true} />
+        </div>
         
-        <div className="notification-bell">
+        <div className="notification-bell" title="Notificaciones">
           <Bell size={20} className="text-secondary" />
           <span className="notification-dot"></span>
         </div>

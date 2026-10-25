@@ -20,8 +20,8 @@ const FundsDashboard = () => {
   }, []);
 
   return (
-    <div className="glass-panel animate-fade-in" style={{ padding: '2rem', margin: '2rem', minHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <div style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem' }}>
+    <div className="glass-panel page-panel animate-fade-in">
+      <div style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '1.25rem' }}>
         <h1 className="page-title text-gradient" style={{ margin: 0 }}>Fondos Comunes y Ahorro</h1>
       </div>
       

@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BottomNav from './BottomNav';
 import { useAuthStore } from '@civiccore/sdk';
 import { EnvTopBanner } from '../Common/EnvBadge';
 
@@ -29,6 +30,7 @@ const MainLayout = () => {
         <main className="main-content">
           <Outlet />
         </main>
+        <BottomNav />
       </div>
     </div>
   );

@@ -43,7 +43,7 @@ const MembersList = () => {
   };
 
   return (
-    <div className="animate-fade-in pb-12">
+    <div className="page-panel animate-fade-in pb-12">
       <div className="page-header mb-8">
         <h1 className="page-title flex items-center gap-3">
           <Users className="text-blue" size={28} />

@@ -11,6 +11,8 @@ import Settings from './pages/Settings/Settings';
 import DbManager from './pages/Dev/DbManager';
 import { useConfigStore } from '@civiccore/sdk';
 
+import MembersList from './pages/Membership/MembersList';
+
 function App() {
   const { loadUser } = useAuthStore();
   const { loadConfigs } = useConfigStore();
@@ -35,6 +37,8 @@ function App() {
           {/* Mutual Fam Routes */}
           <Route path="loans" element={<LoansDashboard />} />
           <Route path="funds" element={<FundsDashboard />} />
+          <Route path="members" element={<MembersList />} />
+          <Route path="family" element={<Navigate to="/members" replace />} />
           
           <Route path="settings" element={<Settings />} />
           

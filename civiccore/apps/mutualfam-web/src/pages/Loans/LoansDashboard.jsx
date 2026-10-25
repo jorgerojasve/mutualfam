@@ -94,8 +94,8 @@ export default function LoansDashboard() {
   };
 
   return (
-    <div className="glass-panel animate-fade-in" style={{ padding: '2rem', margin: '2rem', minHeight: '80vh', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <div className="flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '1.5rem' }}>
+    <div className="glass-panel page-panel animate-fade-in">
+      <div className="flex justify-between items-center page-header-row" style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '1.25rem', gap: '1rem', flexWrap: 'wrap' }}>
         <h1 className="page-title text-gradient" style={{ margin: 0 }}>Préstamos Familiares</h1>
         <button 
           onClick={() => setShowModal(true)}
@@ -203,10 +203,10 @@ export default function LoansDashboard() {
 
       {/* Modal para Solicitar Préstamo */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '500px', padding: '2.5rem' }}>
-            <h2 className="text-gradient" style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Solicitar Préstamo</h2>
-            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '480px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '1.25rem' }}>Solicitar Préstamo</h2>
+            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Monto (USD)</label>
                 <input 
@@ -241,7 +241,7 @@ export default function LoansDashboard() {
                 ></textarea>
               </div>
               
-              <div className="flex justify-between items-center mt-8">
+              <div className="flex justify-between items-center mt-6">
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)}
@@ -260,9 +260,9 @@ export default function LoansDashboard() {
 
       {/* Modal para Prometer Aporte (Web / iPhone) */}
       {showPledgeModal && selectedLoan && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '480px', padding: '2rem' }}>
-            <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '0.75rem' }}>Prometer Aporte 🤝</h2>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '460px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 className="text-gradient" style={{ fontSize: '1.35rem', marginBottom: '0.65rem' }}>Prometer Aporte 🤝</h2>
             <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
               Vas a aportar al préstamo de: <strong>{selectedLoan.requester_name}</strong>
             </p>
