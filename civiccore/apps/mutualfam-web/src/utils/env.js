@@ -22,7 +22,11 @@ export function getAppEnvironment() {
     }
   }
 
-  const apiUrl = (import.meta.env.VITE_API_URL || '').toLowerCase();
+  const apiUrl = (import.meta.env.VITE_API_URL || '')
+    .toString()
+    .trim()
+    .replace(/[\r\n\t]/g, '')
+    .toLowerCase();
   if (apiUrl.includes('-qa') || apiUrl.includes('/qa')) {
     return 'qa';
   }
