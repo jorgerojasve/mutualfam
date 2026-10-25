@@ -16,7 +16,12 @@ import './InviteLanding.css';
 import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1';
+const rawApiUrl = (import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1')
+  .toString()
+  .trim()
+  .replace(/[\r\n\t]/g, '')
+  .replace(/\/+$/, '');
+const API_URL = rawApiUrl || 'https://mutualfam-backend.fly.dev/api/v1';
 
 // Enlace Mágico: el backend siempre redirige a la última versión del APK
 // publicada en GitHub, sin que tengamos que actualizar esta página web.
@@ -239,7 +244,8 @@ export default function InviteLanding() {
             </p>
             <a
               id="download-apk-btn"
-              href={isDownloading ? undefined : DOWNLOAD_APK_LINK}
+              href={DOWNLOAD_APK_LINK}
+              download
               onClick={handleDownload}
               className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
             >

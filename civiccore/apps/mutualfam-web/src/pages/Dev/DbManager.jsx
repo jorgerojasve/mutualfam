@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@civiccore/sdk';
 // Since this is a dev-only page, we bypass the main SDK temporarily if needed, 
 // or use raw fetch to call our new sandbox endpoint
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002/api/v1';
+const rawApiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8002/api/v1')
+  .toString()
+  .trim()
+  .replace(/[\r\n\t]/g, '')
+  .replace(/\/+$/, '');
+const API_URL = rawApiUrl || 'http://localhost:8002/api/v1';
 const DB_MANAGER_URL = `${API_URL}/sandbox/db-manager`;
 
 export default function DbManager() {

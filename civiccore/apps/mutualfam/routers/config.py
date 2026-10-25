@@ -315,6 +315,7 @@ def stream_apk_download(download_url: str):
             yield chunk
 
 @router.api_route("/latest-apk", methods=["GET", "HEAD"])
+@router.api_route("/latest-apk/", methods=["GET", "HEAD"])
 def download_latest_apk(request: Request, redirect: bool = False):
     """
     Entrega el último APK del entorno correspondiente.

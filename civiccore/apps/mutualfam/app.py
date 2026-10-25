@@ -18,6 +18,23 @@ load_dotenv()
 
 app = FastAPI(title="Mutual Familiar API", version="1.0.0")
 
+class PathSanitizerMiddleware:
+    """Sanea rutas entrantes eliminando saltos de línea codificados (%0A, \n, \r) o espacios accidentales."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") in ("http", "websocket"):
+            path = scope.get("path", "")
+            if any(c in path for c in ("\n", "\r", "%0A", "%0a", "%20")):
+                clean = path.replace("\n", "").replace("\r", "").replace("%0A", "").replace("%0a", "").replace("%20", "").strip()
+                scope["path"] = clean
+                if "raw_path" in scope:
+                    scope["raw_path"] = clean.encode("ascii", errors="ignore")
+        await self.app(scope, receive, send)
+
+app.add_middleware(PathSanitizerMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

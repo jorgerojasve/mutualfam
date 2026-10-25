@@ -14,7 +14,11 @@ const manifest = {
     fontFamily: "Inter, system-ui, sans-serif",
   },
 
-  apiUrl: import.meta.env.VITE_API_URL || "http://localhost:8002/api/v1",
+  apiUrl: (import.meta.env.VITE_API_URL || "http://localhost:8002/api/v1")
+    .toString()
+    .trim()
+    .replace(/[\r\n\t]/g, '')
+    .replace(/\/+$/, ''),
   organizationId: import.meta.env.VITE_ORGANIZATION_ID || "1",
 
   modules: {
