@@ -1,23 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { fundsApi } from '@civiccore/sdk';
+import { fundsApi, useAuthStore } from '@civiccore/sdk';
 
 const FundsDashboard = () => {
+  const { activeOrg } = useAuthStore();
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchFunds = async () => {
+      if (!activeOrg?.id) {
+        setFunds([]);
+        setLoading(false);
+        return;
+      }
       try {
+        setLoading(true);
         const data = await fundsApi.getFunds();
-        setFunds(data);
+        setFunds(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error(err);
+        setFunds([]);
       } finally {
         setLoading(false);
       }
     };
     fetchFunds();
-  }, []);
+  }, [activeOrg?.id]);
 
   return (
     <div className="glass-panel page-panel animate-fade-in">

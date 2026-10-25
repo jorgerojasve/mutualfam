@@ -26,7 +26,7 @@ const Sidebar = () => {
     { to: '/loans', icon: Wallet, label: 'Préstamos Familiares', show: true },
     { to: '/funds', icon: PiggyBank, label: 'Fondo Común', show: true },
     { to: '/members', icon: Users, label: 'Familia', show: true },
-    { to: '/settings', icon: Settings, label: 'Configuración', show: true },
+    { to: '/profile', icon: Settings, label: 'Perfil y Ajustes', show: true },
   ].filter(item => item.show);
   
   // En dev mode, mostrar el DB Manager

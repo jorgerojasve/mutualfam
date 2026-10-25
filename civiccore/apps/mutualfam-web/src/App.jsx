@@ -40,7 +40,8 @@ function App() {
           <Route path="members" element={<MembersList />} />
           <Route path="family" element={<Navigate to="/members" replace />} />
           
-          <Route path="settings" element={<Settings />} />
+          <Route path="profile" element={<Settings />} />
+          <Route path="settings" element={<Navigate to="/profile" replace />} />
           
           {/* Dev Routes */}
           <Route path="dev/db-manager" element={<DbManager />} />

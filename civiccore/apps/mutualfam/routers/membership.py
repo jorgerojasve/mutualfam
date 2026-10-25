@@ -233,7 +233,7 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
     ).first()
     
     if existing_membership:
-        raise HTTPException(status_code=400, detail="Ya perteneces a esta mutual")
+        return {"message": "Ya eres miembro de esta mutual", "organization_id": invite.organization_id}
 
     # Regla 2: Validar si la mutual ya alcanzó su límite máximo de miembros
     check_can_join_organization(db, invite.organization_id)
@@ -301,8 +301,12 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
         "max_members": get_max_members_per_mutual()
     }
 
+@router.get("")
+@router.get("/")
 @router.get("/members")
 def get_organization_members(org_member: dict = Depends(get_current_org_member), db: Session = Depends(get_db)):
+    if not org_member or not org_member.get("organization"):
+        return []
     org_id = org_member["organization"].id
     memberships = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).all()
     
@@ -314,6 +318,7 @@ def get_organization_members(org_member: dict = Depends(get_current_org_member),
                 "id": user.id,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
+                "email": user.email,
                 "role": m.role,
                 "status": m.status,
                 "joined_at": str(m.joined_at) if m.joined_at else None

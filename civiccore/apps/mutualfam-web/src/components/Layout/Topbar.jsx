@@ -1,35 +1,27 @@
 import React from 'react';
-import { Bell, LogOut, Search, User } from 'lucide-react';
+import { Bell, LogOut, Search } from 'lucide-react';
 import { useAuthStore, useManifest } from '@civiccore/sdk';
 import { EnvBadge } from '../Common/EnvBadge';
+import MutualSwitcher from './MutualSwitcher';
 
 const Topbar = () => {
-  const { logout, user } = useAuthStore();
+  const { logout } = useAuthStore();
   const manifest = useManifest();
 
   return (
     <header className="topbar glass-panel">
-      {/* Mobile Branding (visible only on mobile <= 768px) */}
-      <div className="mobile-brand">
-        <div className="mobile-logo-icon"></div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span className="mobile-brand-title text-gradient">{manifest?.shortName || 'MFam'}</span>
-          <EnvBadge size="small" />
-        </div>
+      {/* Mutual Switcher principal (homologado con Android) */}
+      <div className="topbar-left">
+        <MutualSwitcher />
       </div>
 
-      {/* Desktop Search (hidden on mobile <= 768px) */}
+      {/* Desktop Search (oculto en móvil <= 768px) */}
       <div className="topbar-search">
         <Search className="search-icon text-muted" size={18} />
         <input type="text" placeholder="Buscar préstamos, miembros..." className="search-input" />
       </div>
       
       <div className="topbar-actions">
-        {/* Desktop EnvBadge (hidden on mobile) */}
-        <div className="desktop-env-badge">
-          <EnvBadge size="medium" showProd={true} />
-        </div>
-        
         <div className="notification-bell" title="Notificaciones">
           <Bell size={20} className="text-secondary" />
           <span className="notification-dot"></span>

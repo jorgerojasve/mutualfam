@@ -1,92 +1,242 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import { useAuthStore } from '@civiccore/sdk';
-import { Settings as SettingsIcon, AlertTriangle, Shield, Bell, Key, Activity } from 'lucide-react';
-import ModuleStatusCard from '../../components/ModuleStatusCard';
+import {
+  Users,
+  MessageSquare,
+  Mail,
+  Copy,
+  Check,
+  Info,
+  Code,
+  CheckCircle,
+  RefreshCw,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  AlertTriangle
+} from 'lucide-react';
+import { EnvBadge } from '../../components/Common/EnvBadge';
+import { getEnvironmentConfig } from '../../utils/env';
 
-const Settings = () => {
-  const { user } = useAuthStore();
-  const navigate = useNavigate();
+const SUPPORT_EMAIL = 'mutualfam@gmail.com';
+const APP_VERSION = '1.0.0';
+
+export default function ProfileAndSettings() {
+  const { user, activeOrg, logout } = useAuthStore();
+  const envConfig = getEnvironmentConfig();
+
+  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const handleCopyEmail = async () => {
+    try {
+      await navigator.clipboard.writeText(SUPPORT_EMAIL);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2500);
+    } catch (_) {
+      const el = document.createElement('textarea');
+      el.value = SUPPORT_EMAIL;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2500);
+    }
+  };
+
+  const handleSupportEmail = () => {
+    const subject = encodeURIComponent(`[MutualFam Beta v${APP_VERSION}] Consulta o Reporte Beta`);
+    const bodyLines = [
+      'Escribe aquí tu consulta, duda o reporte:',
+      '[Describe lo que necesitas o el fallo que experimentaste...]',
+      '',
+      '--------------------------------------------------',
+      'Información técnica de diagnóstico (Beta):',
+      `- Aplicación: Mutual Familiar`,
+      `- Versión instalada: v${APP_VERSION}`,
+      `- Entorno: ${envConfig.label || 'QA'}`,
+      `- Dispositivo: Web Safari / Navegador Móvil`,
+      `- Usuario: ${user?.email || 'No registrado'}`,
+      `- Mutual activa: ${activeOrg?.name || 'Ninguna'}`,
+      '--------------------------------------------------',
+    ];
+    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+  };
+
+  const handleCheckUpdate = () => {
+    setCheckingUpdate(true);
+    setUpdateMsg('');
+    setTimeout(() => {
+      setCheckingUpdate(false);
+      setUpdateMsg(`¡Estás al día! Tienes instalada la versión más reciente (v${APP_VERSION}).`);
+      setTimeout(() => setUpdateMsg(''), 4000);
+    }, 700);
+  };
 
   return (
-    <div className="page-panel animate-fade-in max-w-4xl mx-auto">
-      <div className="page-header mb-6">
-        <h1 className="page-title text-2xl font-bold">Configuración de Cuenta</h1>
-        <p className="text-secondary">Administra tus preferencias y seguridad.</p>
+    <div className="profile-container animate-fade-in">
+      <h1 className="profile-screen-title">Perfil y Ajustes</h1>
+
+      {/* Tarjeta 1: Mi Mutual Activa (Homologada con Android) */}
+      <div className="profile-card">
+        <div className="profile-card-header">
+          <Users size={20} className="profile-icon-blue" />
+          <h2 className="profile-card-title">Mi Mutual Activa</h2>
+        </div>
+        <p className="profile-card-text">
+          Nombre: <strong className="profile-highlight-text">{activeOrg?.name || 'Ninguna seleccionada'}</strong>
+        </p>
+        <p className="profile-card-text" style={{ marginBottom: '0.85rem' }}>
+          Rol: <strong className="profile-highlight-text">
+            {activeOrg?.role === 'founder' ? 'Fundador' : activeOrg ? 'Miembro' : 'Sin mutual'}
+          </strong>
+        </p>
+        <p className="profile-help-text">
+          Si no puedes ver tus datos, es probable que tu sesión haya expirado o la base de datos se haya reiniciado.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Menú Lateral de Configuración (Visual) */}
-        <div className="col-span-1 space-y-2">
-          <button className="w-full text-left p-3 rounded-lg bg-white/10 text-primary font-bold flex items-center gap-3">
-            <SettingsIcon size={18} /> General
-          </button>
-          <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3">
-            <Shield size={18} /> Privacidad
-          </button>
-          <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3">
-            <Bell size={18} /> Notificaciones
-          </button>
-          <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3">
-            <Key size={18} /> Seguridad
-          </button>
-          <button className="w-full text-left p-3 rounded-lg hover:bg-white/5 text-secondary flex items-center gap-3 mt-4 border-t border-white/5 pt-4">
-            <Activity size={18} /> Estado del Sistema
-          </button>
+      {/* Tarjeta 2: Soporte y Ayuda Beta (Homologada con Android) */}
+      <div className="profile-card">
+        <div className="profile-card-header">
+          <MessageSquare size={20} className="profile-icon-green" />
+          <h2 className="profile-card-title">Soporte y Ayuda Beta</h2>
         </div>
+        <p className="profile-support-desc">
+          ¿Tienes dudas, sugerencias o encontraste algún error en la aplicación? Como usuario beta, tu comunicación directa con el equipo es fundamental para mejorar la plataforma.
+        </p>
 
-        {/* Panel Principal */}
-        <div className="col-span-1 md:col-span-2 space-y-6">
-          
-          <div className="glass-card p-6 md:p-8">
-            <h2 className="text-xl font-bold mb-6">Información Personal</h2>
-            <div className="space-y-6">
-              <div>
-                <label className="form-label">Nombre Completo</label>
-                <input type="text" className="form-input" disabled value={`${user?.nombre} ${user?.apellido}`} />
-              </div>
-              <div>
-                <label className="form-label">Correo Electrónico</label>
-                <input type="email" className="form-input" disabled value={user?.email} />
-              </div>
-            </div>
-          </div>
+        <button
+          type="button"
+          className="profile-support-btn"
+          onClick={handleSupportEmail}
+        >
+          <Mail size={18} />
+          <span>Contactar a Soporte por Email</span>
+        </button>
 
-          <div className="glass-card p-6 border-red-500/20 border">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="text-red-500" size={20} />
-              <h2 className="text-lg font-bold text-red-500">Zona de Peligro</h2>
-            </div>
-            <p className="text-secondary text-sm mb-4">
-              Acciones destructivas o irreversibles relacionadas con tu membresía en la mutual.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-red-500/5 rounded-lg border border-red-500/20">
-              <div>
-                <h3 className="font-bold mb-1">Salida Voluntaria de la Mutual</h3>
-                <p className="text-xs text-secondary max-w-sm">
-                  Iniciar el proceso para retirarte de la organización. Implica la pérdida de derechos políticos tras un período de espera.
-                </p>
-              </div>
-              <button 
-                className="mt-4 sm:mt-0 btn btn-outline border-red-500 text-red-500 hover:bg-red-500/10 text-sm whitespace-nowrap"
-                onClick={() => navigate('/membership/withdrawal')}
-              >
-                Gestionar Salida
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Estado del Sistema */}
-        <div className="col-span-1 md:col-span-3 mt-8">
-          <ModuleStatusCard />
+        <div className="profile-email-row">
+          <span className="profile-email-label">@</span>
+          <span className="profile-email-text">{SUPPORT_EMAIL}</span>
+          <button
+            type="button"
+            className="profile-copy-btn"
+            onClick={handleCopyEmail}
+            title="Copiar email de soporte"
+          >
+            {copiedEmail ? <Check size={16} className="text-green-400" /> : <Copy size={16} className="text-blue-400" />}
+          </button>
+          {copiedEmail && <span className="profile-copy-toast">¡Copiado!</span>}
         </div>
       </div>
+
+      {/* Tarjeta 3: Acerca de la App (Homologada con Android) */}
+      <div className="profile-card">
+        <div className="profile-card-header">
+          <Info size={20} className="profile-icon-cyan" />
+          <h2 className="profile-card-title">Acerca de la App</h2>
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Aplicación</span>
+          <span className="profile-about-value">Mutual Familiar</span>
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Versión</span>
+          <span className="profile-pill">v{APP_VERSION}</span>
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Fase</span>
+          <span className="profile-pill profile-pill--beta">Beta (Familias)</span>
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Entorno</span>
+          <EnvBadge size="small" />
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Desarrollador</span>
+          <div className="profile-badge-author">
+            <Code size={15} className="text-blue-400" />
+            <span>Jorge Rojas</span>
+          </div>
+        </div>
+
+        <div className="profile-about-row">
+          <span className="profile-about-label">Analista de calidad</span>
+          <div className="profile-badge-author">
+            <CheckCircle size={15} className="text-green-400" />
+            <span>Maira Salazar</span>
+          </div>
+        </div>
+
+        <div className="profile-divider" />
+
+        <button
+          type="button"
+          className="profile-update-btn"
+          onClick={handleCheckUpdate}
+          disabled={checkingUpdate}
+        >
+          <RefreshCw size={17} className={checkingUpdate ? 'animate-spin' : ''} />
+          <span>{checkingUpdate ? 'Buscando actualizaciones...' : 'Buscar actualizaciones'}</span>
+        </button>
+
+        {updateMsg && (
+          <p className="profile-update-feedback">{updateMsg}</p>
+        )}
+      </div>
+
+      {/* Tarjeta 4: Opciones avanzadas y cuenta (plegable limpia) */}
+      <div className="profile-card profile-card--collapsible">
+        <button
+          type="button"
+          className="profile-collapse-header"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+          <div className="flex items-center gap-2">
+            <Shield size={18} className="text-secondary" />
+            <span className="text-sm font-semibold text-secondary">Información Personal y Cuenta</span>
+          </div>
+          {showAdvanced ? <ChevronUp size={18} className="text-secondary" /> : <ChevronDown size={18} className="text-secondary" />}
+        </button>
+
+        {showAdvanced && (
+          <div className="profile-advanced-content animate-fade-in">
+            <div className="profile-about-row">
+              <span className="profile-about-label">Nombre</span>
+              <span className="profile-about-value">{user?.nombre} {user?.apellido}</span>
+            </div>
+            <div className="profile-about-row">
+              <span className="profile-about-label">Correo</span>
+              <span className="profile-about-value text-xs">{user?.email}</span>
+            </div>
+            {user?.cedula && (
+              <div className="profile-about-row">
+                <span className="profile-about-label">Cédula</span>
+                <span className="profile-about-value">{user.cedula}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Botón de Cerrar Sesión */}
+      <button
+        type="button"
+        className="profile-logout-btn"
+        onClick={logout}
+      >
+        <LogOut size={18} />
+        <span>Cerrar Sesión</span>
+      </button>
     </div>
   );
-};
-
-export default Settings;
+}

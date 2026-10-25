@@ -17,7 +17,7 @@ export default function LoansDashboard() {
   const [pledgeAmount, setPledgeAmount] = useState('');
   const [pledging, setPledging] = useState(false);
   
-  const { user } = useAuthStore();
+  const { user, activeOrg } = useAuthStore();
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -32,11 +32,20 @@ export default function LoansDashboard() {
   };
 
   useEffect(() => {
-    fetchLoans();
-  }, []);
+    if (activeOrg?.id) {
+      fetchLoans();
+    } else {
+      setLoans([]);
+      setLoading(false);
+    }
+  }, [activeOrg?.id]);
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
+    if (!activeOrg) {
+      alert("Debes pertenecer a una mutual activa para solicitar préstamos.");
+      return;
+    }
     try {
       await loansApi.createLoan({
         amount_usd: parseFloat(amount),

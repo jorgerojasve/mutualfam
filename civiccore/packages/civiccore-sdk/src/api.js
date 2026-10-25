@@ -8,9 +8,11 @@ const request = async (endpoint, options = {}) => {
   const { baseURL, storage } = getConfig();
   const token = await storage.getItem('jwt_token');
 
+  const orgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId')) || getConfig().manifest?.organizationId || '1';
+
   const headers = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'X-Organization-ID': await storage.getItem('organizationId') || getConfig().manifest?.organizationId || '1',
+    'X-Organization-ID': String(orgId),
     ...options.headers,
   };
 
@@ -107,7 +109,7 @@ export const authApi = {
 
 export const membershipApi = {
   stats: () => request('/membership/stats'),
-  getMembers: () => request('/membership/'),
+  getMembers: () => request('/membership/members'),
   joinOrganization: (token) => request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token }) }),
   getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),

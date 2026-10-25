@@ -1,13 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Wallet, PiggyBank, Users, Settings } from 'lucide-react';
+import { Wallet, PiggyBank, Users, User } from 'lucide-react';
 
 const BottomNav = () => {
   const navTabs = [
     { to: '/loans', icon: Wallet, label: 'Préstamos' },
     { to: '/funds', icon: PiggyBank, label: 'Fondos' },
     { to: '/members', icon: Users, label: 'Familia' },
-    { to: '/settings', icon: Settings, label: 'Ajustes' },
+    { to: '/profile', icon: User, label: 'Perfil' },
   ];
 
   return (
