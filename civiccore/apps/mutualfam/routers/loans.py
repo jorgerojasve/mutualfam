@@ -7,7 +7,7 @@ from datetime import date
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import User
 import json
-from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig, RepaymentStatus, LoanRepayment
+from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig, RepaymentStatus, LoanRepayment, utcnow
 from routers.membership import get_current_org_member
 from services.telegram_bot import send_telegram_notification, send_telegram_photo
 from services.realtime import notify_org
@@ -212,6 +212,24 @@ def get_loan_requests(
             accepted_pm = json.loads(l.accepted_payment_methods)
         except:
             accepted_pm = []
+
+        # Auto-corrección y sincronización del estatus real del préstamo
+        total_active = amt_pledged + amt_paid + amt_verified
+        if l.status in [LoanStatus.PENDING, LoanStatus.PARTIAL, LoanStatus.FUNDED]:
+            if total_active >= (l.amount_usd - 0.001):
+                expected_status = LoanStatus.FUNDED
+            elif total_active > 0:
+                expected_status = LoanStatus.PARTIAL
+            else:
+                expected_status = LoanStatus.PENDING
+
+            if l.status != expected_status:
+                l.status = expected_status
+                if expected_status == LoanStatus.FUNDED and not l.funded_at:
+                    l.funded_at = utcnow()
+                elif expected_status != LoanStatus.FUNDED:
+                    l.funded_at = None
+                db.commit()
             
         response.append({
             "id": l.id,
@@ -293,9 +311,25 @@ def contribute_to_loan(
     
     if not loan:
         raise HTTPException(status_code=404, detail="Préstamo no encontrado")
-        
-    if loan.status in [LoanStatus.FUNDED, LoanStatus.REPAID, LoanStatus.CANCELLED]:
-        raise HTTPException(status_code=400, detail="Este préstamo ya no acepta aportes")
+
+    from sqlalchemy import func
+    total_current = db.query(func.sum(LoanContribution.amount_usd)).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.status != ContributionStatus.REJECTED
+    ).scalar() or 0.0
+
+    if total_current >= (loan.amount_usd - 0.001) or loan.status in [LoanStatus.REPAID, LoanStatus.CANCELLED]:
+        raise HTTPException(status_code=400, detail="Este préstamo ya no acepta aportes porque ya está 100% fondeado.")
+
+    remaining = loan.amount_usd - total_current
+    if contrib.amount_usd <= 0:
+        raise HTTPException(status_code=400, detail="El monto del aporte debe ser mayor a 0.")
+
+    if contrib.amount_usd > (remaining + 0.001):
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto a aportar (${contrib.amount_usd:.2f}) supera el restante por fondear (${max(0.0, remaining):.2f})."
+        )
         
     existing_contrib = db.query(LoanContribution).filter(
         LoanContribution.loan_request_id == loan.id,
@@ -306,8 +340,6 @@ def contribute_to_loan(
     if existing_contrib:
         existing_contrib.amount_usd += contrib.amount_usd
         new_contrib = existing_contrib
-        db.commit()
-        db.refresh(new_contrib)
     else:
         new_contrib = LoanContribution(
             loan_request_id=loan.id,
@@ -316,21 +348,19 @@ def contribute_to_loan(
             status=ContributionStatus.PLEDGED
         )
         db.add(new_contrib)
-        db.commit()
-        db.refresh(new_contrib)
+
+    db.commit()
+    db.refresh(new_contrib)
     
-    # Validar sumatoria de aportes
-    from sqlalchemy import func
-    
+    # Recalcular sumatoria real de aportes en la base de datos
     total_contributed = db.query(func.sum(LoanContribution.amount_usd)).filter(
         LoanContribution.loan_request_id == loan.id,
         LoanContribution.status != ContributionStatus.REJECTED
     ).scalar() or 0.0
     
-    total_contributed += contrib.amount_usd
-    
-    if total_contributed >= loan.amount_usd:
+    if total_contributed >= (loan.amount_usd - 0.001):
         loan.status = LoanStatus.FUNDED
+        loan.funded_at = utcnow()
     else:
         loan.status = LoanStatus.PARTIAL
         

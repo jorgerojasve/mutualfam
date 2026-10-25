@@ -494,6 +494,15 @@ export default function LoansScreen() {
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Error', 'El monto debe ser válido'); return;
     }
+
+    const totalContributed = selectedLoan ? ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0)) : 0;
+    const remainingToFund = selectedLoan ? Math.max(0, selectedLoan.amount_usd - totalContributed) : 0;
+
+    if (parsedAmount > remainingToFund + 0.01) {
+      Alert.alert('Monto Excedido', `El monto máximo restante para fondear este préstamo es de $${remainingToFund.toFixed(2)}.`);
+      return;
+    }
+
     setPledging(true);
     try {
       await loansApi.contributeToLoan(selectedLoan.id, parsedAmount);
@@ -704,18 +713,30 @@ export default function LoansScreen() {
     const isMine = user && user.id === item.requester_id;
     const canRepay = isMine && (item.status === 'funded' || item.status === 'partial');
     
+    const totalContributed = (item.amount_pledged || 0) + (item.amount_paid || 0) + (item.amount_verified || 0);
+    const percentage = item.amount_usd > 0 ? Math.min(100, Math.round((totalContributed / item.amount_usd) * 100)) : 0;
+    const isFullyFunded = item.status === 'funded' || percentage >= 100;
+
     let statusLabel = item.status;
     if (item.status === 'pending') statusLabel = 'Buscando fondeo';
-    if (item.status === 'partial') statusLabel = 'Fondeo parcial';
-    if (item.status === 'funded') statusLabel = '100% Fondeado';
+    if (item.status === 'partial') statusLabel = `${percentage}% Fondeado`;
+    if (item.status === 'funded') statusLabel = percentage < 100 ? `${percentage}% Fondeado` : '100% Fondeado';
     if (item.status === 'repaid') statusLabel = 'Saldado ✅';
     if (item.status === 'cancelled') statusLabel = 'Cancelado';
     
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={[styles.badge, item.status === 'funded' && {backgroundColor: 'rgba(34, 197, 94, 0.2)'}]}>
-            <Text style={[styles.badgeText, item.status === 'funded' && {color: '#4ade80'}]}>
+          <View style={[
+            styles.badge, 
+            isFullyFunded && {backgroundColor: 'rgba(34, 197, 94, 0.2)'},
+            (!isFullyFunded && percentage > 0) && {backgroundColor: 'rgba(59, 130, 246, 0.2)'}
+          ]}>
+            <Text style={[
+              styles.badgeText, 
+              isFullyFunded && {color: '#4ade80'},
+              (!isFullyFunded && percentage > 0) && {color: '#60a5fa'}
+            ]}>
               {statusLabel}
             </Text>
           </View>
@@ -849,7 +870,7 @@ export default function LoansScreen() {
               )}
             </View>
           ) : (
-            (item.status === 'pending' || item.status === 'partial') && (
+            (!isFullyFunded && item.status !== 'repaid' && item.status !== 'cancelled') && (
               <TouchableOpacity 
                 style={styles.actionButton} 
                 onPress={() => handlePressPledge(item)}
@@ -1313,7 +1334,12 @@ export default function LoansScreen() {
         >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Prometer Aporte 🤝</Text>
-            <Text style={{color: '#94a3b8', marginBottom: 15}}>Vas a prometer un aporte para: {selectedLoan?.requester_name}</Text>
+            <Text style={{color: '#94a3b8', marginBottom: 5}}>Vas a prometer un aporte para: {selectedLoan?.requester_name}</Text>
+            {selectedLoan && (
+              <Text style={{color: '#38bdf8', fontSize: 13, fontWeight: '600', marginBottom: 15}}>
+                Faltan por fondear: ${Math.max(0, selectedLoan.amount_usd - ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0))).toFixed(2)} (de ${selectedLoan.amount_usd})
+              </Text>
+            )}
             
             <Text style={styles.label}>Monto a prometer (USD)</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={pledgeAmount} onChangeText={setPledgeAmount} placeholder="Ej: 50" placeholderTextColor="#475569" />
