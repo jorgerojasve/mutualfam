@@ -178,8 +178,19 @@ export default function InviteLanding() {
           </div>
           <h1 className="il-title">Invitación no válida</h1>
           <p className="il-lead">
-            Esta invitación ya expiró o fue revocada. Pide a quien te invitó que te envíe una nueva.
+            Esta invitación ya expiró o no corresponde a este entorno de pruebas. Pide a quien te invitó que te envíe una nueva.
           </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', width: '100%', marginTop: '1.25rem' }}>
+            <a href="/login" className="il-btn il-btn--primary">
+              Iniciar Sesión en MutualFam
+            </a>
+            <a href="/register" className="il-btn il-btn--secondary">
+              Crear una cuenta nueva
+            </a>
+            <a href="/invite" className="il-btn il-btn--ghost" style={{ fontSize: '0.85rem' }}>
+              Ver opciones de acceso general
+            </a>
+          </div>
         </section>
         <p className="il-footer">Plataforma Cívica Mutual Familiar</p>
       </main>

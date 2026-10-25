@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import User, OrganizationMembership, Organization, OrganizationInvite, InviteStatus, MemberStatus
@@ -103,7 +104,11 @@ def get_current_org_member(request: Request, current_user: User = Depends(get_cu
 class RegisterRequest(BaseModel):
     email: str
     password: str
-    full_name: str
+    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    identifier: Optional[str] = None
+    phone: Optional[str] = None
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
@@ -112,16 +117,28 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="El email ya está registrado")
     
     hashed_pw = get_password_hash(req.password)
-    parts = req.full_name.split(" ", 1)
-    first_name = parts[0]
-    last_name = parts[1] if len(parts) > 1 else ""
     
+    first_name = (req.first_name or "").strip()
+    last_name = (req.last_name or "").strip()
+    
+    if not first_name and req.full_name:
+        parts = req.full_name.strip().split(" ", 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+    elif not last_name and not req.full_name and first_name:
+        parts = first_name.split(" ", 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+
+    if not first_name:
+        first_name = req.email.split("@")[0]
+
     new_user = User(
         email=req.email,
         hashed_password=hashed_pw,
         first_name=first_name,
         last_name=last_name,
-        phone=""
+        phone=req.phone or ""
     )
     db.add(new_user)
     db.commit()

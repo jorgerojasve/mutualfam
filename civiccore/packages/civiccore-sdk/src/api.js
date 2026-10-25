@@ -28,7 +28,12 @@ const request = async (endpoint, options = {}) => {
   let rawText = '';
   try {
     rawText = await response.text();
-    const data = JSON.parse(rawText);
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      data = null;
+    }
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -36,7 +41,19 @@ const request = async (endpoint, options = {}) => {
         const { useAuthStore } = require('./authStore.js');
         useAuthStore.getState().logout();
       }
-      const message = data?.detail || 'Ocurrió un error en el servidor.';
+      let message = 'Ocurrió un error en el servidor.';
+      if (typeof data?.detail === 'string') {
+        message = data.detail;
+      } else if (Array.isArray(data?.detail)) {
+        // Formato FastAPI 422: [{ loc: [...], msg: "..." }]
+        message = data.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (data?.detail && typeof data.detail === 'object') {
+        message = JSON.stringify(data.detail);
+      } else if (data?.message) {
+        message = data.message;
+      } else if (rawText) {
+        message = `Error del servidor (${response.status}): ${rawText.slice(0, 150)}`;
+      }
       throw new Error(message);
     }
     return data;
@@ -91,6 +108,8 @@ export const authApi = {
 export const membershipApi = {
   stats: () => request('/membership/stats'),
   getMembers: () => request('/membership/'),
+  joinOrganization: (token) => request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token }) }),
+  getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
   estadoBaja: () => request('/membership/withdrawal/status'),

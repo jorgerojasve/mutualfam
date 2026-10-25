@@ -18,10 +18,13 @@ export const useConfigStore = create((set, get) => ({
     try {
       const data = await configApi.getVariables();
       
-      // Extraer terminología de la BD
-      const termGov = data.find(c => c.key === 'TERM_GOVERNANCE')?.value || 'Gobernanza';
-      const termTrans = data.find(c => c.key === 'TERM_TRANSPARENCY')?.value || 'Transparencia';
-      const termMem = data.find(c => c.key === 'TERM_MEMBERS')?.value || 'Miembros';
+      // Asegurar lista segura incluso si el endpoint devuelve un objeto dict
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.variables) ? data.variables : []);
+
+      // Extraer terminología de la BD o defaults
+      const termGov = list.find(c => c.key === 'TERM_GOVERNANCE')?.value || 'Gobernanza';
+      const termTrans = list.find(c => c.key === 'TERM_TRANSPARENCY')?.value || 'Transparencia';
+      const termMem = list.find(c => c.key === 'TERM_MEMBERS')?.value || 'Miembros';
 
       // Cargar data de madurez
       let maturityData = { framework: null, modules: {} };
@@ -52,7 +55,8 @@ export const useConfigStore = create((set, get) => ({
       }
 
       set({ 
-        configs: data, 
+        configs: list,
+        rawConfig: data,
         terminology: {
           governance: termGov,
           transparency: termTrans,
