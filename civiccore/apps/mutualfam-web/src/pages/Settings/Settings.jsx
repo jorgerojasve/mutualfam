@@ -177,6 +177,14 @@ export default function ProfileAndSettings() {
           </div>
         </div>
 
+        <div className="profile-about-row">
+          <span className="profile-about-label">Analista de calidad (iOS)</span>
+          <div className="profile-badge-author">
+            <CheckCircle size={15} className="text-green-400" />
+            <span>Martín Vieira</span>
+          </div>
+        </div>
+
         <div className="profile-divider" />
 
         <button

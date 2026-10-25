@@ -199,6 +199,14 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
+        <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Analista de calidad (iOS)</Text>
+          <View style={styles.authorBadge}>
+            <Ionicons name="checkmark-done-circle-outline" size={16} color="#38bdf8" style={{ marginRight: 5 }} />
+            <Text style={styles.authorText}>Martín Vieira</Text>
+          </View>
+        </View>
+
         <View style={styles.divider} />
 
         {/* Botón de buscar actualizaciones */}
