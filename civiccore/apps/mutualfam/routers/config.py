@@ -199,7 +199,25 @@ def get_config():
         "limits": get_limits_summary(),
         "app_phase": get_app_phase_summary(),
         "app_version": get_latest_release_info(),
-        "banks": VENEZUELAN_BANKS
+        "banks": VENEZUELAN_BANKS,
+        "firebase_distribution": {
+            "enabled": True,
+            "invite_url": os.getenv("FIREBASE_INVITE_URL_QA" if is_qa_environment() else "FIREBASE_INVITE_URL", ""),
+            "app_id": "1:833486393039:android:b88cb4bc152b114c04f1ba" if is_qa_environment() else "1:833486393039:android:452c1bd61f9024de04f1ba",
+        }
+    }
+
+@router.get("/firebase-tester-url")
+def get_firebase_tester_url():
+    """Retorna el enlace de invitación de Firebase App Distribution para testers."""
+    is_qa = is_qa_environment()
+    url = os.getenv("FIREBASE_INVITE_URL_QA" if is_qa else "FIREBASE_INVITE_URL", "")
+    app_id = "1:833486393039:android:b88cb4bc152b114c04f1ba" if is_qa else "1:833486393039:android:452c1bd61f9024de04f1ba"
+    return {
+        "url": url,
+        "app_id": app_id,
+        "has_custom_url": bool(url),
+        "app_tester_playstore": "https://play.google.com/store/apps/details?id=com.google.android.apps.internal.betterbug"
     }
 
 class LimitsUpdate(BaseModel):
