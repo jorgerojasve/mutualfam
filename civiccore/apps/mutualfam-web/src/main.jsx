@@ -20,6 +20,11 @@ if (faviconEl) {
   faviconEl.href = envConfig.isQA ? '/favicon-qa.png' : '/favicon.png';
 }
 
+const appleTouchIconEl = document.getElementById('apple-touch-icon');
+if (appleTouchIconEl) {
+  appleTouchIconEl.href = envConfig.isQA ? '/favicon-qa.png' : '/favicon.png';
+}
+
 // Adaptador de LocalStorage para la Web
 initCivicCore({
   manifest,

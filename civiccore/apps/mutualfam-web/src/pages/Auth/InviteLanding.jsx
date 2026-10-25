@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Download,
   Smartphone,
+  Globe,
   Copy,
   Check,
   ShieldCheck,
@@ -26,6 +27,17 @@ const API_URL = rawApiUrl || 'https://mutualfam-backend.fly.dev/api/v1';
 // Enlace Mágico: el backend siempre redirige a la última versión del APK
 // publicada en GitHub, sin que tengamos que actualizar esta página web.
 const DOWNLOAD_APK_LINK = `${API_URL}/config/latest-apk`;
+
+function detectInitialPlatform() {
+  if (typeof navigator === 'undefined') return 'android';
+  const ua = navigator.userAgent || '';
+  const plat = navigator.platform || '';
+  const maxTouch = navigator.maxTouchPoints || 0;
+  if (/iPad|iPhone|iPod/.test(ua) || (plat === 'MacIntel' && maxTouch > 1)) {
+    return 'ios';
+  }
+  return 'android';
+}
 
 async function copyText(text) {
   try {
@@ -73,6 +85,7 @@ export default function InviteLanding() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState(detectInitialPlatform);
   const downloadCooldownRef = useRef(false);
   const toastTimer = useRef(null);
   const envConfig = getEnvironmentConfig();
@@ -84,11 +97,16 @@ export default function InviteLanding() {
         : 'Invitación a Mutual Familiar | MutualFam';
     } else {
       document.title = envConfig.isQA
-        ? 'Descargar MutualFam (QA) - App Oficial Android'
-        : 'Descargar MutualFam - App Oficial Android';
+        ? 'Acceso a MutualFam (QA) - Android e iPhone'
+        : 'Acceso a MutualFam - Android e iPhone';
     }
     const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute('content', 'Descarga la app oficial de Mutual Familiar para Android y gestiona préstamos y aportes familiares.');
+    if (meta) {
+      meta.setAttribute(
+        'content',
+        'Accede a la app oficial de Mutual Familiar para Android e iPhone y gestiona préstamos y aportes familiares.'
+      );
+    }
   }, [envConfig.isQA, token]);
 
   useEffect(() => {
@@ -197,7 +215,13 @@ export default function InviteLanding() {
             </div>
             <EnvBadge size="medium" />
           </div>
-          <p className="il-eyebrow">{token ? 'Tienes una invitación' : 'Aplicación Oficial Android'}</p>
+          <p className="il-eyebrow">
+            {token
+              ? 'Tienes una invitación'
+              : selectedPlatform === 'ios'
+              ? 'Acceso Oficial para iPhone'
+              : 'Aplicación Oficial Android'}
+          </p>
           <h1 className="il-title">
             {status === 'loading' ? (
               <span className="il-skeleton" />
@@ -206,15 +230,41 @@ export default function InviteLanding() {
             ) : token ? (
               <>Te invitaron a una <span className="il-gradient">Mutual Familiar</span></>
             ) : (
-              <>Descarga <span className="il-gradient">{envConfig.appName}</span></>
+              <>Accede a <span className="il-gradient">{envConfig.appName}</span></>
             )}
           </h1>
           <p className="il-lead">
-            {token
+            {selectedPlatform === 'ios'
+              ? 'Sigue estos sencillos pasos para usar la aplicación directamente en tu iPhone.'
+              : token
               ? 'Sigue estos 4 pasos. Te tomará unos 3 minutos.'
               : 'Sigue estos sencillos pasos para instalar la aplicación en tu dispositivo móvil.'}
           </p>
         </header>
+
+        {/* Selector de plataforma Android vs iPhone */}
+        <div className="il-tabs" role="tablist" aria-label="Seleccionar plataforma">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={selectedPlatform === 'android'}
+            className={`il-tab ${selectedPlatform === 'android' ? 'il-tab--active' : ''}`}
+            onClick={() => setSelectedPlatform('android')}
+          >
+            <Smartphone size={16} aria-hidden="true" />
+            <span>🤖 Android (APK)</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={selectedPlatform === 'ios'}
+            className={`il-tab ${selectedPlatform === 'ios' ? 'il-tab--active' : ''}`}
+            onClick={() => setSelectedPlatform('ios')}
+          >
+            <Globe size={16} aria-hidden="true" />
+            <span>🍏 iPhone (Web App)</span>
+          </button>
+        </div>
 
         {/* Código de invitación: respaldo manual si la detección automática falla */}
         {Boolean(token && code) && (
@@ -236,116 +286,208 @@ export default function InviteLanding() {
           </div>
         )}
 
-        <ol className="il-steps">
-          <Step number={1} icon={Download} title="Descarga la app" active={!downloadStarted}>
-            <p className="il-text">
-              Toca el botón. Se descargará un archivo que termina en <strong>.apk</strong> (así se
-              instalan las apps que aún no están en Play Store).
-            </p>
-            <a
-              id="download-apk-btn"
-              href={DOWNLOAD_APK_LINK}
-              download
-              onClick={handleDownload}
-              className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
-            >
-              <Download aria-hidden="true" />
-              {isDownloading
-                ? 'Iniciando descarga...'
-                : envConfig.isQA
-                ? 'Descargar MutualFam (QA)'
-                : 'Descargar MutualFam'}
-            </a>
-            <p className="il-note">
-              Si Chrome dice <em>"Este tipo de archivo puede dañar tu dispositivo"</em>, toca{' '}
-              <strong>Descargar de todas formas</strong>.
-            </p>
-
-            <details className="il-help">
-              <summary>
-                <span>¿La descarga se queda al 100% o no finaliza?</span>
-                <ChevronDown className="il-help__chevron" aria-hidden="true" />
-              </summary>
-              <div className="il-help__content">
-                <p className="il-help__title">Si el círculo de descarga se completó pero nunca termina:</p>
-                <ol className="il-help__list">
-                  <li>En Chrome, toca los <strong>tres puntos (⋮)</strong> arriba a la derecha y entra a <strong>Descargas</strong>.</li>
-                  <li>Si ves el archivo con advertencia, toca <strong>Mantener</strong> o <strong>Descargar de todas formas</strong>.</li>
-                  <li>O abre la app <strong>Archivos / Mis archivos</strong> de tu teléfono en la carpeta <strong>Descargas</strong> para tocar el instalador directamente.</li>
-                </ol>
+        {/* Pasos para iPhone */}
+        {selectedPlatform === 'ios' ? (
+          <ol className="il-steps">
+            <Step number={1} icon={Globe} title="Entra a la aplicación" active={true}>
+              <p className="il-text">
+                En iPhone no necesitas descargar archivos APK. Accede directamente a la versión oficial optimizada para Safari:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginBottom: '0.75rem' }}>
+                <a
+                  id="enter-web-btn"
+                  href={token ? `/register?token=${encodeURIComponent(token)}` : '/login'}
+                  onClick={() => {
+                    if (token) {
+                      try { localStorage.setItem('pending_join_token', token); } catch (_) {}
+                      copyText(window.location.href);
+                    }
+                  }}
+                  className="il-btn il-btn--primary"
+                >
+                  <UserPlus aria-hidden="true" />
+                  {token ? 'Entrar y Registrarme' : 'Abrir MutualFam Web'}
+                </a>
+                <a
+                  href="/login"
+                  className="il-btn il-btn--ghost"
+                  style={{ fontSize: '0.85rem' }}
+                >
+                  ¿Ya tienes cuenta? Inicia sesión aquí
+                </a>
               </div>
-            </details>
-          </Step>
+            </Step>
 
-          <Step number={2} icon={ShieldCheck} title="Instálala" active={downloadStarted}>
-            <p className="il-text">
-              Cuando termine la descarga, toca la notificación <strong>"Descarga completa"</strong>. Si
-              no la ves, abre la app <strong>Archivos</strong> → <strong>Descargas</strong> y toca el
-              archivo de MutualFam.
-            </p>
-
-            <details className="il-help">
-              <summary>
-                <span>¿Android no te deja instalar?</span>
-                <ChevronDown className="il-help__chevron" aria-hidden="true" />
-              </summary>
-              <div className="il-help__content">
-                <p className="il-help__title">Si dice "Por tu seguridad, no se pueden instalar apps desconocidas":</p>
-                <ol className="il-help__list">
-                  <li>Toca <strong>Configuración</strong>.</li>
-                  <li>Activa <strong>Permitir de esta fuente</strong>.</li>
-                  <li>Toca la flecha <strong>atrás</strong> y luego <strong>Instalar</strong>.</li>
-                </ol>
-                <p className="il-help__title">Si aparece Google Play Protect ("App desconocida"):</p>
-                <ol className="il-help__list">
-                  <li>Toca <strong>Más detalles</strong>.</li>
-                  <li>Toca <strong>Instalar de todas formas</strong>.</li>
-                </ol>
-                <p className="il-help__foot">
-                  Es normal: aparece porque la app todavía no se distribuye por Play Store.
-                </p>
+            <Step number={2} icon={ShieldCheck} title="Agrégala a tu pantalla de inicio" active={false}>
+              <p className="il-text">
+                Para usarla con su ícono oficial en tu escritorio y que abra a pantalla completa sin barras de navegador:
+              </p>
+              <div className="il-ios-guide">
+                <div className="il-ios-guide__step">
+                  <span className="il-ios-guide__num">1</span>
+                  <span>En Safari, toca el botón <strong>Compartir</strong> (el ícono de la cajita con flecha <strong>⎋</strong> en la barra inferior).</span>
+                </div>
+                <div className="il-ios-guide__step">
+                  <span className="il-ios-guide__num">2</span>
+                  <span>Desliza hacia abajo en el menú y selecciona <strong>"Agregar a pantalla de inicio"</strong>.</span>
+                </div>
+                <div className="il-ios-guide__step">
+                  <span className="il-ios-guide__num">3</span>
+                  <span>Toca <strong>"Agregar"</strong> arriba a la derecha.</span>
+                </div>
               </div>
-            </details>
-          </Step>
-
-          <Step number={3} icon={UserPlus} title="Abre la app y crea tu cuenta">
-            <p className="il-text">
-              Al terminar la instalación toca <strong>Abrir</strong> y luego <strong>Regístrate</strong> con
-              tu nombre, correo y una contraseña.
-            </p>
-            {Boolean(token) && (
               <p className="il-note il-note--success">
-                La app detectará tu invitación automáticamente{orgName ? ` a ${orgName}` : ''}.
+                ✨ ¡Listo! Se creará el ícono oficial de MutualFam en tu iPhone y abrirá como una aplicación instalada.
               </p>
-            )}
-          </Step>
+            </Step>
 
-          <Step number={4} icon={Users} title={token ? "Únete a la mutual" : "Únete o crea tu mutual"}>
-            <p className="il-text">
-              {token ? (
-                <>Verás el mensaje <em>"Has sido invitado a…"</em>. Toca <strong>Confirmar y Unirme</strong>.</>
-              ) : (
-                'Dentro de la app podrás crear una nueva mutual familiar o ingresar el código de invitación que te hayan compartido.'
-              )}
-            </p>
-            {Boolean(token && code) && (
-              <p className="il-note">
-                ¿No apareció? En la app toca <strong>Tengo un código de invitación</strong> y escribe{' '}
-                <code className="il-inline-code">{code}</code>.
+            <Step number={3} icon={UserPlus} title="Crea tu cuenta o inicia sesión" active={false}>
+              <p className="il-text">
+                Regístrate con tu nombre, correo y contraseña para activar tu acceso personal.
               </p>
-            )}
-          </Step>
-        </ol>
+              {Boolean(token) && (
+                <p className="il-note il-note--success">
+                  La app detectará tu invitación automáticamente{orgName ? ` a ${orgName}` : ''}.
+                </p>
+              )}
+            </Step>
+
+            <Step number={4} icon={Users} title={token ? "Únete a la mutual" : "Únete o crea tu mutual"} active={false}>
+              <p className="il-text">
+                {token ? (
+                  <>Verás el mensaje <em>"Has sido invitado a…"</em>. Toca <strong>Confirmar y Unirme</strong>.</>
+                ) : (
+                  'Dentro de la app podrás crear una nueva mutual familiar o ingresar el código de invitación que te hayan compartido.'
+                )}
+              </p>
+              {Boolean(token && code) && (
+                <p className="il-note">
+                  ¿No apareció automáticamente? Copia tu código: <code className="il-inline-code">{code}</code>.
+                </p>
+              )}
+            </Step>
+          </ol>
+        ) : (
+          /* Pasos para Android */
+          <ol className="il-steps">
+            <Step number={1} icon={Download} title="Descarga la app" active={!downloadStarted}>
+              <p className="il-text">
+                Toca el botón. Se descargará un archivo que termina en <strong>.apk</strong> (así se
+                instalan las apps que aún no están en Play Store).
+              </p>
+              <a
+                id="download-apk-btn"
+                href={DOWNLOAD_APK_LINK}
+                download
+                onClick={handleDownload}
+                className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
+              >
+                <Download aria-hidden="true" />
+                {isDownloading
+                  ? 'Iniciando descarga...'
+                  : envConfig.isQA
+                  ? 'Descargar MutualFam (QA)'
+                  : 'Descargar MutualFam'}
+              </a>
+              <p className="il-note">
+                Si Chrome dice <em>"Este tipo de archivo puede dañar tu dispositivo"</em>, toca{' '}
+                <strong>Descargar de todas formas</strong>.
+              </p>
+
+              <details className="il-help">
+                <summary>
+                  <span>¿La descarga se queda al 100% o no finaliza?</span>
+                  <ChevronDown className="il-help__chevron" aria-hidden="true" />
+                </summary>
+                <div className="il-help__content">
+                  <p className="il-help__title">Si el círculo de descarga se completó pero nunca termina:</p>
+                  <ol className="il-help__list">
+                    <li>En Chrome, toca los <strong>tres puntos (⋮)</strong> arriba a la derecha y entra a <strong>Descargas</strong>.</li>
+                    <li>Si ves el archivo con advertencia, toca <strong>Mantener</strong> o <strong>Descargar de todas formas</strong>.</li>
+                    <li>O abre la app <strong>Archivos / Mis archivos</strong> de tu teléfono en la carpeta <strong>Descargas</strong> para tocar el instalador directamente.</li>
+                  </ol>
+                </div>
+              </details>
+            </Step>
+
+            <Step number={2} icon={ShieldCheck} title="Instálala" active={downloadStarted}>
+              <p className="il-text">
+                Cuando termine la descarga, toca la notificación <strong>"Descarga completa"</strong>. Si
+                no la ves, abre la app <strong>Archivos</strong> → <strong>Descargas</strong> y toca el
+                archivo de MutualFam.
+              </p>
+
+              <details className="il-help">
+                <summary>
+                  <span>¿Android no te deja instalar?</span>
+                  <ChevronDown className="il-help__chevron" aria-hidden="true" />
+                </summary>
+                <div className="il-help__content">
+                  <p className="il-help__title">Si dice "Por tu seguridad, no se pueden instalar apps desconocidas":</p>
+                  <ol className="il-help__list">
+                    <li>Toca <strong>Configuración</strong>.</li>
+                    <li>Activa <strong>Permitir de esta fuente</strong>.</li>
+                    <li>Toca la flecha <strong>atrás</strong> y luego <strong>Instalar</strong>.</li>
+                  </ol>
+                  <p className="il-help__title">Si aparece Google Play Protect ("App desconocida"):</p>
+                  <ol className="il-help__list">
+                    <li>Toca <strong>Más detalles</strong>.</li>
+                    <li>Toca <strong>Instalar de todas formas</strong>.</li>
+                  </ol>
+                  <p className="il-help__foot">
+                    Es normal: aparece porque la app todavía no se distribuye por Play Store.
+                  </p>
+                </div>
+              </details>
+            </Step>
+
+            <Step number={3} icon={UserPlus} title="Abre la app y crea tu cuenta">
+              <p className="il-text">
+                Al terminar la instalación toca <strong>Abrir</strong> y luego <strong>Regístrate</strong> con
+                tu nombre, correo y una contraseña.
+              </p>
+              {Boolean(token) && (
+                <p className="il-note il-note--success">
+                  La app detectará tu invitación automáticamente{orgName ? ` a ${orgName}` : ''}.
+                </p>
+              )}
+            </Step>
+
+            <Step number={4} icon={Users} title={token ? "Únete a la mutual" : "Únete o crea tu mutual"}>
+              <p className="il-text">
+                {token ? (
+                  <>Verás el mensaje <em>"Has sido invitado a…"</em>. Toca <strong>Confirmar y Unirme</strong>.</>
+                ) : (
+                  'Dentro de la app podrás crear una nueva mutual familiar o ingresar el código de invitación que te hayan compartido.'
+                )}
+              </p>
+              {Boolean(token && code) && (
+                <p className="il-note">
+                  ¿No apareció? En la app toca <strong>Tengo un código de invitación</strong> y escribe{' '}
+                  <code className="il-inline-code">{code}</code>.
+                </p>
+              )}
+            </Step>
+          </ol>
+        )}
 
         <div className="il-divider">
-          <span>¿Ya tienes la app instalada?</span>
+          <span>{selectedPlatform === 'ios' ? '¿Ya tienes cuenta en la web?' : '¿Ya tienes la app instalada?'}</span>
         </div>
 
-        <a id="open-app-btn" href={deepLink} className="il-btn il-btn--secondary">
-          <Smartphone aria-hidden="true" />
-          Abrir invitación en la app
-          <ExternalLink className="il-btn__trailing" aria-hidden="true" />
-        </a>
+        {selectedPlatform === 'ios' ? (
+          <a id="open-app-btn" href="/login" className="il-btn il-btn--secondary">
+            <Globe aria-hidden="true" />
+            Ir a Iniciar Sesión en la Web
+            <ExternalLink className="il-btn__trailing" aria-hidden="true" />
+          </a>
+        ) : (
+          <a id="open-app-btn" href={deepLink} className="il-btn il-btn--secondary">
+            <Smartphone aria-hidden="true" />
+            Abrir invitación en la app
+            <ExternalLink className="il-btn__trailing" aria-hidden="true" />
+          </a>
+        )}
       </section>
 
       <p className="il-footer">Plataforma Cívica Mutual Familiar</p>
