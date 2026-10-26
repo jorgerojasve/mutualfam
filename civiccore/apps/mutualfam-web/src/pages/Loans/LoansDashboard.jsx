@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { loansApi } from '@civiccore/sdk';
-import { useAuthStore } from '@civiccore/sdk/src/authStore.js';
+import { loansApi, useAuthStore } from '@civiccore/sdk';
 import { X, Check } from 'lucide-react';
 
 export default function LoansDashboard() {
