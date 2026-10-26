@@ -67,14 +67,18 @@ export default function ProfileAndSettings() {
     window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
   };
 
-  const handleCheckUpdate = () => {
+  const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
-    setUpdateMsg('');
+    setUpdateMsg('Limpiando caché y descargando última versión...');
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (_) {}
     setTimeout(() => {
-      setCheckingUpdate(false);
-      setUpdateMsg(`¡Estás al día! Tienes instalada la versión más reciente (v${APP_VERSION}).`);
-      setTimeout(() => setUpdateMsg(''), 4000);
-    }, 700);
+      window.location.href = window.location.origin + '/loans?v=' + Date.now();
+    }, 600);
   };
 
   return (
