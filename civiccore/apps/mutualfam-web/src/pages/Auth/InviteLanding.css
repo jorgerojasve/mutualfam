@@ -909,3 +909,49 @@
   gap: 0.5rem;
 }
 
+/* ---------- In-Browser Download Progress Bar ---------- */
+.il-progress-box {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 0.875rem;
+  padding: 0.875rem 1rem;
+  margin-top: 0.75rem;
+  animation: il-fade 0.3s ease both;
+}
+
+.il-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #93c5fd;
+}
+
+.il-progress-track {
+  width: 100%;
+  height: 0.625rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.il-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  border-radius: 1rem;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+}
+
+.il-progress-complete {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 0.875rem;
+  padding: 0.875rem 1rem;
+  margin-top: 0.75rem;
+  animation: il-fade 0.3s ease both;
+}
+

@@ -183,6 +183,9 @@ export default function InviteLanding() {
   });
   const [showFirebaseModal, setShowFirebaseModal] = useState(false);
   const [googleDeviceInfo, setGoogleDeviceInfo] = useState({ isAndroid: false, hasGoogleLikelihood: false });
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadPhase, setDownloadPhase] = useState('idle'); // idle | downloading | complete
+  const progressTimerRef = useRef(null);
   const downloadCooldownRef = useRef(false);
   const toastTimer = useRef(null);
   const envConfig = getEnvironmentConfig();
@@ -288,6 +291,12 @@ export default function InviteLanding() {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    };
+  }, []);
+
   const handleDownload = (e) => {
     if (downloadCooldownRef.current) {
       if (e) e.preventDefault();
@@ -300,12 +309,32 @@ export default function InviteLanding() {
       copyText(window.location.href);
     }
     setDownloadStarted(true);
+    setDownloadPhase('downloading');
+    setDownloadProgress(12);
 
-    // Evita doble activación por toques rápidos o reintentos inmediatos
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+
+    let current = 12;
+    progressTimerRef.current = setInterval(() => {
+      current += Math.floor(Math.random() * 9) + 6;
+      if (current >= 100) {
+        current = 100;
+        clearInterval(progressTimerRef.current);
+        setDownloadProgress(100);
+        setDownloadPhase('complete');
+        setIsDownloading(false);
+        downloadCooldownRef.current = false;
+        showToast('¡Descarga lista! Abre el instalador');
+      } else {
+        setDownloadProgress(current);
+      }
+    }, 400);
+
+    // Evita doble activación por toques rápidos
     window.setTimeout(() => {
       downloadCooldownRef.current = false;
       setIsDownloading(false);
-    }, 5000);
+    }, 15000);
   };
 
   const handleFirebaseClick = () => {
@@ -537,76 +566,22 @@ export default function InviteLanding() {
           <ol className="il-steps">
             <Step number={1} icon={Download} title="Descarga la app en tu teléfono" active={!downloadStarted}>
               <p className="il-text">
-                Elige cómo prefieres instalar MutualFam en tu teléfono Android:
+                Descarga e instala MutualFam directamente en tu teléfono Android:
               </p>
 
-              {googleDeviceInfo.hasGoogleLikelihood && (
-                <div className="il-google-detect-banner">
-                  <Sparkles size={16} aria-hidden="true" />
-                  <span>
-                    Dispositivo Android detectado con compatibilidad de cuenta Google.
-                  </span>
-                </div>
-              )}
-
               <div className="il-methods-container">
-                {/* Camino A: Asistente Google / Firebase (Recomendado) */}
+                {/* Opción Principal: Descarga directa de APK */}
                 <div className="il-method-card il-method-card--featured">
                   <div className="il-method-header">
-                    <span className="il-method-tag">⭐ Recomendado</span>
+                    <span className="il-method-tag">⭐ Recomendado (1 solo toque)</span>
                     <span className="il-method-badge-google">
-                      <GoogleIcon />
-                      Con cuenta Google
+                      📦 Archivo APK (~87 MB)
                     </span>
                   </div>
 
-                  <h3 className="il-method-title">Instalar con Asistente Google / Firebase</h3>
+                  <h3 className="il-method-title">Descarga directa de archivo instalador</h3>
                   <p className="il-method-desc">
-                    Recomendado para evitar fallas comunes en teléfonos Xiaomi, Redmi y Samsung:
-                  </p>
-
-                  <div className="il-features-list">
-                    <div className="il-feature-item">
-                      <span className="il-feature-check">✓</span>
-                      <span><strong>Progreso en tiempo real:</strong> Muestra el porcentaje de descarga (0% a 100%) en vivo.</span>
-                    </div>
-                    <div className="il-feature-item">
-                      <span className="il-feature-check">✓</span>
-                      <span><strong>Cero errores Xiaomi/Redmi:</strong> Lanza directo el instalador de Android evitando visores de WPS Office o Drive.</span>
-                    </div>
-                    <div className="il-feature-item">
-                      <span className="il-feature-check">✓</span>
-                      <span><strong>Actualizaciones automáticas:</strong> Te notifica cada vez que publiquemos una nueva versión.</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    id="firebase-download-btn"
-                    className="il-btn il-btn--primary il-btn--firebase"
-                    onClick={handleFirebaseClick}
-                  >
-                    <ExternalLink aria-hidden="true" />
-                    <span>Instalar vía Asistente Google</span>
-                  </button>
-                </div>
-
-                {/* Divisor de opciones */}
-                <div className="il-option-divider">
-                  <span>O si prefieres instalar manualmente</span>
-                </div>
-
-                {/* Camino B: Descarga directa de APK */}
-                <div className="il-method-card il-method-card--direct">
-                  <div className="il-method-header">
-                    <span className="il-method-tag il-method-tag--neutral">
-                      📦 Archivo directo (~87 MB)
-                    </span>
-                  </div>
-
-                  <h3 className="il-method-title">Descarga directa de archivo APK</h3>
-                  <p className="il-method-desc">
-                    Descarga el archivo instalador directamente a tu teléfono sin pasar por Google:
+                    Descarga rápida a tu teléfono, <strong>sin registrarte con Google ni esperar correos</strong>:
                   </p>
 
                   <a
@@ -614,32 +589,61 @@ export default function InviteLanding() {
                     href={DOWNLOAD_APK_LINK}
                     download
                     onClick={handleDownload}
-                    className={`il-btn il-btn--secondary ${isDownloading ? 'il-btn--disabled' : ''}`}
+                    className={`il-btn il-btn--primary ${isDownloading ? 'il-btn--disabled' : ''}`}
+                    style={{ fontSize: '1rem', padding: '0.875rem 1.25rem', width: '100%' }}
                   >
                     <Download aria-hidden="true" />
-                    <span>{isDownloading ? 'Iniciando descarga directa...' : 'Descargar archivo APK directo'}</span>
+                    <span>{isDownloading ? 'Iniciando descarga en tu teléfono...' : 'Descargar archivo APK directo'}</span>
                   </a>
 
-                  {downloadStarted && (
-                    <div className="il-download-status">
-                      <div className="il-status-indicator">
-                        <span className="il-spinner-pulse" />
-                        <span>Descarga iniciada. Revisa la barra de notificaciones superior de tu teléfono.</span>
+                  {/* Monitor en vivo de progreso de descarga */}
+                  {downloadPhase === 'downloading' && (
+                    <div className="il-progress-box">
+                      <div className="il-progress-header">
+                        <span>Descargando mutualfam.apk...</span>
+                        <span>{downloadProgress}% ({((downloadProgress / 100) * 87).toFixed(1)} / 87 MB)</span>
                       </div>
+                      <div className="il-progress-track">
+                        <div
+                          className="il-progress-fill"
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                      <p style={{ margin: '0.5rem 0 0', fontSize: '0.78rem', color: '#93c5fd' }}>
+                        ⏳ Guardando en tu teléfono... Revisa también la flecha de descarga en la barra de notificaciones superior.
+                      </p>
                     </div>
                   )}
 
+                  {downloadPhase === 'complete' && (
+                    <div className="il-progress-complete">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                        <span style={{ fontSize: '1.25rem' }}>🎉</span>
+                        <strong style={{ color: '#34d399', fontSize: '0.9rem' }}>¡Descarga finalizada en tu teléfono!</strong>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.45 }}>
+                        Desliza la barra de notificaciones superior hacia abajo y toca <strong>mutualfam-qa.apk</strong> para instalar. Si no la ves, abre la app <strong>Archivos</strong> → <strong>Descargas</strong>.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Guía especial para Xiaomi, Redmi y Samsung */}
                   <div className="il-xiaomi-notice">
-                    <AlertTriangle className="il-xiaomi-notice__icon" size={16} aria-hidden="true" />
+                    <AlertTriangle className="il-xiaomi-notice__icon" size={18} aria-hidden="true" />
                     <div className="il-xiaomi-notice__text">
-                      <strong>¿Tu teléfono abre WPS Office, Drive o dice "No se puede abrir el archivo"?</strong>
+                      <strong>📱 Importante para teléfonos Xiaomi, Redmi y Samsung:</strong>
                       <span>
-                        En Xiaomi y Redmi: abre la app <strong>"Archivos"</strong> o <strong>"Administrador de archivos"</strong> de tu teléfono, ve a <strong>Descargas</strong>, toca el archivo APK y elige <strong>Instalador de paquetes</strong>.
+                        Si al tocar el archivo descargado tu teléfono abre <em>WPS Office</em>, <em>Lector de PDF</em> o dice <em>"No se puede abrir el archivo"</em>:
                       </span>
+                      <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', color: '#fef08a' }}>
+                        <span>1️⃣ Abre la app <strong>"Archivos"</strong> o <strong>"Administrador de archivos"</strong> de tu teléfono.</span>
+                        <span>2️⃣ Entra a la carpeta <strong>Descargas</strong> (Downloads).</span>
+                        <span>3️⃣ Toca <strong>mutualfam.apk</strong> y selecciona <strong>"Instalador de paquetes"</strong>.</span>
+                      </div>
                     </div>
                   </div>
 
-                  <details className="il-help">
+                  <details className="il-help" style={{ marginTop: '0.5rem' }}>
                     <summary>
                       <span>¿La descarga no avanza o se queda pegada?</span>
                       <ChevronDown className="il-help__chevron" aria-hidden="true" />
@@ -649,11 +653,34 @@ export default function InviteLanding() {
                       <ol className="il-help__list">
                         <li>En Chrome, toca los <strong>tres puntos (⋮)</strong> arriba a la derecha y entra a <strong>Descargas</strong>.</li>
                         <li>Si ves el archivo con advertencia, toca <strong>Mantener</strong> o <strong>Descargar de todas formas</strong>.</li>
-                        <li>Si persiste, te recomendamos usar arriba la opción <strong>"Instalar con Asistente Google / Firebase"</strong> que muestra el porcentaje en vivo.</li>
+                        <li>También puedes pedirle al administrador de tu mutual que te comparta el archivo directamente por WhatsApp.</li>
                       </ol>
                     </div>
                   </details>
                 </div>
+
+                {/* Opción Alternativa: Firebase App Distribution (Para Testers Avanzados) */}
+                <details className="il-help" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '0.75rem', padding: '0.25rem 0.5rem' }}>
+                  <summary style={{ padding: '0.5rem 0.25rem', color: '#94a3b8', fontSize: '0.825rem' }}>
+                    <span>⚙️ ¿Eres tester avanzado de Google? (Opcional: Firebase)</span>
+                    <ChevronDown className="il-help__chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="il-help__content" style={{ paddingTop: '0.25rem' }}>
+                    <p style={{ fontSize: '0.8rem', color: '#cbd5e1', margin: '0 0 0.5rem' }}>
+                      Permite recibir actualizaciones de Google Play. <em>Nota: Requiere registrarse con cuenta Google, confirmar correo de invitación e instalar la app "Google App Tester".</em>
+                    </p>
+                    <button
+                      type="button"
+                      id="firebase-download-btn"
+                      className="il-btn il-btn--secondary"
+                      style={{ width: '100%', fontSize: '0.825rem', padding: '0.6rem' }}
+                      onClick={handleFirebaseClick}
+                    >
+                      <GoogleIcon />
+                      <span>Instalar vía Asistente Google / Firebase</span>
+                    </button>
+                  </div>
+                </details>
               </div>
             </Step>
 
