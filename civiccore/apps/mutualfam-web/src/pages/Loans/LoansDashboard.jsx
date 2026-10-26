@@ -394,6 +394,7 @@ export default function LoansDashboard() {
                       )
                     )}
                   </div>
+                </div>
               );
             })}
             </div>
