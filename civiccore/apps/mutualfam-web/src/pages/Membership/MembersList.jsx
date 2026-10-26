@@ -110,94 +110,135 @@ const MembersList = () => {
   };
 
   return (
-    <div className="page-panel animate-fade-in pb-12">
-      <div className="flex justify-between items-center page-header-row mb-6" style={{ flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 className="page-title flex items-center gap-3 text-gradient" style={{ margin: 0 }}>
-            <Users className="text-blue" size={26} />
-            Directorio de Miembros
-          </h1>
-          <p className="text-secondary mt-1 text-sm">
-            {activeOrg ? `Mutual: ${activeOrg.name}` : 'Nuestra red de ayuda mutua y gobernanza solidaria.'}
-          </p>
-        </div>
-
-        {activeOrg?.role === 'founder' && (
-          <button
-            type="button"
-            className="btn btn-primary text-sm flex items-center gap-2"
-            onClick={handleGenerateInvite}
-            disabled={generatingInvite}
-          >
-            <UserPlus size={16} />
-            <span>{generatingInvite ? 'Generando...' : 'Invitar a Familiar'}</span>
-          </button>
-        )}
-      </div>
+    <div className="page-panel animate-fade-in pb-12" style={{ padding: '1.25rem 1rem' }}>
+      {/* Título homologado con Android */}
+      <h1 style={{
+        fontSize: '1.75rem',
+        fontWeight: '700',
+        color: '#f8fafc',
+        marginBottom: '1.25rem',
+      }}>
+        Familia Mutual
+      </h1>
 
       {!activeOrg ? (
-        <div className="glass-card p-8 text-center border border-white/5 my-4">
+        <div className="glass-card" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
           <Users size={36} className="text-muted mx-auto mb-3" />
-          <h3 className="text-lg font-bold text-white mb-2">No tienes una mutual activa seleccionada</h3>
-          <p className="text-sm text-secondary max-w-md mx-auto">
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#f8fafc', marginBottom: '0.5rem' }}>
+            No tienes una mutual activa seleccionada
+          </h3>
+          <p style={{ fontSize: '0.875rem', color: '#94a3b8', maxWidth: '24rem', margin: '0 auto' }}>
             Selecciona tu mutual en la barra superior o ingresa tu código de invitación para ver a los miembros de tu familia.
           </p>
         </div>
       ) : (
         <>
-          <div className="glass-card p-4 mb-6 flex flex-wrap gap-4 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary" size={17} />
-              <input 
-                type="text" 
-                placeholder="Buscar por nombre..." 
-                className="form-input pl-10 bg-black/40 border-white/10 w-full text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="text-secondary" size={16} />
-              <select 
-                className="form-input bg-black/40 border-white/10 text-sm py-1.5" 
-                value={filterStatus} 
-                onChange={e => setFilterStatus(e.target.value)}
-              >
-                <option value="ALL">Todos los Estados</option>
-                <option value="active">Activos</option>
-                <option value="pending">Pendientes</option>
-              </select>
-            </div>
+          {/* Tarjeta Miembros Actuales */}
+          <div style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '16px',
+            padding: '1.25rem',
+            marginBottom: '1.25rem',
+          }}>
+            <h3 style={{
+              fontSize: '1.1rem',
+              fontWeight: '700',
+              color: '#f8fafc',
+              marginBottom: '1rem',
+            }}>
+              Miembros Actuales ({members.length})
+            </h3>
+
+            {isLoading ? (
+              <div style={{ padding: '2rem', textAlign: 'center' }}><div className="loader mx-auto" /></div>
+            ) : members.length === 0 ? (
+              <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>No hay miembros que mostrar.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                {members.map((member) => (
+                  <div
+                    key={member.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.875rem',
+                      backgroundColor: '#0f172a',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '21px',
+                        backgroundColor: '#3b82f6',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: '#ffffff',
+                        fontWeight: '700',
+                        fontSize: '1.1rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {(member.first_name || member.nombre || 'U')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: '700', color: '#f8fafc' }}>
+                        {member.nombre}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                        {member.role === 'founder' ? 'Fundador' : 'Miembro'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {isLoading ? (
-            <div className="text-center p-12"><div className="loader mx-auto"></div></div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredMembers.map(member => (
-                <div key={member.id} className="glass-card p-5 flex flex-col items-center text-center hover:bg-white/5 transition-colors border border-white/5">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-900 to-slate-900 border-2 border-blue-500/50 rounded-full flex items-center justify-center text-xl font-bold text-white mb-3 shadow-[0_0_12px_rgba(59,130,246,0.3)]">
-                    {member.nombre ? member.nombre.charAt(0).toUpperCase() : '?'}
-                  </div>
-                  <h3 className="text-base font-bold text-white mb-1">{member.nombre}</h3>
-                  {member.email && (
-                    <p className="text-secondary text-xs mb-3 truncate w-full" title={member.email}>{member.email}</p>
-                  )}
-                  
-                  <div className="mt-auto pt-3 border-t border-white/10 w-full flex justify-between items-center text-xs">
-                    {getStatusBadge(member.status)}
-                    <span className="text-secondary font-mono bg-black/40 px-2 py-0.5 rounded">
-                      {member.role === 'founder' ? '👑 Fundador' : 'Miembro'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              
-              {filteredMembers.length === 0 && (
-                <div className="col-span-full p-10 text-center text-secondary bg-black/20 rounded-xl border border-white/5">
-                  No se encontraron miembros con esos criterios de búsqueda.
-                </div>
-              )}
+          {/* Tarjeta Invitar Miembros (Período de Gracia) para el Fundador */}
+          {activeOrg?.role === 'founder' && (
+            <div style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '16px',
+              padding: '1.25rem',
+            }}>
+              <h3 style={{
+                fontSize: '1.1rem',
+                fontWeight: '700',
+                color: '#f8fafc',
+                marginBottom: '0.5rem',
+              }}>
+                Invitar (Período de Gracia)
+              </h3>
+              <p style={{
+                fontSize: '0.85rem',
+                color: '#94a3b8',
+                lineHeight: '1.45',
+                marginBottom: '1.25rem',
+              }}>
+                Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
+              </p>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                }}
+                onClick={handleGenerateInvite}
+                disabled={generatingInvite}
+              >
+                {generatingInvite ? 'Generando enlace...' : 'Compartir Enlace de Invitación'}
+              </button>
             </div>
           )}
         </>

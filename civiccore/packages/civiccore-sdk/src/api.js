@@ -144,6 +144,7 @@ export const loansApi = {
 
 export const fundsApi = {
   getFunds: () => request('/funds/'),
+  createFund: (data) => request('/funds/', { method: 'POST', body: JSON.stringify(data) }),
   contribute: (fundId, data) => request(`/funds/${fundId}/contribute`, { method: 'POST', body: JSON.stringify(data) })
 };
 
