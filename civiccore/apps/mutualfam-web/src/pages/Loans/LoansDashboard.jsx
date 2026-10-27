@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { loansApi, useAuthStore } from '@civiccore/sdk';
-import { X, Check } from 'lucide-react';
+import { X, Check, Copy } from 'lucide-react';
+import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 
 export default function LoansDashboard() {
   const [loans, setLoans] = useState([]);
@@ -28,7 +29,24 @@ export default function LoansDashboard() {
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [pledgeAmount, setPledgeAmount] = useState('');
   const [pledging, setPledging] = useState(false);
-  
+
+  // Estados para Notificar Pago (Homologado con Android)
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [selectedContrib, setSelectedContrib] = useState(null);
+  const [notifyMethod, setNotifyMethod] = useState('Pago Móvil');
+  const [referenceText, setReferenceText] = useState('');
+  const [notifying, setNotifying] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptPreview, setReceiptPreview] = useState(null);
+
+  // Estados para Devolver Préstamo (Repay)
+  const [showRepayModal, setShowRepayModal] = useState(false);
+  const [selectedRepayContrib, setSelectedRepayContrib] = useState(null);
+  const [repayMethod, setRepayMethod] = useState('Pago Móvil');
+  const [repayReference, setRepayReference] = useState('');
+  const [repaying, setRepaying] = useState(false);
+
   const { user, activeOrg } = useAuthStore();
 
   const fetchLoans = async () => {
@@ -43,9 +61,39 @@ export default function LoansDashboard() {
     }
   };
 
+  const fetchPaymentConfig = async () => {
+    try {
+      const res = await loansApi.getPaymentMethods();
+      const parsed = JSON.parse(res.payment_methods_json || '{}');
+      setPaymentConfig(parsed);
+      if (parsed['Pago Móvil']) {
+        setPagoMovilBanco(parsed['Pago Móvil'].banco || '');
+        setPagoMovilCedula(parsed['Pago Móvil'].cedula || '');
+        setPagoMovilTelefono(parsed['Pago Móvil'].telefono || '');
+      }
+      if (parsed['Zelle']) {
+        setZelleEmail(parsed['Zelle'].email || '');
+      }
+      return parsed;
+    } catch (_) {
+      return {};
+    }
+  };
+
+  const hasConfiguredPaymentMethods = (config = paymentConfig) => {
+    if (!config || typeof config !== 'object') return false;
+    return Object.entries(config).some(([method, val]) => {
+      if (method === 'Pago Móvil') {
+        return val && typeof val === 'object' && Boolean(val.banco) && Boolean(val.cedula) && Boolean(val.telefono);
+      }
+      return typeof val === 'string' && val.trim().length > 0;
+    });
+  };
+
   useEffect(() => {
     if (activeOrg?.id) {
       fetchLoans();
+      fetchPaymentConfig();
     } else {
       setLoans([]);
       setLoading(false);
@@ -63,28 +111,15 @@ export default function LoansDashboard() {
       .catch(() => {});
   }, []);
 
+  const handleCopy = (field, text) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   const handleOpenConfig = async () => {
-    try {
-      const rawApiUrl = (import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1')
-        .toString().trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
-      const token = localStorage.getItem('jwt_token');
-      const res = await fetch(`${rawApiUrl}/config/payment_methods`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = JSON.parse(data.payment_methods_json || '{}');
-        setPaymentConfig(parsed);
-        if (parsed['Pago Móvil']) {
-          setPagoMovilBanco(parsed['Pago Móvil'].banco || '');
-          setPagoMovilCedula(parsed['Pago Móvil'].cedula || '');
-          setPagoMovilTelefono(parsed['Pago Móvil'].telefono || '');
-        }
-        if (parsed['Zelle']) {
-          setZelleEmail(parsed['Zelle'].email || '');
-        }
-      }
-    } catch (_) {}
+    await fetchPaymentConfig();
     setShowConfigModal(true);
   };
 
@@ -103,22 +138,12 @@ export default function LoansDashboard() {
       if (zelleEmail) {
         newConfig['Zelle'] = { email: zelleEmail };
       }
-      const rawApiUrl = (import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1')
-        .toString().trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
-      const token = localStorage.getItem('jwt_token');
-      await fetch(`${rawApiUrl}/config/payment_methods`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ payment_methods_json: JSON.stringify(newConfig) })
-      });
+      await loansApi.savePaymentMethods({ payment_methods_json: JSON.stringify(newConfig) });
       setPaymentConfig(newConfig);
       setShowConfigModal(false);
       alert('Datos de pago guardados exitosamente.');
     } catch (err) {
-      alert('Error al guardar datos de pago');
+      alert('Error al guardar datos de pago: ' + (err.message || 'Error desconocido'));
     } finally {
       setSavingPayment(false);
     }
@@ -133,7 +158,7 @@ export default function LoansDashboard() {
     try {
       await loansApi.createLoan({
         amount_usd: parseFloat(amount),
-        motive: motive,
+        motive,
         estimated_repayment_date: estimatedDate || null
       });
       setShowModal(false);
@@ -142,17 +167,17 @@ export default function LoansDashboard() {
       setEstimatedDate('');
       fetchLoans();
     } catch (err) {
-      alert("Error: " + err.message);
+      alert("Error: " + (err.message || 'No se pudo crear la solicitud'));
     }
   };
 
-  const handleCancelLoan = async (loanId) => {
-    if (!window.confirm("¿Seguro que deseas cancelar esta solicitud?")) return;
+  const handleCancelLoan = async (id) => {
+    if (!window.confirm("¿Estás seguro de que deseas cancelar esta solicitud?")) return;
     try {
-      await loansApi.cancelLoan(loanId);
+      await loansApi.cancelLoan(id);
       fetchLoans();
     } catch (err) {
-      alert("Error al cancelar: " + err.message);
+      alert("Error: " + (err.message || 'No se pudo cancelar'));
     }
   };
 
@@ -160,14 +185,15 @@ export default function LoansDashboard() {
     e.preventDefault();
     if (!selectedLoan) return;
     const parsed = parseFloat(pledgeAmount);
-    if (isNaN(parsed) || parsed <= 0) {
+    if (!parsed || parsed <= 0) {
       alert("Por favor ingresa un monto válido mayor a 0.");
       return;
     }
-    const currentContributed = (selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0);
-    const remaining = Math.max(0, selectedLoan.amount_usd - currentContributed);
-    if (parsed > remaining + 0.01) {
-      alert(`El monto máximo restante para fondear este préstamo es de $${remaining.toFixed(2)}.`);
+
+    const currentTotal = (selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0);
+    const maxAllowed = Math.max(0, selectedLoan.amount_usd - currentTotal);
+    if (parsed > maxAllowed) {
+      alert(`El monto máximo que falta por fondear es $${maxAllowed.toFixed(2)}.`);
       return;
     }
 
@@ -185,6 +211,129 @@ export default function LoansDashboard() {
       setPledging(false);
     }
   };
+
+  const handleOpenNotify = (c, loan) => {
+    if (!hasConfiguredPaymentMethods()) {
+      if (window.confirm("Debes cargar por lo menos un dato de pago antes de notificar pagos.\n\n¿Deseas configurarlos ahora?")) {
+        handleOpenConfig();
+      }
+      return;
+    }
+    setSelectedContrib(c);
+    setSelectedLoan(loan);
+    setNotifyMethod('Pago Móvil');
+    setReferenceText('');
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setShowNotifyModal(true);
+  };
+
+  const handleSubmitNotify = async (e) => {
+    e.preventDefault();
+    if (!selectedContrib) return;
+    if (!notifyMethod) {
+      alert("Debes seleccionar el método de pago utilizado.");
+      return;
+    }
+    if (!referenceText.trim() && !receiptFile) {
+      alert("Por favor ingresa el número de referencia del pago.");
+      return;
+    }
+
+    setNotifying(true);
+    try {
+      let finalReceiptUrl = null;
+      if (receiptFile) {
+        const uploadRes = await loansApi.uploadFile(receiptFile);
+        finalReceiptUrl = uploadRes.url;
+      }
+
+      await loansApi.notifyPayment(selectedContrib.id, {
+        payment_method: notifyMethod,
+        reference_text: referenceText.trim() || undefined,
+        receipt_url: finalReceiptUrl || undefined
+      });
+      setShowNotifyModal(false);
+      setSelectedContrib(null);
+      setSelectedLoan(null);
+      setReferenceText('');
+      setReceiptFile(null);
+      setReceiptPreview(null);
+      alert("¡Pago notificado exitosamente! El solicitante verificará la recepción del dinero.");
+      fetchLoans();
+    } catch (err) {
+      alert("Error al notificar pago: " + (err.message || 'Error desconocido'));
+    } finally {
+      setNotifying(false);
+    }
+  };
+
+  const handleCancelContrib = async (contribId) => {
+    if (!window.confirm("¿Seguro que deseas cancelar esta promesa de aporte?")) return;
+    try {
+      await loansApi.cancelContribution(contribId);
+      alert("Promesa de aporte cancelada.");
+      fetchLoans();
+    } catch (err) {
+      alert("Error al cancelar aporte: " + (err.message || 'Error desconocido'));
+    }
+  };
+
+  const handleVerifyPayment = async (contribId) => {
+    if (!window.confirm("¿Confirmas que recibiste el dinero de este pago?")) return;
+    try {
+      await loansApi.verifyPayment(contribId);
+      alert("¡Pago validado exitosamente!");
+      fetchLoans();
+    } catch (err) {
+      alert("Error al validar pago: " + (err.message || 'Error desconocido'));
+    }
+  };
+
+  const handleOpenRepay = (c, loan) => {
+    setSelectedRepayContrib(c);
+    setSelectedLoan(loan);
+    setRepayMethod('Pago Móvil');
+    setRepayReference('');
+    setShowRepayModal(true);
+  };
+
+  const handleSubmitRepay = async (e) => {
+    e.preventDefault();
+    if (!selectedRepayContrib) return;
+    if (!repayReference.trim()) {
+      alert("Debes ingresar la referencia de la devolución.");
+      return;
+    }
+    setRepaying(true);
+    try {
+      await loansApi.notifyRepayment(selectedRepayContrib.id, {
+        payment_method: repayMethod,
+        reference_text: repayReference.trim()
+      });
+      setShowRepayModal(false);
+      setSelectedRepayContrib(null);
+      alert("¡Devolución notificada! El aportante validará la recepción.");
+      fetchLoans();
+    } catch (err) {
+      alert("Error al reportar devolución: " + (err.message || 'Error desconocido'));
+    } finally {
+      setRepaying(false);
+    }
+  };
+
+  const handleVerifyRepayment = async (repayId) => {
+    if (!window.confirm("¿Confirmas que recibiste la devolución del dinero?")) return;
+    try {
+      await loansApi.verifyRepayment(repayId);
+      alert("¡Devolución validada con éxito!");
+      fetchLoans();
+    } catch (err) {
+      alert("Error al validar devolución: " + (err.message || 'Error desconocido'));
+    }
+  };
+
+  const userFullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim().toLowerCase();
 
   const displayedLoans = loans.filter((loan) => {
     if (filter === 'active') {
@@ -304,6 +453,31 @@ export default function LoansDashboard() {
         </button>
       </div>
 
+      {/* Alerta si no tiene métodos de pago configurados */}
+      {!hasConfiguredPaymentMethods() && (
+        <div
+          onClick={handleOpenConfig}
+          style={{
+            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            borderRadius: '8px',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            color: '#fde047',
+            fontSize: '0.85rem',
+            fontWeight: '500',
+          }}
+        >
+          <span>⚠️ Configura tus datos de pago para poder recibir y notificar pagos.</span>
+          <span style={{ textDecoration: 'underline', fontWeight: '700' }}>Configurar</span>
+        </div>
+      )}
+
       {error && <div className="p-4 bg-red-100 text-red-700 rounded-md mb-4">{error}</div>}
 
       {loading ? (
@@ -317,86 +491,274 @@ export default function LoansDashboard() {
           ) : (
             <div className="dashboard-grid">
               {displayedLoans.map(loan => {
-              const totalContributed = (loan.amount_pledged || 0) + (loan.amount_paid || 0) + (loan.amount_verified || 0);
-              const percentage = loan.amount_usd > 0 ? Math.min(100, Math.round((totalContributed / loan.amount_usd) * 100)) : 0;
-              const isFullyFunded = loan.status === 'funded' || percentage >= 100;
-              const isMine = user && user.id === loan.requester_id;
+                const totalContributed = (loan.amount_pledged || 0) + (loan.amount_paid || 0) + (loan.amount_verified || 0);
+                const percentage = loan.amount_usd > 0 ? Math.min(100, Math.round((totalContributed / loan.amount_usd) * 100)) : 0;
+                const isFullyFunded = loan.status === 'funded' || percentage >= 100;
+                const isMine = user && (
+                  String(user.id) === String(loan.requester_id) ||
+                  (userFullName && (loan.requester_name || '').trim().toLowerCase() === userFullName)
+                );
 
-              let statusLabel = loan.status;
-              if (loan.status === 'pending') statusLabel = 'Buscando fondeo';
-              if (loan.status === 'partial') statusLabel = `${percentage}% Fondeado`;
-              if (loan.status === 'funded') statusLabel = percentage < 100 ? `${percentage}% Fondeado` : '100% Fondeado';
-              if (loan.status === 'repaid') statusLabel = 'Saldado ✅';
-              if (loan.status === 'cancelled') statusLabel = 'Cancelado';
+                let statusLabel = loan.status;
+                if (loan.status === 'pending') statusLabel = 'Buscando fondeo';
+                if (loan.status === 'partial') statusLabel = `${percentage}% Fondeado`;
+                if (loan.status === 'funded') statusLabel = percentage < 100 ? `${percentage}% Fondeado` : '100% Fondeado';
+                if (loan.status === 'repaid') statusLabel = 'Saldado ✅';
+                if (loan.status === 'cancelled') statusLabel = 'Cancelado';
 
-              return (
-                <div key={loan.id} className="glass-card flex flex-col justify-between" style={{ padding: '1.5rem', gap: '1.25rem' }}>
-                  <div>
-                    <div className="flex justify-between items-start" style={{ marginBottom: '1rem' }}>
-                      <span className={`badge ${isFullyFunded ? 'badge-green' : percentage > 0 ? 'badge-blue' : 'badge-blue'}`}>
-                        {statusLabel}
-                      </span>
-                      <span className="text-gradient" style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>${loan.amount_usd}</span>
-                    </div>
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>{loan.requester_name}</h3>
-                    <p className="text-secondary" style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>{loan.motive}</p>
-                    
-                    {loan.estimated_repayment_date && (
-                      <p style={{ color: 'var(--accent-secondary)', marginTop: '0.75rem', fontSize: '0.9rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '1.2rem' }}>🗓</span> Lo paga el: {new Date(loan.estimated_repayment_date).toLocaleDateString()}
-                      </p>
-                    )}
+                return (
+                  <div key={loan.id} className="glass-card flex flex-col justify-between" style={{ padding: '1.5rem', gap: '1.25rem' }}>
+                    <div>
+                      <div className="flex justify-between items-start" style={{ marginBottom: '1rem' }}>
+                        <span className={`badge ${isFullyFunded ? 'badge-green' : percentage > 0 ? 'badge-blue' : 'badge-blue'}`}>
+                          {statusLabel}
+                        </span>
+                        <span className="text-gradient" style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>${loan.amount_usd}</span>
+                      </div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>{loan.requester_name}</h3>
+                      <p className="text-secondary" style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>{loan.motive}</p>
+                      
+                      {loan.estimated_repayment_date && (
+                        <p style={{ color: 'var(--accent-secondary)', marginTop: '0.75rem', fontSize: '0.9rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '1.2rem' }}>🗓</span> Lo paga el: {new Date(loan.estimated_repayment_date).toLocaleDateString()}
+                        </p>
+                      )}
 
-                    {/* Resumen de aportes */}
-                    <div style={{ marginTop: '0.85rem', padding: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="text-secondary">📢 Prometido:</span>
-                        <span style={{ fontWeight: '600' }}>${loan.amount_pledged || 0}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="text-secondary">💸 Pagado:</span>
-                        <span style={{ fontWeight: '600' }}>${loan.amount_paid || 0}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span className="text-secondary">✅ Validado:</span>
-                        <span style={{ fontWeight: '600' }}>${loan.amount_verified || 0}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', marginTop: 'auto' }}>
-                    {isMine ? (
-                       loan.status === 'pending' ? (
-                         <button className="w-full btn btn-danger" onClick={() => handleCancelLoan(loan.id)}>
-                           Cancelar Solicitud
-                         </button>
-                       ) : (
-                         <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                           Tu solicitud {loan.status === 'repaid' ? 'está saldada' : isFullyFunded ? 'está 100% fondeada' : 'recibiendo aportes'}
-                         </div>
-                       )
-                    ) : (
-                      !isFullyFunded && loan.status !== 'repaid' && loan.status !== 'cancelled' ? (
-                        <button 
-                          className="w-full btn btn-primary" 
-                          onClick={() => {
-                            setSelectedLoan(loan);
-                            setPledgeAmount('');
-                            setShowPledgeModal(true);
-                          }}
-                        >
-                          Aportar a este préstamo
-                        </button>
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600' }}>
-                          {loan.status === 'repaid' ? 'Préstamo Saldado ✅' : 'Fondeo Completado (100%)'}
+                      {/* Resumen de aportes */}
+                      <div style={{ marginTop: '0.85rem', padding: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span className="text-secondary">📢 Prometido:</span>
+                          <span style={{ fontWeight: '600' }}>${loan.amount_pledged || 0}</span>
                         </div>
-                      )
-                    )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span className="text-secondary">💸 Pagado:</span>
+                          <span style={{ fontWeight: '600' }}>${loan.amount_paid || 0}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span className="text-secondary">✅ Validado:</span>
+                          <span style={{ fontWeight: '600' }}>${loan.amount_verified || 0}</span>
+                        </div>
+                      </div>
+
+                      {/* Lista de aportes en curso (Homologado con Android) */}
+                      {loan.contributions && loan.contributions.length > 0 && (
+                        <div style={{ marginTop: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Aportes en curso ({loan.contributions.length}):
+                          </span>
+                          {loan.contributions.map((c) => {
+                            const funderFullName = (c.funder_name || '').trim().toLowerCase();
+                            const isMyContrib = user && (
+                              String(user.id) === String(c.funder_id) ||
+                              (userFullName && funderFullName && userFullName === funderFullName) ||
+                              (user.email && c.funder_email && user.email.toLowerCase() === c.funder_email.toLowerCase())
+                            );
+
+                            return (
+                              <div
+                                key={c.id}
+                                style={{
+                                  background: 'rgba(15, 23, 42, 0.7)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                  borderRadius: '8px',
+                                  padding: '0.75rem',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '0.4rem',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <strong style={{ fontSize: '0.875rem', color: '#f8fafc' }}>
+                                    {c.funder_name} — ${c.amount_usd}
+                                  </strong>
+                                  <span
+                                    style={{
+                                      fontSize: '0.725rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '12px',
+                                      fontWeight: '600',
+                                      backgroundColor:
+                                        c.status === 'verified' ? 'rgba(16, 185, 129, 0.2)' :
+                                        c.status === 'paid' ? 'rgba(234, 179, 8, 0.2)' :
+                                        c.status === 'repaid' ? 'rgba(16, 185, 129, 0.2)' :
+                                        'rgba(59, 130, 246, 0.2)',
+                                      color:
+                                        c.status === 'verified' ? '#34d399' :
+                                        c.status === 'paid' ? '#fde047' :
+                                        c.status === 'repaid' ? '#34d399' :
+                                        '#93c5fd',
+                                    }}
+                                  >
+                                    {c.status === 'pledged' ? '⏳ Prometido (Por pagar)' :
+                                     c.status === 'paid' ? '🟡 Pagado (Por validar)' :
+                                     c.status === 'verified' ? '✅ Validado' :
+                                     c.status === 'repay_notified' ? '🔄 Devolución en validación' :
+                                     c.status === 'repaid' ? '🎉 Devuelto' : c.status}
+                                  </span>
+                                </div>
+
+                                {c.payment_method && (
+                                  <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                                    Vía {c.payment_method} {c.reference_text ? `• Ref: ${c.reference_text}` : ''}
+                                  </span>
+                                )}
+
+                                {/* Devoluciones registradas */}
+                                {c.repayments && c.repayments.length > 0 && (
+                                  <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '0.35rem', marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    {c.repayments.map((r) => (
+                                      <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                                        <span style={{ color: '#cbd5e1' }}>↪ Devolución de ${r.amount_usd} ({r.payment_method || 'Pago Móvil'})</span>
+                                        {isMyContrib && r.status === 'paid' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleVerifyRepayment(r.id)}
+                                            style={{
+                                              backgroundColor: '#10b981',
+                                              border: 'none',
+                                              color: '#fff',
+                                              borderRadius: '4px',
+                                              padding: '3px 8px',
+                                              fontSize: '0.7rem',
+                                              fontWeight: '600',
+                                              cursor: 'pointer'
+                                            }}
+                                          >
+                                            Validar Devolución
+                                          </button>
+                                        )}
+                                        {r.status === 'verified' && (
+                                          <span style={{ color: '#34d399', fontWeight: '600' }}>✓ Validada</span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Acciones del aporte */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                                  {isMyContrib && c.status === 'pledged' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelContrib(c.id)}
+                                        title="Cancelar promesa"
+                                        style={{
+                                          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                                          color: '#f87171',
+                                          borderRadius: '6px',
+                                          padding: '6px 10px',
+                                          fontSize: '0.75rem',
+                                          fontWeight: '700',
+                                          cursor: 'pointer',
+                                        }}
+                                      >
+                                        ❌
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenNotify(c, loan)}
+                                        style={{
+                                          backgroundColor: '#2563eb',
+                                          border: 'none',
+                                          color: '#ffffff',
+                                          borderRadius: '6px',
+                                          padding: '6px 14px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: '600',
+                                          cursor: 'pointer',
+                                          boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        💸 Notificar Pago
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {isMine && c.status === 'paid' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifyPayment(c.id)}
+                                      style={{
+                                        backgroundColor: '#10b981',
+                                        border: 'none',
+                                        color: '#ffffff',
+                                        borderRadius: '6px',
+                                        padding: '6px 14px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
+                                      }}
+                                    >
+                                      ✅ Validar Pago
+                                    </button>
+                                  )}
+
+                                  {isMine && c.status === 'verified' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRepay(c, loan)}
+                                      style={{
+                                        backgroundColor: '#f59e0b',
+                                        border: 'none',
+                                        color: '#ffffff',
+                                        borderRadius: '6px',
+                                        padding: '6px 14px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 8px rgba(245, 158, 11, 0.4)',
+                                      }}
+                                    >
+                                      🔄 Devolver Dinero
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', marginTop: 'auto' }}>
+                      {isMine ? (
+                         loan.status === 'pending' ? (
+                           <button className="w-full btn btn-danger" onClick={() => handleCancelLoan(loan.id)}>
+                             Cancelar Solicitud
+                           </button>
+                         ) : (
+                           <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                             Tu solicitud {loan.status === 'repaid' ? 'está saldada' : isFullyFunded ? 'está 100% fondeada' : 'recibiendo aportes'}
+                           </div>
+                         )
+                      ) : (
+                        !isFullyFunded && loan.status !== 'repaid' && loan.status !== 'cancelled' ? (
+                          <button 
+                            className="w-full btn btn-primary" 
+                            onClick={() => {
+                              setSelectedLoan(loan);
+                              setPledgeAmount('');
+                              setShowPledgeModal(true);
+                            }}
+                          >
+                            Aportar a este préstamo
+                          </button>
+                        ) : (
+                          <div style={{ textAlign: 'center', color: '#4ade80', fontSize: '0.9rem', fontWeight: '600' }}>
+                            {loan.status === 'repaid' ? 'Préstamo Saldado ✅' : 'Fondeo Completado (100%)'}
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
             </div>
           )}
         </div>
@@ -528,7 +890,7 @@ export default function LoansDashboard() {
               border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: '16px',
               padding: '1.5rem',
-              maxWidth: '26rem',
+              maxWidth: '28rem',
               width: '100%',
               color: '#f8fafc',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
@@ -556,9 +918,7 @@ export default function LoansDashboard() {
                   📲 Pago Móvil (Venezuela)
                 </strong>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <input
-                    type="text"
-                    placeholder="Banco (ej. Banesco, Venezuela)"
+                  <select
                     value={pagoMovilBanco}
                     onChange={(e) => setPagoMovilBanco(e.target.value)}
                     style={{
@@ -570,7 +930,14 @@ export default function LoansDashboard() {
                       color: '#f8fafc',
                       fontSize: '0.85rem',
                     }}
-                  />
+                  >
+                    <option value="">Selecciona tu banco...</option>
+                    {VENEZUELAN_BANKS.map((b) => (
+                      <option key={b.code} value={b.code}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="text"
                     placeholder="Cédula / Documento (ej. 12345678)"
@@ -658,6 +1025,462 @@ export default function LoansDashboard() {
                   }}
                 >
                   {savingPayment ? 'Guardando...' : 'Guardar Datos'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Notificar Pago (Homologado con Android) */}
+      {showNotifyModal && selectedContrib && selectedLoan && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }}
+          onClick={() => setShowNotifyModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '1.5rem',
+              maxWidth: '30rem',
+              width: '100%',
+              color: '#f8fafc',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '700' }}>Notificar Pago 💸</h3>
+                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Aporte de ${selectedContrib.amount_usd} a {selectedLoan.requester_name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNotifyModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Monto en Bolívares */}
+            {bcvRate && (
+              <div style={{ background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#93c5fd' }}>Monto en Bolívares (Tasa BCV {bcvRate})</span>
+                  <span style={{ fontSize: '1.05rem', fontWeight: '700', color: '#38bdf8' }}>
+                    {(selectedContrib.amount_usd * parseFloat(bcvRate)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Selección de Método */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                Método de Pago
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {['Pago Móvil', 'Zelle', 'Efectivo USD', 'Transferencia'].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setNotifyMethod(m)}
+                    style={{
+                      backgroundColor: notifyMethod === m ? '#2563eb' : 'rgba(15, 23, 42, 0.6)',
+                      border: notifyMethod === m ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                      color: notifyMethod === m ? '#ffffff' : '#94a3b8',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Instrucciones de pago del solicitante */}
+            <div style={{ marginBottom: '1rem' }}>
+              {(() => {
+                let reqConfig = {};
+                try {
+                  reqConfig = JSON.parse(selectedLoan.requester_payment_methods_json || '{}');
+                } catch (_) {}
+
+                if (notifyMethod === 'Pago Móvil') {
+                  const pm = reqConfig['Pago Móvil'];
+                  if (!pm || !pm.cedula) {
+                    return (
+                      <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem', color: '#fde047' }}>
+                        ⚠️ El solicitante no configuró datos de Pago Móvil. Por favor coordina directamente con {selectedLoan.requester_name}.
+                      </div>
+                    );
+                  }
+                  const safeBanco = getBankLabel(pm.banco);
+                  const docPrefix = pm.tipo_doc || (pm.cedula?.startsWith('V-') || pm.cedula?.startsWith('J-') ? '' : 'V-');
+                  const safeDoc = `${docPrefix}${pm.cedula}`;
+                  const safeTel = pm.telefono || '';
+                  const montoBsStr = bcvRate ? (selectedContrib.amount_usd * parseFloat(bcvRate)).toFixed(2) : '';
+
+                  const copyAllText = `Banco: ${safeBanco} | Documento: ${safeDoc} | Teléfono: ${safeTel}${montoBsStr ? ` | Monto: ${montoBsStr} Bs` : ''}`;
+
+                  return (
+                    <div style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '10px', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700' }}>
+                        Datos de Pago Móvil de {selectedLoan.requester_name}:
+                      </span>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Banco</div>
+                          <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{safeBanco}</div>
+                        </div>
+                        <button type="button" onClick={() => handleCopy('banco', pm.banco || safeBanco)} style={{ background: 'none', border: 'none', color: copiedField === 'banco' ? '#34d399' : '#60a5fa', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                          {copiedField === 'banco' ? '✓ Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Cédula / Documento</div>
+                          <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{safeDoc}</div>
+                        </div>
+                        <button type="button" onClick={() => handleCopy('doc', pm.cedula)} style={{ background: 'none', border: 'none', color: copiedField === 'doc' ? '#34d399' : '#60a5fa', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                          {copiedField === 'doc' ? '✓ Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Teléfono</div>
+                          <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{safeTel}</div>
+                        </div>
+                        <button type="button" onClick={() => handleCopy('tel', safeTel)} style={{ background: 'none', border: 'none', color: copiedField === 'tel' ? '#34d399' : '#60a5fa', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                          {copiedField === 'tel' ? '✓ Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+
+                      {montoBsStr && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Monto exacto</div>
+                            <div style={{ fontSize: '0.85rem', color: '#38bdf8', fontWeight: '600' }}>{montoBsStr} Bs</div>
+                          </div>
+                          <button type="button" onClick={() => handleCopy('monto', montoBsStr)} style={{ background: 'none', border: 'none', color: copiedField === 'monto' ? '#34d399' : '#60a5fa', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                            {copiedField === 'monto' ? '✓ Copiado' : 'Copiar'}
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopy('all', copyAllText)}
+                        style={{
+                          backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          color: copiedField === 'all' ? '#34d399' : '#60a5fa',
+                          borderRadius: '6px',
+                          padding: '8px',
+                          fontSize: '0.8rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          marginTop: '0.25rem',
+                          textAlign: 'center'
+                        }}
+                      >
+                        {copiedField === 'all' ? '✅ ¡Copiado al portapapeles!' : '📋 Copiar todo para el banco'}
+                      </button>
+                    </div>
+                  );
+                }
+
+                if (notifyMethod === 'Zelle') {
+                  const zelle = reqConfig['Zelle'];
+                  const email = typeof zelle === 'object' ? zelle?.email : zelle;
+                  if (!email) {
+                    return (
+                      <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem', color: '#fde047' }}>
+                        ⚠️ El solicitante no configuró cuenta Zelle.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '10px', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700' }}>
+                        Cuenta Zelle de {selectedLoan.requester_name}:
+                      </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Correo / Destinatario</div>
+                          <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{email}</div>
+                        </div>
+                        <button type="button" onClick={() => handleCopy('zelle', email)} style={{ background: 'none', border: 'none', color: copiedField === 'zelle' ? '#34d399' : '#60a5fa', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                          {copiedField === 'zelle' ? '✓ Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '10px', padding: '0.85rem', fontSize: '0.85rem', color: '#94a3b8' }}>
+                    ℹ️ Realiza el pago o entrega acordada y escribe el número de referencia a continuación.
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Formulario de Notificación */}
+            <form onSubmit={handleSubmitNotify} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Número de Referencia
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. 12345678 (últimos dígitos del comprobante)"
+                  value={referenceText}
+                  onChange={(e) => setReferenceText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    color: '#f8fafc',
+                    fontSize: '0.9rem',
+                  }}
+                />
+              </div>
+
+              {/* Comprobante de pago (Opcional) */}
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Comprobante / Captura (Opcional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setReceiptFile(file);
+                      setReceiptPreview(URL.createObjectURL(file));
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    padding: '0.45rem',
+                    color: '#94a3b8',
+                    fontSize: '0.8rem',
+                  }}
+                />
+                {receiptPreview && (
+                  <div style={{ marginTop: '0.5rem', position: 'relative' }}>
+                    <img src={receiptPreview} alt="Comprobante" style={{ maxHeight: '120px', borderRadius: '6px', objectFit: 'contain' }} />
+                    <button
+                      type="button"
+                      onClick={() => { setReceiptFile(null); setReceiptPreview(null); }}
+                      style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                    >
+                      🗑️ Quitar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowNotifyModal(false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '0.65rem',
+                    color: '#f8fafc',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={notifying}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#2563eb',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem',
+                    color: '#ffffff',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
+                  }}
+                >
+                  {notifying ? 'Notificando...' : 'Confirmar Pago'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Devolver Dinero (Repay) */}
+      {showRepayModal && selectedRepayContrib && selectedLoan && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }}
+          onClick={() => setShowRepayModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '1.5rem',
+              maxWidth: '28rem',
+              width: '100%',
+              color: '#f8fafc',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '700' }}>Devolver Dinero 🔄</h3>
+                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Acreedor: {selectedRepayContrib.funder_name} (${selectedRepayContrib.amount_usd})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRepayModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitRepay} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Método de Devolución
+                </label>
+                <select
+                  value={repayMethod}
+                  onChange={(e) => setRepayMethod(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    color: '#f8fafc',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  <option value="Pago Móvil">Pago Móvil</option>
+                  <option value="Zelle">Zelle</option>
+                  <option value="Efectivo USD">Efectivo USD</option>
+                  <option value="Efectivo Bolívares">Efectivo Bolívares</option>
+                  <option value="Transferencia">Transferencia</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Referencia de Pago
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Número de referencia de la devolución"
+                  value={repayReference}
+                  onChange={(e) => setRepayReference(e.target.value)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#0f172a',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    padding: '0.65rem 0.85rem',
+                    color: '#f8fafc',
+                    fontSize: '0.9rem',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowRepayModal(false)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '0.65rem',
+                    color: '#f8fafc',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={repaying}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#f59e0b',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem',
+                    color: '#ffffff',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+                  }}
+                >
+                  {repaying ? 'Reportando...' : 'Reportar Devolución'}
                 </button>
               </div>
             </form>
