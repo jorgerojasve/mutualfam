@@ -47,6 +47,10 @@ export default function LoansDashboard() {
   const [repayReference, setRepayReference] = useState('');
   const [repaying, setRepaying] = useState(false);
 
+  // Estados para Visor de Comprobantes
+  const [showReceiptViewer, setShowReceiptViewer] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
+
   const { user, activeOrg } = useAuthStore();
 
   const fetchLoans = async () => {
@@ -116,6 +120,26 @@ export default function LoansDashboard() {
     navigator.clipboard?.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const getFullReceiptUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const rawApiUrl = (import.meta.env.VITE_API_URL || 'https://mutualfam-backend.fly.dev/api/v1')
+      .toString().trim().replace(/[\r\n\t]/g, '').replace(/\/+$/, '');
+    const baseUrl = rawApiUrl.replace(/\/api\/v1\/?$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${baseUrl}${cleanPath}`;
+  };
+
+  const openReceiptViewer = (receiptUrl, title = 'Comprobante de Pago', extraInfo = {}) => {
+    if (!receiptUrl) return;
+    setSelectedReceipt({
+      url: getFullReceiptUrl(receiptUrl),
+      title,
+      ...extraInfo
+    });
+    setShowReceiptViewer(true);
   };
 
   const handleOpenConfig = async () => {
@@ -370,6 +394,27 @@ export default function LoansDashboard() {
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button
               type="button"
+              onClick={async () => {
+                setLoading(true);
+                await fetchLoans();
+                await fetchPaymentConfig();
+              }}
+              title="Refrescar préstamos"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#f8fafc',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+              }}
+            >
+              🔄
+            </button>
+            <button
+              type="button"
               onClick={handleOpenConfig}
               style={{
                 backgroundColor: 'transparent',
@@ -603,12 +648,64 @@ export default function LoansDashboard() {
                                   </span>
                                 )}
 
+                                {c.receipt_url && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openReceiptViewer(c.receipt_url, `Comprobante de Aporte - ${c.funder_name}`, {
+                                      method: c.payment_method,
+                                      reference: c.reference_text,
+                                      amount: `$${c.amount_usd}`
+                                    })}
+                                    style={{
+                                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                                      color: '#60a5fa',
+                                      borderRadius: '6px',
+                                      padding: '4px 10px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      alignSelf: 'flex-start',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      marginTop: '2px'
+                                    }}
+                                  >
+                                    🧾 Ver comprobante de aporte
+                                  </button>
+                                )}
+
                                 {/* Devoluciones registradas */}
                                 {c.repayments && c.repayments.length > 0 && (
                                   <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '0.35rem', marginTop: '0.2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                     {c.repayments.map((r) => (
-                                      <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
-                                        <span style={{ color: '#cbd5e1' }}>↪ Devolución de ${r.amount_usd} ({r.payment_method || 'Pago Móvil'})</span>
+                                      <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', flexWrap: 'wrap', gap: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#cbd5e1' }}>↪ Devolución de ${r.amount_usd} ({r.payment_method || 'Pago Móvil'})</span>
+                                          {r.receipt_url && (
+                                            <button
+                                              type="button"
+                                              onClick={() => openReceiptViewer(r.receipt_url, 'Comprobante de Devolución', {
+                                                method: r.payment_method,
+                                                reference: r.reference_text,
+                                                amount: `$${r.amount_usd}`
+                                              })}
+                                              style={{
+                                                backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                color: '#60a5fa',
+                                                borderRadius: '4px',
+                                                padding: '2px 8px',
+                                                fontSize: '0.7rem',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                              }}
+                                            >
+                                              🧾 Ver
+                                            </button>
+                                          )}
+                                        </div>
                                         {isMyContrib && r.status === 'paid' && (
                                           <button
                                             type="button"
@@ -1484,6 +1581,127 @@ export default function LoansDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Visor de Comprobantes */}
+      {showReceiptViewer && selectedReceipt && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 100000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowReceiptViewer(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '16px',
+              padding: '1.25rem',
+              maxWidth: '32rem',
+              width: '100%',
+              color: '#f8fafc',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '700' }}>
+                  {selectedReceipt.title || 'Comprobante de Pago'}
+                </h3>
+                <div style={{ fontSize: '0.825rem', color: '#94a3b8', marginTop: '2px' }}>
+                  {selectedReceipt.amount && (
+                    <span style={{ color: '#34d399', fontWeight: '700', marginRight: '6px' }}>
+                      {selectedReceipt.amount}
+                    </span>
+                  )}
+                  {selectedReceipt.method && <span>• Vía {selectedReceipt.method} </span>}
+                  {selectedReceipt.reference && <span>• Ref: {selectedReceipt.reference}</span>}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReceiptViewer(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{
+              background: '#0f172a',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '200px',
+              maxHeight: '60vh',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <img
+                src={selectedReceipt.url}
+                alt="Comprobante"
+                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                }}
+              />
+              <div style={{ display: 'none', padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>
+                <p>⚠️ No se pudo cargar la imagen directamente.</p>
+                <a
+                  href={selectedReceipt.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#60a5fa', textDecoration: 'underline', fontWeight: '600' }}
+                >
+                  Abrir comprobante en nueva pestaña ↗
+                </a>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <a
+                href={selectedReceipt.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.8rem', color: '#60a5fa', textDecoration: 'underline' }}
+              >
+                Ver en tamaño completo ↗
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowReceiptViewer(false)}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  color: '#f8fafc',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>,
         document.body
