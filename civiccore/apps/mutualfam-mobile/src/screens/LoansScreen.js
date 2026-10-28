@@ -1563,7 +1563,7 @@ export default function LoansScreen() {
               <Text style={styles.label}>Monto a devolver (USD)</Text>
               <TextInput style={styles.input} keyboardType="numeric" value={repayAmount} onChangeText={setRepayAmount} placeholder="Ej. 10" placeholderTextColor="#475569" />
 
-              <Text style={styles.label}>¿Cómo le transferiste?</Text>
+              <Text style={styles.label}>¿Cómo transfieres?</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15}}>
                 {selectedContrib?.funder_payment_methods_json && Object.keys(JSON.parse(selectedContrib.funder_payment_methods_json)).map(method => {
                   const isSelected = notifyMethod === method;

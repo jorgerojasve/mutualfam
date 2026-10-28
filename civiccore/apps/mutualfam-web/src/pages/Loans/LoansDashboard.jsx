@@ -43,8 +43,11 @@ export default function LoansDashboard() {
   // Estados para Devolver Préstamo (Repay)
   const [showRepayModal, setShowRepayModal] = useState(false);
   const [selectedRepayContrib, setSelectedRepayContrib] = useState(null);
+  const [repayAmount, setRepayAmount] = useState('');
   const [repayMethod, setRepayMethod] = useState('Pago Móvil');
   const [repayReference, setRepayReference] = useState('');
+  const [repayReceiptFile, setRepayReceiptFile] = useState(null);
+  const [repayReceiptPreview, setRepayReceiptPreview] = useState(null);
   const [repaying, setRepaying] = useState(false);
 
   // Estados para Visor de Comprobantes
@@ -315,28 +318,65 @@ export default function LoansDashboard() {
   };
 
   const handleOpenRepay = (c, loan) => {
+    if (!hasConfiguredPaymentMethods()) {
+      if (window.confirm("Debes cargar por lo menos un dato de pago antes de devolver un préstamo.\n\n¿Deseas configurarlos ahora?")) {
+        handleOpenConfig();
+      }
+      return;
+    }
     setSelectedRepayContrib(c);
     setSelectedLoan(loan);
-    setRepayMethod('Pago Móvil');
+    setRepayAmount(String(c.amount_usd || ''));
+    let defaultMethod = 'Pago Móvil';
+    if (c.funder_payment_methods_json) {
+      try {
+        const methods = Object.keys(JSON.parse(c.funder_payment_methods_json));
+        if (methods.length > 0) {
+          defaultMethod = methods.includes('Pago Móvil') ? 'Pago Móvil' : methods[0];
+        }
+      } catch (_) {}
+    }
+    setRepayMethod(defaultMethod);
     setRepayReference('');
+    setRepayReceiptFile(null);
+    setRepayReceiptPreview(null);
     setShowRepayModal(true);
   };
 
   const handleSubmitRepay = async (e) => {
     e.preventDefault();
     if (!selectedRepayContrib) return;
-    if (!repayReference.trim()) {
-      alert("Debes ingresar la referencia de la devolución.");
+    if (!repayMethod || !repayAmount) {
+      alert("Debes elegir el método de pago y el monto a devolver.");
       return;
     }
+    const parsedAmount = parseFloat(repayAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert("Por favor ingresa un monto válido a devolver.");
+      return;
+    }
+
     setRepaying(true);
     try {
+      let finalReceiptUrl = null;
+      if (repayReceiptFile) {
+        const uploadRes = await loansApi.uploadFile(repayReceiptFile);
+        finalReceiptUrl = uploadRes.url;
+      }
+
       await loansApi.notifyRepayment(selectedRepayContrib.id, {
+        amount_usd: parsedAmount,
         payment_method: repayMethod,
-        reference_text: repayReference.trim()
+        reference_text: repayReference.trim() || undefined,
+        receipt_url: finalReceiptUrl || undefined
       });
       setShowRepayModal(false);
       setSelectedRepayContrib(null);
+      setSelectedLoan(null);
+      setRepayAmount('');
+      setRepayReference('');
+      setRepayReceiptFile(null);
+      setRepayReceiptPreview(null);
       alert("¡Devolución notificada! El aportante validará la recepción.");
       fetchLoans();
     } catch (err) {
@@ -1474,20 +1514,17 @@ export default function LoansDashboard() {
               border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: '16px',
               padding: '1.5rem',
-              maxWidth: '28rem',
+              maxWidth: '30rem',
               width: '100%',
               color: '#f8fafc',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '700' }}>Devolver Dinero 🔄</h3>
-                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                  Acreedor: {selectedRepayContrib.funder_name} (${selectedRepayContrib.amount_usd})
-                </span>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '700' }}>Devolver Dinero</h3>
               <button
                 type="button"
                 onClick={() => setShowRepayModal(false)}
@@ -1497,14 +1534,29 @@ export default function LoansDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitRepay} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {/* Acreedor y Monto Original */}
+            <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(0, 0, 0, 0.25)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ color: '#f8fafc', fontSize: '0.95rem' }}>
+                Acreedor: <strong style={{ color: '#ffffff' }}>{selectedRepayContrib.funder_name}</strong>
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '3px' }}>
+                Monto original: ${selectedRepayContrib.amount_usd}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitRepay} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Monto a devolver (USD) */}
               <div>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
-                  Método de Devolución
+                  Monto a devolver (USD)
                 </label>
-                <select
-                  value={repayMethod}
-                  onChange={(e) => setRepayMethod(e.target.value)}
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  placeholder="Ej. 10"
+                  value={repayAmount}
+                  onChange={(e) => setRepayAmount(e.target.value)}
                   style={{
                     width: '100%',
                     backgroundColor: '#0f172a',
@@ -1512,25 +1564,229 @@ export default function LoansDashboard() {
                     borderRadius: '8px',
                     padding: '0.65rem 0.85rem',
                     color: '#f8fafc',
-                    fontSize: '0.9rem',
+                    fontSize: '0.95rem',
                   }}
-                >
-                  <option value="Pago Móvil">Pago Móvil</option>
-                  <option value="Zelle">Zelle</option>
-                  <option value="Efectivo USD">Efectivo USD</option>
-                  <option value="Efectivo Bolívares">Efectivo Bolívares</option>
-                  <option value="Transferencia">Transferencia</option>
-                </select>
+                />
               </div>
 
+              {/* ¿Cómo transfieres? */}
               <div>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
-                  Referencia de Pago
+                  ¿Cómo transfieres?
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {(() => {
+                    let availableMethods = [];
+                    if (selectedRepayContrib.funder_payment_methods_json) {
+                      try {
+                        const parsed = JSON.parse(selectedRepayContrib.funder_payment_methods_json);
+                        availableMethods = Object.keys(parsed);
+                      } catch (_) {}
+                    }
+                    if (availableMethods.length === 0) {
+                      availableMethods = ['Pago Móvil', 'Zelle', 'Efectivo USD', 'Transferencia'];
+                    }
+                    return availableMethods.map((m) => {
+                      const isSelected = repayMethod === m;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setRepayMethod(m)}
+                          style={{
+                            backgroundColor: isSelected ? '#2563eb' : 'rgba(15, 23, 42, 0.6)',
+                            border: isSelected ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: isSelected ? '#ffffff' : '#94a3b8',
+                            borderRadius: '20px',
+                            padding: '6px 16px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {m}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Instrucciones de pago del acreedor */}
+              {repayMethod && (
+                <div>
+                  {(() => {
+                    let funderConfig = {};
+                    try {
+                      funderConfig = JSON.parse(selectedRepayContrib.funder_payment_methods_json || '{}');
+                    } catch (_) {}
+
+                    const config = funderConfig[repayMethod];
+
+                    if (!config) {
+                      return (
+                        <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '10px', padding: '0.85rem', fontSize: '0.85rem', color: '#fde047' }}>
+                          ⚠️ El acreedor no configuró datos para {repayMethod}. Por favor coordina directamente con {selectedRepayContrib.funder_name}.
+                        </div>
+                      );
+                    }
+
+                    if (repayMethod === 'Pago Móvil' && typeof config === 'object') {
+                      const getPrefix = (tipo) => {
+                        if (!tipo) return 'V';
+                        if (tipo === 'Persona') return 'V';
+                        if (tipo === 'Comercio') return 'J';
+                        if (tipo === 'Comuna') return 'G';
+                        return tipo.replace('-', '') || 'V';
+                      };
+                      const docPrefix = config.tipo_doc ? getPrefix(config.tipo_doc) : (config.cedula?.startsWith('V-') || config.cedula?.startsWith('J-') ? '' : 'V');
+                      const cleanCedula = config.cedula?.replace(/^[VJEG]-?/i, '') || '';
+                      const safeDoc = `${docPrefix}-${cleanCedula}`;
+                      const safeBanco = getBankLabel(config.banco);
+                      const safeTelefono = config.telefono || '';
+                      const parsedMonto = parseFloat(repayAmount);
+                      const montoBs = bcvRate && !isNaN(parsedMonto) && parsedMonto > 0 
+                        ? (parsedMonto * parseFloat(bcvRate)).toFixed(2) 
+                        : null;
+                      const montoBsFormatted = montoBs 
+                        ? parseFloat(montoBs).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : null;
+                      const copyAllText = `Banco: ${safeBanco} | ${safeDoc} | ${safeTelefono}${montoBs ? ` | Monto: ${montoBs} Bs` : ''}`;
+
+                      return (
+                        <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                          <span style={{ fontSize: '0.82rem', color: '#60a5fa', fontWeight: '700' }}>
+                            Instrucciones de Pago de {selectedRepayContrib.funder_name} (Pago Móvil):
+                          </span>
+
+                          {montoBsFormatted && (
+                            <div 
+                              onClick={() => handleCopy('monto', montoBs)}
+                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Monto a pagar (Tasa BCV: {bcvRate})</div>
+                                <div style={{ fontSize: '0.95rem', color: '#10b981', fontWeight: '700' }}>{montoBsFormatted} Bs</div>
+                              </div>
+                              <span style={{ color: copiedField === 'monto' ? '#34d399' : '#94a3b8', fontSize: '0.9rem' }}>
+                                {copiedField === 'monto' ? '✓' : '📋'}
+                              </span>
+                            </div>
+                          )}
+
+                          <div 
+                            onClick={() => handleCopy('banco', config.banco || safeBanco)}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Banco</div>
+                              <div style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: '600' }}>{safeBanco}</div>
+                            </div>
+                            <span style={{ color: copiedField === 'banco' ? '#34d399' : '#94a3b8', fontSize: '0.9rem' }}>
+                              {copiedField === 'banco' ? '✓' : '📋'}
+                            </span>
+                          </div>
+
+                          <div 
+                            onClick={() => handleCopy('doc', safeDoc)}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Documento</div>
+                              <div style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: '600' }}>{safeDoc}</div>
+                            </div>
+                            <span style={{ color: copiedField === 'doc' ? '#34d399' : '#94a3b8', fontSize: '0.9rem' }}>
+                              {copiedField === 'doc' ? '✓' : '📋'}
+                            </span>
+                          </div>
+
+                          <div 
+                            onClick={() => handleCopy('tel', safeTelefono)}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Teléfono</div>
+                              <div style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: '600' }}>{safeTelefono}</div>
+                            </div>
+                            <span style={{ color: copiedField === 'tel' ? '#34d399' : '#94a3b8', fontSize: '0.9rem' }}>
+                              {copiedField === 'tel' ? '✓' : '📋'}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCopy('all', copyAllText)}
+                            style={{
+                              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              color: copiedField === 'all' ? '#34d399' : '#60a5fa',
+                              borderRadius: '8px',
+                              padding: '9px',
+                              fontSize: '0.85rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              marginTop: '0.2rem',
+                              textAlign: 'center',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.5rem'
+                            }}
+                          >
+                            {copiedField === 'all' ? '✅ ¡Copiado al portapapeles!' : '📋  Copiar todo para el banco'}
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    if (repayMethod === 'Zelle') {
+                      const email = typeof config === 'object' ? config?.email : config;
+                      if (!email) {
+                        return (
+                          <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '10px', padding: '0.85rem', fontSize: '0.85rem', color: '#fde047' }}>
+                            ⚠️ El acreedor no configuró cuenta Zelle.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                          <span style={{ fontSize: '0.82rem', color: '#60a5fa', fontWeight: '700' }}>
+                            Cuenta Zelle de {selectedRepayContrib.funder_name}:
+                          </span>
+                          <div 
+                            onClick={() => handleCopy('zelle', email)}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                          >
+                            <div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Correo / Destinatario</div>
+                              <div style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: '600' }}>{email}</div>
+                            </div>
+                            <span style={{ color: copiedField === 'zelle' ? '#34d399' : '#94a3b8', fontSize: '0.9rem' }}>
+                              {copiedField === 'zelle' ? '✓' : '📋'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', padding: '0.85rem', fontSize: '0.85rem', color: '#94a3b8' }}>
+                        {typeof config === 'string' ? config : 'Coordina la devolución directamente con el acreedor.'}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Referencia (Opcional) */}
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Referencia (Opcional)
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="Ej. Número de referencia de la devolución"
+                  placeholder="Ej. Número de referencia o nota"
                   value={repayReference}
                   onChange={(e) => setRepayReference(e.target.value)}
                   style={{
@@ -1545,6 +1801,82 @@ export default function LoansDashboard() {
                 />
               </div>
 
+              {/* Comprobante (Opcional) */}
+              <div>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
+                  Comprobante (Opcional)
+                </label>
+                <input
+                  type="file"
+                  id="repay-receipt-file-input"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setRepayReceiptFile(file);
+                      setRepayReceiptPreview(URL.createObjectURL(file));
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('repay-receipt-file-input')?.click()}
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px dashed rgba(59, 130, 246, 0.4)',
+                    borderRadius: '8px',
+                    padding: '0.65rem',
+                    color: '#60a5fa',
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                  }}
+                >
+                  📎 {repayReceiptFile ? 'Cambiar Comprobante' : 'Adjuntar Comprobante'}
+                </button>
+                {repayReceiptPreview && (
+                  <div style={{ marginTop: '0.65rem', textAlign: 'center' }}>
+                    <img
+                      src={repayReceiptPreview}
+                      alt="Comprobante"
+                      style={{
+                        maxHeight: '140px',
+                        maxWidth: '100%',
+                        borderRadius: '8px',
+                        objectFit: 'contain',
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                      }}
+                    />
+                    <div style={{ marginTop: '0.35rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRepayReceiptFile(null);
+                          setRepayReceiptPreview(null);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                        }}
+                      >
+                        🗑️ Quitar comprobante
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de Acción */}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button
                   type="button"
@@ -1554,7 +1886,7 @@ export default function LoansDashboard() {
                     backgroundColor: 'rgba(255, 255, 255, 0.08)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: '8px',
-                    padding: '0.65rem',
+                    padding: '0.75rem',
                     color: '#f8fafc',
                     fontWeight: '600',
                     cursor: 'pointer',
@@ -1567,17 +1899,17 @@ export default function LoansDashboard() {
                   disabled={repaying}
                   style={{
                     flex: 1,
-                    backgroundColor: '#f59e0b',
+                    backgroundColor: '#2563eb',
                     border: 'none',
                     borderRadius: '8px',
-                    padding: '0.65rem',
+                    padding: '0.75rem',
                     color: '#ffffff',
                     fontWeight: '600',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)',
+                    cursor: repaying ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
                   }}
                 >
-                  {repaying ? 'Reportando...' : 'Reportar Devolución'}
+                  {repaying ? 'Confirmando...' : 'Confirmar'}
                 </button>
               </div>
             </form>
