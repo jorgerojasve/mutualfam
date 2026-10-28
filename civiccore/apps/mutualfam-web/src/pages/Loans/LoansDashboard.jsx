@@ -259,7 +259,7 @@ export default function LoansDashboard() {
     e.preventDefault();
     if (!selectedContrib) return;
     if (!notifyMethod) {
-      alert("Debes seleccionar el método de pago utilizado.");
+      alert("Debes seleccionar el método de pago.");
       return;
     }
     if (!referenceText.trim() && !receiptFile) {
@@ -1232,7 +1232,7 @@ export default function LoansDashboard() {
             {/* Selección de Método */}
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
-                Método de Pago
+                ¿Cómo transfieres?
               </label>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {['Pago Móvil', 'Zelle', 'Efectivo USD', 'Transferencia'].map((m) => (

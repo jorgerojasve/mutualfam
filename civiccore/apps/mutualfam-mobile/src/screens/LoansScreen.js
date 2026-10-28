@@ -531,7 +531,7 @@ export default function LoansScreen() {
       return;
     }
     if (!notifyMethod) {
-      Alert.alert('Error', 'Debes elegir el método de pago que usaste'); return;
+      Alert.alert('Error', 'Debes elegir el método de pago'); return;
     }
     setNotifying(true);
     try {
@@ -1385,7 +1385,7 @@ export default function LoansScreen() {
                 </View>
               )}
               
-              <Text style={styles.label}>Método que usaste</Text>
+              <Text style={styles.label}>¿Cómo transfieres?</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
