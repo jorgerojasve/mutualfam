@@ -20,7 +20,7 @@ import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = '1.0.26';
+const APP_VERSION = '1.0.27';
 
 export default function ProfileAndSettings() {
   const { user, activeOrg, logout } = useAuthStore();

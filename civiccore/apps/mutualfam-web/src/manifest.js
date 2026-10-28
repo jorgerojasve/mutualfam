@@ -34,7 +34,7 @@ const manifest = {
   },
 
   appMaturity: {
-    version: "1.0.26",
+    version: "1.0.27",
     level: 3,
     state: "stable",
     label: "Estable"
