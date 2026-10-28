@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      FIREBASE_SERVICE_CREDENTIALS: ${{ secrets.FIREBASE_SERVICE_CREDENTIALS }}
 
     steps:
       - name: ⬇️ Descargar Código
@@ -153,11 +155,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔥 Distribuir en Firebase App Distribution
-        if: ${{ secrets.FIREBASE_SERVICE_CREDENTIALS != '' }}
+        if: env.FIREBASE_SERVICE_CREDENTIALS != ''
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         continue-on-error: true
         with:
           appId: ${{ steps.env-config.outputs.firebase_app_id }}
-          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_CREDENTIALS }}
+          serviceCredentialsFileContent: ${{ env.FIREBASE_SERVICE_CREDENTIALS }}
           groups: testers
           file: civiccore/apps/mutualfam-mobile/*.apk
