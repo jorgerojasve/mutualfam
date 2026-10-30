@@ -36,6 +36,7 @@ class LoanRequest(Base):
     created_at = Column(DateTime, default=utcnow)
     funded_at = Column(DateTime, nullable=True)
     repaid_at = Column(DateTime, nullable=True)
+    last_repayment_reminder_date = Column(Date, nullable=True)
 
 
 class ContributionStatus(str, enum.Enum):

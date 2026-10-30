@@ -13,10 +13,31 @@ from routers import auth, membership, config
 
 # Crear todas las tablas en la base de datos SQLite aislada de MutualFam
 Base.metadata.create_all(bind=engine)
+from services.repayment_reminders import ensure_reminder_column_exists
+ensure_reminder_column_exists(engine)
 
 load_dotenv()
 
 app = FastAPI(title="Mutual Familiar API", version="1.0.0")
+
+@app.on_event("startup")
+async def start_repayment_reminders_task():
+    """Inicia tarea en segundo plano para evaluar y enviar recordatorios de vencimiento de préstamos."""
+    async def reminder_loop():
+        # Esperar brevemente al arranque del servidor
+        await asyncio.sleep(15)
+        while True:
+            try:
+                from services.repayment_reminders import check_and_send_repayment_reminders
+                from civiccore.core.database import SessionLocal
+                with SessionLocal() as db:
+                    check_and_send_repayment_reminders(db)
+            except Exception as e:
+                print(f"⚠️ [REPAYMENT REMINDERS] Error en ciclo periódico: {e}", flush=True)
+            # Reevaluar cada hora (evita duplicados con last_repayment_reminder_date)
+            await asyncio.sleep(3600)
+
+    asyncio.create_task(reminder_loop())
 
 class PathSanitizerMiddleware:
     """Sanea rutas entrantes eliminando saltos de línea codificados (%0A, \n, \r) o espacios accidentales."""
