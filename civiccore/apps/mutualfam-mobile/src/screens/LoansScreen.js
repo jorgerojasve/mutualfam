@@ -767,25 +767,59 @@ export default function LoansScreen() {
         {item.contributions && item.contributions.length > 0 && (
           <View style={styles.contribsList}>
             <Text style={styles.contribsTitle}>Aportes en curso:</Text>
-            {item.contributions.map(c => (
-              <View key={c.id} style={styles.contribRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.contribName}>{c.funder_name} - ${c.amount_usd}</Text>
-                  <Text style={styles.contribStatus}>
-                    {c.status === 'pledged' ? '⏳ Prometido (Por pagar)' : 
-                     c.status === 'paid' ? '🟡 Pagado (Por validar)' : 
-                     c.status === 'repay_notified' ? '🔄 Devolución notificada (Por validar)' :
-                     c.status === 'repaid' ? '🎉 Devuelto' : '✅ Validado'}
-                  </Text>
-                  {c.payment_method ? (
-                    <Text style={{color: '#94a3b8', fontSize: 12}}>Vía {c.payment_method}</Text>
-                  ) : null}
-                  {c.reference_text ? (
-                    <Text style={{color: '#94a3b8', fontSize: 12}}>Referencia: {c.reference_text}</Text>
-                  ) : null}
+            {item.contributions.map(c => {
+              // Paleta de color según estado del aporte
+              const csMap = {
+                pledged:       { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+                paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+                verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+                repay_notified:{ bg: 'rgba(168, 85, 247, 0.10)', border: '#a855f7', badgeBg: '#7e22ce', badgeText: '#e9d5ff', icon: '🔄', label: 'Devolución en revisión' },
+                repaid:        { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
+              };
+              const cs = csMap[c.status] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: c.status };
+              return (
+                <View key={c.id} style={[styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}>
+                  {/* Cabecera: nombre + monto + badge de estado */}
+                  <View style={styles.contribCardHeader}>
+                    <View style={styles.contribAvatarWrap}>
+                      <View style={[styles.contribAvatar, { backgroundColor: cs.border + '33', borderColor: cs.border }]}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: cs.border }}>
+                          {c.funder_name ? c.funder_name.trim()[0].toUpperCase() : '?'}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.contribName}>{c.funder_name}</Text>
+                        <Text style={styles.contribAmountLine}>${c.amount_usd} USD</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
+                      <Text style={{ fontSize: 11 }}>{cs.icon}</Text>
+                      <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
+                    </View>
+                  </View>
+
+                  {/* Detalles de pago */}
+                  {(c.payment_method || c.reference_text) && (
+                    <View style={styles.contribMeta}>
+                      {c.payment_method ? (
+                        <View style={styles.contribMetaRow}>
+                          <Text style={styles.contribMetaIcon}>💳</Text>
+                          <Text style={styles.contribMetaText}>{c.payment_method}</Text>
+                        </View>
+                      ) : null}
+                      {c.reference_text ? (
+                        <View style={styles.contribMetaRow}>
+                          <Text style={styles.contribMetaIcon}>#</Text>
+                          <Text style={styles.contribMetaText}>{c.reference_text}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
+
+                  {/* Comprobante de aporte */}
                   {c.receipt_url ? (
                     <TouchableOpacity 
-                      style={styles.receiptLinkBtn} 
+                      style={[styles.receiptLinkBtn, { borderColor: cs.border + '55', marginTop: 8 }]} 
                       onPress={() => openReceiptViewer(c.receipt_url, `Comprobante de Aporte - ${c.funder_name}`, {
                         method: c.payment_method,
                         reference: c.reference_text,
@@ -795,68 +829,76 @@ export default function LoansScreen() {
                       <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
                     </TouchableOpacity>
                   ) : null}
-                  {c.repayments && c.repayments.map(r => (
-                     <View key={r.id} style={{marginTop: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 5}}>
-                        <Text style={{color: '#f8fafc', fontSize: 12}}>↪ Devolución de ${r.amount_usd}</Text>
-                        <Text style={{color: r.status === 'paid' ? '#eab308' : '#10b981', fontSize: 11}}>
-                           Estatus: {r.status === 'paid' ? 'Por validar' : 'Validada'}
-                        </Text>
-                        {r.payment_method ? (
-                          <Text style={{color: '#94a3b8', fontSize: 11}}>Vía {r.payment_method}</Text>
-                        ) : null}
-                        {r.reference_text ? (
-                          <Text style={{color: '#94a3b8', fontSize: 11}}>Ref: {r.reference_text}</Text>
-                        ) : null}
-                        {r.receipt_url ? (
-                          <TouchableOpacity 
-                            style={styles.receiptLinkBtnSmall}
-                            onPress={() => openReceiptViewer(r.receipt_url, 'Comprobante de Devolución', {
-                              method: r.payment_method,
-                              reference: r.reference_text,
-                              amount: `$${r.amount_usd}`
-                            })}
-                          >
-                            <Text style={styles.receiptLinkTextSmall}>🧾 Ver comprobante</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {c.funder_id === user?.id && r.status === 'paid' && (
-                          <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981', marginTop: 5, alignSelf: 'flex-start'}]} onPress={() => handleVerifyRepayment(r.id)}>
-                            <Text style={styles.smallActionText}>Validar Devolución</Text>
-                          </TouchableOpacity>
-                        )}
-                     </View>
-                  ))}
-                </View>
-                
-                <View style={{flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'wrap', marginTop: 5}}>
-                  {c.funder_id === user?.id && c.status === 'pledged' && (
-                    <>
-                      <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#ef4444'}]} onPress={() => handleCancelContribution(c.id)}>
-                        <Text style={{color: '#ef4444', fontSize: 12, fontWeight: 'bold'}}>❌</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => handlePressNotify(c, item)}>
-                        <Text style={styles.smallActionText}>Notificar Pago</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                  {isMine && c.status === 'paid' && (
-                    <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981'}]} onPress={() => handleVerify(c.id)}>
-                      <Text style={styles.smallActionText}>Validar</Text>
-                    </TouchableOpacity>
-                  )}
-                  {isMine && c.status === 'verified' && (
-                    <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#f59e0b'}]} onPress={() => handlePressRepay(c, item)}>
-                      <Text style={styles.smallActionText}>Devolver</Text>
-                    </TouchableOpacity>
-                  )}
-                  {isMine && c.status === 'repay_notified' && (
-                    <View style={[styles.smallActionBtn, {backgroundColor: 'rgba(234, 179, 8, 0.15)', borderWidth: 1, borderColor: '#eab308'}]}>
-                      <Text style={{color: '#eab308', fontSize: 12, fontWeight: '600'}}>⏳ Devolución en validación</Text>
+
+                  {/* Devoluciones anidadas */}
+                  {c.repayments && c.repayments.length > 0 && (
+                    <View style={styles.repaymentsList}>
+                      {c.repayments.map(r => {
+                        const repayPending = r.status === 'paid';
+                        return (
+                          <View key={r.id} style={[styles.repaymentRow, { borderColor: repayPending ? '#eab308' : '#10b981' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <Text style={{ fontSize: 13 }}>{repayPending ? '⏳' : '✅'}</Text>
+                              <Text style={[styles.repaymentAmount, { color: repayPending ? '#facc15' : '#34d399' }]}>
+                                Devolución ${r.amount_usd}
+                              </Text>
+                              <View style={[styles.repaymentBadge, { backgroundColor: repayPending ? 'rgba(202,138,4,0.2)' : 'rgba(16,185,129,0.2)', borderColor: repayPending ? '#ca8a04' : '#059669' }]}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: repayPending ? '#fde047' : '#6ee7b7' }}>
+                                  {repayPending ? 'Por validar' : 'Validada'}
+                                </Text>
+                              </View>
+                            </View>
+                            {r.payment_method ? (<Text style={styles.contribMetaText}>💳 {r.payment_method}</Text>) : null}
+                            {r.reference_text ? (<Text style={styles.contribMetaText}># {r.reference_text}</Text>) : null}
+                            {r.receipt_url ? (
+                              <TouchableOpacity 
+                                style={styles.receiptLinkBtnSmall}
+                                onPress={() => openReceiptViewer(r.receipt_url, 'Comprobante de Devolución', {
+                                  method: r.payment_method,
+                                  reference: r.reference_text,
+                                  amount: `$${r.amount_usd}`
+                                })}
+                              >
+                                <Text style={styles.receiptLinkTextSmall}>🧾 Ver comprobante</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            {c.funder_id === user?.id && r.status === 'paid' && (
+                              <TouchableOpacity style={[styles.smallActionBtn, { backgroundColor: '#10b981', marginTop: 6, alignSelf: 'flex-start' }]} onPress={() => handleVerifyRepayment(r.id)}>
+                                <Text style={styles.smallActionText}>Validar Devolución</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        );
+                      })}
                     </View>
                   )}
+
+                  {/* Acciones */}
+                  <View style={styles.contribActions}>
+                    {c.funder_id === user?.id && c.status === 'pledged' && (
+                      <>
+                        <TouchableOpacity style={styles.contribActionDanger} onPress={() => handleCancelContribution(c.id)}>
+                          <Text style={styles.contribActionDangerText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.contribActionPrimary} onPress={() => handlePressNotify(c, item)}>
+                          <Text style={styles.contribActionPrimaryText}>📤 Notificar Pago</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {isMine && c.status === 'paid' && (
+                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]} onPress={() => handleVerify(c.id)}>
+                        <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isMine && c.status === 'verified' && (
+                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#b45309' }]} onPress={() => handlePressRepay(c, item)}>
+                        <Text style={styles.contribActionPrimaryText}>↩ Devolver</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
         
@@ -1872,11 +1914,100 @@ const styles = StyleSheet.create({
   methodsText: { color: '#cbd5e1', fontSize: 12, marginBottom: 10, fontStyle: 'italic' },
   progressContainer: { backgroundColor: 'rgba(0,0,0,0.2)', padding: 10, borderRadius: 8, marginBottom: 10 },
   progressText: { color: '#cbd5e1', fontSize: 13, marginBottom: 2 },
-  contribsList: { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 8 },
-  contribsTitle: { color: '#f8fafc', fontWeight: 'bold', marginBottom: 8, fontSize: 13 },
-  contribRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  contribName: { color: '#e2e8f0', fontSize: 14, fontWeight: 'bold' },
-  contribStatus: { color: '#94a3b8', fontSize: 12 },
+  contribsList: { marginTop: 12, gap: 8 },
+  contribsTitle: { color: '#94a3b8', fontWeight: '700', marginBottom: 6, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
+  // Nuevo diseño de tarjeta de aporte
+  contribCard: {
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 0,
+  },
+  contribCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  contribAvatarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  contribAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contribName: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
+  contribAmountLine: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
+  contribStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  contribStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  contribMeta: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 6,
+    padding: 7,
+    marginTop: 4,
+    gap: 3,
+  },
+  contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  contribMetaIcon: { fontSize: 12, width: 16 },
+  contribMetaText: { color: '#94a3b8', fontSize: 12 },
+  contribActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  contribActionPrimary: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  contribActionPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  contribActionDanger: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  contribActionDangerText: { color: '#f87171', fontSize: 13, fontWeight: '700' },
+  repaymentsList: { marginTop: 8, gap: 6 },
+  repaymentRow: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 6,
+    borderWidth: 1,
+    padding: 8,
+  },
+  repaymentAmount: { fontSize: 13, fontWeight: '700' },
+  repaymentBadge: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   receiptLinkBtn: {
     backgroundColor: 'rgba(59, 130, 246, 0.12)',
     borderWidth: 1,
