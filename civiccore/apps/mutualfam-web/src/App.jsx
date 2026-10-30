@@ -5,6 +5,7 @@ import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import InviteLanding from './pages/Auth/InviteLanding';
+import SelectMutual from './pages/Auth/SelectMutual';
 import LoansDashboard from './pages/Loans/LoansDashboard';
 import FundsDashboard from './pages/Funds/FundsDashboard';
 import Settings from './pages/Settings/Settings';
@@ -29,6 +30,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/invite" element={<InviteLanding />} />
         <Route path="/download" element={<InviteLanding />} />
+        <Route path="/select-mutual" element={<SelectMutual />} />
         
         {/* Protected Routes */}
         <Route path="/" element={<MainLayout />}>

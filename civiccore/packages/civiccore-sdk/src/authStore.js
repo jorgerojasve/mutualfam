@@ -98,6 +98,20 @@ export const useAuthStore = create((set, get) => ({
     return res;
   },
 
+  createOrg: async (name, description = '') => {
+    const res = await membershipApi.createOrganization({ name, description });
+    const { storage } = getConfig();
+    if (res?.organization_id) {
+      await storage.setItem('organizationId', String(res.organization_id));
+      await storage.setItem('active_org_id', String(res.organization_id));
+    }
+    const rawUser = await authApi.me();
+    const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ user, organizations: orgs, activeOrg: targetOrg });
+    return res;
+  },
+
   login: async (email, password) => {
     const tokenResponse = await authApi.login(email, password);
     const { storage } = getConfig();

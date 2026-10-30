@@ -51,7 +51,7 @@ const request = async (endpoint, options = {}) => {
         // Formato FastAPI 422: [{ loc: [...], msg: "..." }]
         message = data.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
       } else if (data?.detail && typeof data.detail === 'object') {
-        message = JSON.stringify(data.detail);
+        message = data.detail.message || JSON.stringify(data.detail);
       } else if (data?.message) {
         message = data.message;
       } else if (rawText) {
@@ -111,6 +111,7 @@ export const authApi = {
 export const membershipApi = {
   stats: () => request('/membership/stats'),
   getMembers: () => request('/membership/members'),
+  createOrganization: (data) => request('/membership/organizations/create', { method: 'POST', body: JSON.stringify(data) }),
   joinOrganization: (token) => request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token }) }),
   getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
