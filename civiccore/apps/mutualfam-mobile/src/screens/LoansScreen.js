@@ -10,6 +10,7 @@ import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage } from '../utils/errors';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
+import { formatVE, parseVEAmount } from '../utils/currency';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -24,6 +25,7 @@ export default function LoansScreen() {
   // Crear préstamo
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
+  const [amountBs, setAmountBs] = useState('');
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -237,6 +239,50 @@ export default function LoansScreen() {
 
   const effectiveBcvRate = manualBcvRate ? parseFloat(manualBcvRate.replace(',', '.')) : bcvRate;
 
+  const handleAmountUsdChange = (text) => {
+    setAmount(text);
+    if (!text || text.trim() === '') {
+      setAmountBs('');
+      return;
+    }
+    const parsed = parseVEAmount(text);
+    if (parsed !== null && !isNaN(parsed) && effectiveBcvRate && effectiveBcvRate > 0) {
+      const calculatedBs = parsed * effectiveBcvRate;
+      setAmountBs(formatVE(calculatedBs));
+    } else {
+      setAmountBs('');
+    }
+  };
+
+  const handleAmountBsChange = (text) => {
+    setAmountBs(text);
+    if (!text || text.trim() === '') {
+      setAmount('');
+      return;
+    }
+    const parsed = parseVEAmount(text);
+    if (parsed !== null && !isNaN(parsed) && effectiveBcvRate && effectiveBcvRate > 0) {
+      const calculatedUsd = parsed / effectiveBcvRate;
+      setAmount(formatVE(calculatedUsd));
+    } else {
+      setAmount('');
+    }
+  };
+
+  const handleAmountUsdBlur = () => {
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+      setAmount(formatVE(parsed));
+    }
+  };
+
+  const handleAmountBsBlur = () => {
+    const parsed = parseVEAmount(amountBs);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+      setAmountBs(formatVE(parsed));
+    }
+  };
+
   const fetchLoans = async () => {
     setLoading(true);
     try {
@@ -439,21 +485,24 @@ export default function LoansScreen() {
          return;
       }
 
-      const parsedAmount = parseFloat(amount);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      const parsedAmount = parseVEAmount(amount);
+      if (parsedAmount === null || isNaN(parsedAmount) || parsedAmount <= 0) {
         Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
         setSubmitting(false);
         return;
       }
 
+      const roundedUsd = Math.round(parsedAmount * 100) / 100;
+
       await loansApi.createLoan({
-        amount_usd: parsedAmount,
+        amount_usd: roundedUsd,
         motive: motive,
         estimated_repayment_date: estimatedDate || null,
         accepted_payment_methods: acceptedMethods
       });
       setShowModal(false);
       setAmount('');
+      setAmountBs('');
       setMotive('');
       setEstimatedDate('');
       setAcceptedMethods([]);
@@ -1024,8 +1073,61 @@ export default function LoansScreen() {
             >
               <Text style={styles.modalTitle}>Solicitar Préstamo</Text>
               
-              <Text style={styles.label}>Monto (USD)</Text>
-              <TextInput style={styles.input} keyboardType="numeric" value={amount} onChangeText={setAmount} />
+              <View style={styles.dualCurrencyContainer}>
+                {/* Campo 1: Monto en Dólares */}
+                <View style={styles.currencyFieldBlock}>
+                  <View style={styles.currencyHeaderRow}>
+                    <Text style={styles.label}>Monto en Dólares</Text>
+                    <View style={styles.currencyBadgeUsd}>
+                      <Text style={styles.currencyBadgeTextUsd}>USD ($)</Text>
+                    </View>
+                  </View>
+                  <View style={styles.currencyInputRow}>
+                    <Text style={styles.currencyPrefixText}>$</Text>
+                    <TextInput 
+                      style={[styles.input, styles.currencyInnerInput]} 
+                      keyboardType="decimal-pad" 
+                      value={amount} 
+                      onChangeText={handleAmountUsdChange}
+                      onBlur={handleAmountUsdBlur}
+                      placeholder="Ej: 50,00"
+                      placeholderTextColor="#64748b"
+                    />
+                  </View>
+                </View>
+
+                {/* Tasa del día informativa */}
+                <View style={styles.rateSyncBanner}>
+                  <Text style={styles.rateSyncBannerText}>
+                    🏦 Tasa del día: {effectiveBcvRate ? `${formatVE(effectiveBcvRate)} Bs/USD` : 'Consultando...'}
+                  </Text>
+                </View>
+
+                {/* Campo 2: Monto en Bolívares */}
+                <View style={styles.currencyFieldBlock}>
+                  <View style={styles.currencyHeaderRow}>
+                    <Text style={styles.label}>Monto en Bolívares</Text>
+                    <View style={styles.currencyBadgeBs}>
+                      <Text style={styles.currencyBadgeTextBs}>Bs. VES</Text>
+                    </View>
+                  </View>
+                  <View style={styles.currencyInputRow}>
+                    <Text style={styles.currencyPrefixText}>Bs.</Text>
+                    <TextInput 
+                      style={[styles.input, styles.currencyInnerInput]} 
+                      keyboardType="decimal-pad" 
+                      value={amountBs} 
+                      onChangeText={handleAmountBsChange}
+                      onBlur={handleAmountBsBlur}
+                      placeholder="Ej: 2.710,00"
+                      placeholderTextColor="#64748b"
+                    />
+                  </View>
+                </View>
+                <Text style={styles.dualCurrencyHelpText}>
+                  💡 Puedes ingresar el monto en cualquiera de los dos campos; el otro se calcula automáticamente con la tasa del día.
+                </Text>
+              </View>
               
               <Text style={styles.label}>Fecha Límite Sugerida</Text>
               <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
@@ -2051,6 +2153,93 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
   input: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', padding: 12, marginBottom: 15 },
+  dualCurrencyContainer: {
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 12,
+    marginBottom: 15,
+  },
+  currencyFieldBlock: {
+    marginBottom: 2,
+  },
+  currencyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  currencyBadgeUsd: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  currencyBadgeTextUsd: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  currencyBadgeBs: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  currencyBadgeTextBs: {
+    color: '#60a5fa',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  currencyInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  currencyPrefixText: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 1,
+    color: '#94a3b8',
+    fontWeight: '700',
+    fontSize: 15,
+    top: 13,
+  },
+  currencyInnerInput: {
+    flex: 1,
+    paddingLeft: 44,
+    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rateSyncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  rateSyncBannerText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dualCurrencyHelpText: {
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
   modalCancel: { padding: 12, borderRadius: 8 },
   modalCancelText: { color: '#94a3b8', fontWeight: 'bold' },

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { loansApi, useAuthStore } from '@civiccore/sdk';
 import { X, Check, Copy } from 'lucide-react';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
+import { formatVE, parseVEAmount } from '../../utils/currency.js';
 
 export default function LoansDashboard() {
   const [loans, setLoans] = useState([]);
@@ -10,6 +11,7 @@ export default function LoansDashboard() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
+  const [amountBs, setAmountBs] = useState('');
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
 
@@ -118,6 +120,50 @@ export default function LoansDashboard() {
       .catch(() => {});
   }, []);
 
+  const handleAmountUsdChange = (val) => {
+    setAmount(val);
+    if (!val || val.trim() === '') {
+      setAmountBs('');
+      return;
+    }
+    const parsed = parseVEAmount(val);
+    if (parsed !== null && !isNaN(parsed) && bcvRate && bcvRate > 0) {
+      const calculatedBs = parsed * bcvRate;
+      setAmountBs(formatVE(calculatedBs));
+    } else {
+      setAmountBs('');
+    }
+  };
+
+  const handleAmountBsChange = (val) => {
+    setAmountBs(val);
+    if (!val || val.trim() === '') {
+      setAmount('');
+      return;
+    }
+    const parsed = parseVEAmount(val);
+    if (parsed !== null && !isNaN(parsed) && bcvRate && bcvRate > 0) {
+      const calculatedUsd = parsed / bcvRate;
+      setAmount(formatVE(calculatedUsd));
+    } else {
+      setAmount('');
+    }
+  };
+
+  const handleAmountUsdBlur = () => {
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+      setAmount(formatVE(parsed));
+    }
+  };
+
+  const handleAmountBsBlur = () => {
+    const parsed = parseVEAmount(amountBs);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+      setAmountBs(formatVE(parsed));
+    }
+  };
+
   const handleCopy = (field, text) => {
     if (!text) return;
     navigator.clipboard?.writeText(text);
@@ -182,14 +228,21 @@ export default function LoansDashboard() {
       alert("Debes pertenecer a una mutual activa para solicitar préstamos.");
       return;
     }
+    const parsedAmount = parseVEAmount(amount);
+    if (!parsedAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert("Por favor ingresa un monto válido mayor a 0.");
+      return;
+    }
+    const roundedUsd = Math.round(parsedAmount * 100) / 100;
     try {
       await loansApi.createLoan({
-        amount_usd: parseFloat(amount),
+        amount_usd: roundedUsd,
         motive,
         estimated_repayment_date: estimatedDate || null
       });
       setShowModal(false);
       setAmount('');
+      setAmountBs('');
       setMotive('');
       setEstimatedDate('');
       fetchLoans();
@@ -907,16 +960,90 @@ export default function LoansDashboard() {
           <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '480px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '1.25rem' }}>Solicitar Préstamo</h2>
             <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Monto (USD)</label>
-                <input 
-                  type="number" 
-                  className="form-input"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  required 
-                  min="1"
-                />
+              <div style={{
+                backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem'
+              }}>
+                {/* Monto en Dólares */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Monto en Dólares</label>
+                    <span style={{
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      color: '#34d399',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '6px'
+                    }}>USD ($)</span>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: '12px', color: '#94a3b8', fontWeight: 700, fontSize: '0.95rem' }}>$</span>
+                    <input 
+                      type="text" 
+                      className="form-input"
+                      style={{ paddingLeft: '2rem' }}
+                      value={amount}
+                      onChange={e => handleAmountUsdChange(e.target.value)}
+                      onBlur={handleAmountUsdBlur}
+                      placeholder="Ej: 50,00"
+                      required 
+                    />
+                  </div>
+                </div>
+
+                {/* Banner Tasa del Día */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(30, 41, 59, 0.85)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  fontSize: '0.8rem',
+                  color: '#94a3b8',
+                  fontWeight: 600
+                }}>
+                  🏦 Tasa del día: {bcvRate ? `${formatVE(bcvRate)} Bs/USD` : 'Consultando...'}
+                </div>
+
+                {/* Monto en Bolívares */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Monto en Bolívares</label>
+                    <span style={{
+                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                      border: '1px solid rgba(59, 130, 246, 0.4)',
+                      color: '#60a5fa',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '6px'
+                    }}>Bs. VES</span>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: '12px', color: '#94a3b8', fontWeight: 700, fontSize: '0.95rem' }}>Bs.</span>
+                    <input 
+                      type="text" 
+                      className="form-input"
+                      style={{ paddingLeft: '2.5rem' }}
+                      value={amountBs}
+                      onChange={e => handleAmountBsChange(e.target.value)}
+                      onBlur={handleAmountBsBlur}
+                      placeholder="Ej: 2.710,00"
+                    />
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic' }}>
+                  💡 Puedes ingresar el monto en cualquiera de los dos campos; el otro se calcula automáticamente con la tasa del día.
+                </span>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Fecha estimada de pago</label>
