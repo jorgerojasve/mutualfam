@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { membershipApi, useAuthStore } from '@civiccore/sdk';
 import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2 } from 'lucide-react';
+import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
 const MembersList = () => {
-  const { activeOrg, user } = useAuthStore();
+  const { activeOrg, user, isOffline } = useAuthStore();
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
 
@@ -29,6 +31,7 @@ const MembersList = () => {
   const fetchMembers = async () => {
     try {
       setIsLoading(true);
+      setConnectionError(false);
       const data = await membershipApi.getMembers();
       const list = Array.isArray(data) ? data : [];
       const formatted = list.map(m => ({
@@ -37,9 +40,32 @@ const MembersList = () => {
         email: m.email || '',
       }));
       setMembers(formatted);
+      if (activeOrg?.id) {
+        try {
+          localStorage.setItem(`cached_members_${activeOrg.id}`, JSON.stringify(formatted));
+        } catch (_) {}
+      }
     } catch (error) {
       console.warn("Could not fetch members:", error);
-      setMembers([]);
+      const isNet = !error?.response && (
+        Boolean(error?.request) ||
+        Boolean(error?.message && (
+          error.message.includes('Network Error') ||
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('Network request failed')
+        ))
+      );
+      if (isNet) {
+        setConnectionError(true);
+        if (activeOrg?.id) {
+          try {
+            const cached = localStorage.getItem(`cached_members_${activeOrg.id}`);
+            if (cached) setMembers(JSON.parse(cached));
+          } catch (_) {}
+        }
+      } else {
+        setMembers([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +179,15 @@ const MembersList = () => {
             {isLoading ? (
               <div style={{ padding: '2rem', textAlign: 'center' }}><div className="loader mx-auto" /></div>
             ) : members.length === 0 ? (
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>No hay miembros que mostrar.</p>
+              (isOffline || connectionError) ? (
+                <OfflineEmptyState
+                  title="Sin conexión de red"
+                  message="No se pudieron cargar los miembros de la mutual. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                  onRetry={fetchMembers}
+                />
+              ) : (
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>No hay miembros que mostrar.</p>
+              )
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 {members.map((member) => {

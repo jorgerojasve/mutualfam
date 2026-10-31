@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
 import { Users, Plus, Key, LogOut, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
+import { OfflineEmptyState } from '../../components/Common/OfflineEmptyState.jsx';
 
 const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : '?');
 
 export default function SelectMutual() {
   const navigate = useNavigate();
-  const { user, organizations, activeOrg, selectOrg, joinOrg, createOrg, logout, refreshUser } = useAuthStore();
+  const { user, organizations, activeOrg, selectOrg, joinOrg, createOrg, logout, refreshUser, isOffline } = useAuthStore();
   
   const [modalMode, setModalMode] = useState(null); // 'create' | 'join' | null
   
@@ -123,6 +124,13 @@ export default function SelectMutual() {
               );
             })}
           </div>
+        ) : isOffline ? (
+          <OfflineEmptyState
+            title="Sin conexión de red"
+            message="No se pudieron cargar tus mutuales. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+            onRetry={refreshUser}
+            style={{ margin: '0 0 1.5rem 0' }}
+          />
         ) : (
           <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 text-center mb-6">
             <p className="text-slate-300 font-medium mb-1">

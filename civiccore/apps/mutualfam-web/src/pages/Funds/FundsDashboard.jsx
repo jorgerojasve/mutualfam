@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { fundsApi, useAuthStore } from '@civiccore/sdk';
 import { Plus, X } from 'lucide-react';
+import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
 const FundsDashboard = () => {
-  const { activeOrg } = useAuthStore();
+  const { activeOrg, isOffline } = useAuthStore();
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newFundName, setNewFundName] = useState('');
   const [newFundType, setNewFundType] = useState('emergency');
@@ -21,11 +23,31 @@ const FundsDashboard = () => {
     }
     try {
       setLoading(true);
+      setConnectionError(false);
       const data = await fundsApi.getFunds();
-      setFunds(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setFunds(list);
+      try {
+        localStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(list));
+      } catch (_) {}
     } catch (err) {
-      console.error(err);
-      setFunds([]);
+      const isNet = !err?.response && (
+        Boolean(err?.request) ||
+        Boolean(err?.message && (
+          err.message.includes('Network Error') ||
+          err.message.includes('Failed to fetch') ||
+          err.message.includes('Network request failed')
+        ))
+      );
+      if (isNet) {
+        setConnectionError(true);
+        try {
+          const cached = localStorage.getItem(`cached_funds_${activeOrg.id}`);
+          if (cached) setFunds(JSON.parse(cached));
+        } catch (_) {}
+      } else {
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
@@ -101,6 +123,13 @@ const FundsDashboard = () => {
         </button>
       </div>
 
+      {(isOffline || connectionError) && funds.length > 0 && (
+        <OfflineNoticeBanner
+          message="Sin conexión de red · Mostrando fondos guardados"
+          onRetry={fetchFunds}
+        />
+      )}
+
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '12rem' }}>
           <div className="loader" />
@@ -108,14 +137,22 @@ const FundsDashboard = () => {
       ) : (
         <div>
           {funds.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '4rem 1rem',
-              color: '#94a3b8',
-              fontSize: '1rem',
-            }}>
-              No hay fondos creados
-            </div>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar los fondos comunes. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={fetchFunds}
+              />
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                padding: '4rem 1rem',
+                color: '#94a3b8',
+                fontSize: '1rem',
+              }}>
+                No hay fondos creados
+              </div>
+            )
           ) : (
             <div className="dashboard-grid">
               {funds.map((fund) => (

@@ -10,7 +10,8 @@ import {
   Sparkles,
   PlusCircle,
   ArrowLeft,
-  Key
+  Key,
+  WifiOff
 } from 'lucide-react';
 import { EnvBadge } from '../Common/EnvBadge';
 
@@ -18,7 +19,7 @@ const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : '?');
 const roleLabel = (role) => (role === 'founder' ? 'Fundador' : 'Miembro');
 
 export default function MutualSwitcher() {
-  const { activeOrg, organizations, selectOrg, joinOrg, createOrg } = useAuthStore();
+  const { activeOrg, organizations, selectOrg, joinOrg, createOrg, isOffline } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'manage' | 'create' | 'join'
 
@@ -117,6 +118,11 @@ export default function MutualSwitcher() {
         </div>
         <div className="mutual-badges">
           <span className="badge-beta">BETA</span>
+          {isOffline && (
+            <span className="badge-offline">
+              <WifiOff size={11} /> Sin red
+            </span>
+          )}
           <EnvBadge size="small" />
         </div>
         <ChevronsUpDown size={18} className="mutual-swap-icon" />

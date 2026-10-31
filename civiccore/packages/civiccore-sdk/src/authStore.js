@@ -17,8 +17,11 @@ const resolveActiveOrg = async (rawUser, storage) => {
     }
     await storage.setItem('organizationId', String(targetOrg.id));
     await storage.setItem('active_org_id', String(targetOrg.id));
+    await storage.setItem('cached_active_org', JSON.stringify(targetOrg));
+    await storage.setItem('cached_organizations', JSON.stringify(orgs));
   } else {
     await storage.removeItem('active_org_id');
+    await storage.removeItem('cached_active_org');
   }
   return { orgs, targetOrg };
 };
@@ -62,12 +65,22 @@ export const useAuthStore = create((set, get) => ({
 
       if (isNetError) {
         // En fallo de red temporal no eliminamos token ni expulsamos al usuario
+        let cachedOrg = null;
+        let cachedOrgs = [];
+        try {
+          const rawCachedOrg = await storage.getItem('cached_active_org');
+          if (rawCachedOrg) cachedOrg = JSON.parse(rawCachedOrg);
+          const rawCachedOrgs = await storage.getItem('cached_organizations');
+          if (rawCachedOrgs) cachedOrgs = JSON.parse(rawCachedOrgs);
+        } catch (_) {}
+
         const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
         set({
           isAuthenticated: true,
           isOffline: true,
           isLoading: false,
-          activeOrg: storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null
+          activeOrg: cachedOrg || (storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null),
+          organizations: cachedOrgs.length > 0 ? cachedOrgs : []
         });
         return;
       }
@@ -195,4 +208,18 @@ export const useAuthStore = create((set, get) => ({
     
     wsClient.disconnect();
   },
+
+  setIsOffline: (offline) => set({ isOffline: offline }),
 }));
+
+// Escuchadores globales del navegador (Safari en iOS, Chrome en Android/PC)
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    useAuthStore.getState().setIsOffline(false);
+    useAuthStore.getState().refreshUser?.();
+  });
+  window.addEventListener('offline', () => {
+    useAuthStore.getState().setIsOffline(true);
+  });
+}
+
