@@ -11,7 +11,7 @@ export default function LoansDashboard() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
-  const [amountBs, setAmountBs] = useState('');
+  const [loanCurrency, setLoanCurrency] = useState(() => localStorage.getItem('loan_currency_pref') || 'USD'); // 'USD' | 'VES'
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
 
@@ -120,49 +120,40 @@ export default function LoansDashboard() {
       .catch(() => {});
   }, []);
 
-  const handleAmountUsdChange = (val) => {
-    setAmount(val);
-    if (!val || val.trim() === '') {
-      setAmountBs('');
-      return;
+  const handleToggleCurrency = (newCurr) => {
+    if (newCurr === loanCurrency) return;
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && bcvRate && bcvRate > 0) {
+      if (newCurr === 'VES') {
+        const calculatedBs = parsed * bcvRate;
+        setAmount(formatVE(calculatedBs));
+      } else {
+        const calculatedUsd = parsed / bcvRate;
+        setAmount(formatVE(calculatedUsd));
+      }
     }
-    const parsed = parseVEAmount(val);
-    if (parsed !== null && !isNaN(parsed) && bcvRate && bcvRate > 0) {
-      const calculatedBs = parsed * bcvRate;
-      setAmountBs(formatVE(calculatedBs));
-    } else {
-      setAmountBs('');
-    }
-  };
-
-  const handleAmountBsChange = (val) => {
-    setAmountBs(val);
-    if (!val || val.trim() === '') {
-      setAmount('');
-      return;
-    }
-    const parsed = parseVEAmount(val);
-    if (parsed !== null && !isNaN(parsed) && bcvRate && bcvRate > 0) {
-      const calculatedUsd = parsed / bcvRate;
-      setAmount(formatVE(calculatedUsd));
-    } else {
-      setAmount('');
+    setLoanCurrency(newCurr);
+    try {
+      localStorage.setItem('loan_currency_pref', newCurr);
+    } catch (e) {
+      console.warn("Could not save currency preference", e);
     }
   };
 
-  const handleAmountUsdBlur = () => {
+  const handleAmountBlur = () => {
     const parsed = parseVEAmount(amount);
     if (parsed !== null && !isNaN(parsed) && parsed > 0) {
       setAmount(formatVE(parsed));
     }
   };
 
-  const handleAmountBsBlur = () => {
-    const parsed = parseVEAmount(amountBs);
-    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
-      setAmountBs(formatVE(parsed));
-    }
-  };
+  const parsedLoanAmount = parseVEAmount(amount);
+  const countervalueBs = (loanCurrency === 'USD' && parsedLoanAmount !== null && bcvRate && bcvRate > 0)
+    ? parsedLoanAmount * bcvRate
+    : null;
+  const countervalueUsd = (loanCurrency === 'VES' && parsedLoanAmount !== null && bcvRate && bcvRate > 0)
+    ? parsedLoanAmount / bcvRate
+    : null;
 
   const handleCopy = (field, text) => {
     if (!text) return;
@@ -233,7 +224,22 @@ export default function LoansDashboard() {
       alert("Por favor ingresa un monto válido mayor a 0.");
       return;
     }
-    const roundedUsd = Math.round(parsedAmount * 100) / 100;
+
+    let finalUsd = parsedAmount;
+    if (loanCurrency === 'VES') {
+      if (!bcvRate || bcvRate <= 0) {
+        alert("No se dispone de la tasa oficial del día para convertir el monto en bolívares a dólares.");
+        return;
+      }
+      finalUsd = parsedAmount / bcvRate;
+    }
+
+    const roundedUsd = Math.round(finalUsd * 100) / 100;
+    if (roundedUsd <= 0) {
+      alert("El monto equivalente en dólares debe ser mayor a cero.");
+      return;
+    }
+
     try {
       await loansApi.createLoan({
         amount_usd: roundedUsd,
@@ -242,7 +248,6 @@ export default function LoansDashboard() {
       });
       setShowModal(false);
       setAmount('');
-      setAmountBs('');
       setMotive('');
       setEstimatedDate('');
       fetchLoans();
@@ -961,89 +966,130 @@ export default function LoansDashboard() {
             <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '1.25rem' }}>Solicitar Préstamo</h2>
             <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{
-                backgroundColor: 'rgba(15, 23, 42, 0.65)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                backgroundColor: 'rgba(0, 0, 0, 0.22)',
+                border: '1px solid var(--border-light)',
                 borderRadius: '12px',
-                padding: '1rem',
+                padding: '1.1rem',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.75rem'
+                gap: '0.85rem'
               }}>
-                {/* Monto en Dólares */}
+                {/* Selector Toggle [ $ USD | Bs. VES ] con memoria */}
+                <div>
+                  <label className="form-label" style={{ marginBottom: '0.4rem', display: 'block' }}>Moneda del préstamo</label>
+                  <div style={{
+                    display: 'flex',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '8px',
+                    padding: '3px',
+                    border: '1px solid var(--border-light)',
+                    gap: '4px'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCurrency('USD')}
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: loanCurrency === 'USD' ? 700 : 500,
+                        backgroundColor: loanCurrency === 'USD' ? 'var(--accent-primary)' : 'transparent',
+                        color: loanCurrency === 'USD' ? '#ffffff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      $ USD (Dólares)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCurrency('VES')}
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem 0.75rem',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        fontWeight: loanCurrency === 'VES' ? 700 : 500,
+                        backgroundColor: loanCurrency === 'VES' ? 'var(--accent-primary)' : 'transparent',
+                        color: loanCurrency === 'VES' ? '#ffffff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      Bs. VES (Bolívares)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Campo de Entrada Único */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Monto en Dólares</label>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      {loanCurrency === 'USD' ? 'Monto a solicitar en Dólares' : 'Monto a solicitar en Bolívares'}
+                    </label>
                     <span style={{
                       backgroundColor: 'rgba(16, 185, 129, 0.15)',
                       border: '1px solid rgba(16, 185, 129, 0.4)',
-                      color: '#34d399',
+                      color: 'var(--accent-primary)',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '2px 8px',
                       borderRadius: '6px'
-                    }}>USD ($)</span>
+                    }}>
+                      {loanCurrency === 'USD' ? 'USD ($)' : 'Bs. (VES)'}
+                    </span>
                   </div>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: '12px', color: '#94a3b8', fontWeight: 700, fontSize: '0.95rem' }}>$</span>
+                    <span style={{ position: 'absolute', left: '12px', color: '#94a3b8', fontWeight: 700, fontSize: '0.95rem' }}>
+                      {loanCurrency === 'USD' ? '$' : 'Bs.'}
+                    </span>
                     <input 
                       type="text" 
                       className="form-input"
-                      style={{ paddingLeft: '2rem' }}
+                      style={{ paddingLeft: loanCurrency === 'USD' ? '2rem' : '2.6rem' }}
                       value={amount}
-                      onChange={e => handleAmountUsdChange(e.target.value)}
-                      onBlur={handleAmountUsdBlur}
-                      placeholder="Ej: 50,00"
+                      onChange={e => setAmount(e.target.value)}
+                      onBlur={handleAmountBlur}
+                      placeholder={loanCurrency === 'USD' ? "Ej: 50,00" : "Ej: 2.710,00"}
                       required 
                     />
                   </div>
                 </div>
 
-                {/* Banner Tasa del Día */}
+                {/* Tarjeta de Contravalor Dinámico */}
                 <div style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid var(--border-light)',
+                  borderRadius: '10px',
+                  padding: '0.75rem 0.9rem',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: 'rgba(30, 41, 59, 0.85)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  borderRadius: '8px',
-                  padding: '6px 10px',
-                  fontSize: '0.8rem',
-                  color: '#94a3b8',
-                  fontWeight: 600
+                  flexDirection: 'column',
+                  gap: '0.2rem'
                 }}>
-                  🏦 Tasa del día: {bcvRate ? `${formatVE(bcvRate)} Bs/USD` : 'Consultando...'}
-                </div>
-
-                {/* Monto en Bolívares */}
-                <div className="form-group" style={{ margin: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>Monto en Bolívares</label>
-                    <span style={{
-                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                      border: '1px solid rgba(59, 130, 246, 0.4)',
-                      color: '#60a5fa',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '6px'
-                    }}>Bs. VES</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      {loanCurrency === 'USD' ? 'Equivalente en Bolívares:' : 'Equivalente en Dólares:'}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Tasa: {bcvRate ? `${formatVE(bcvRate)} Bs/USD` : 'Consultando...'}
+                    </span>
                   </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: '12px', color: '#94a3b8', fontWeight: 700, fontSize: '0.95rem' }}>Bs.</span>
-                    <input 
-                      type="text" 
-                      className="form-input"
-                      style={{ paddingLeft: '2.5rem' }}
-                      value={amountBs}
-                      onChange={e => handleAmountBsChange(e.target.value)}
-                      onBlur={handleAmountBsBlur}
-                      placeholder="Ej: 2.710,00"
-                    />
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {loanCurrency === 'USD'
+                      ? `≈ Bs. ${countervalueBs !== null ? formatVE(countervalueBs) : '0,00'}`
+                      : `≈ $ ${countervalueUsd !== null ? formatVE(countervalueUsd) : '0,00'} USD`
+                    }
                   </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    {loanCurrency === 'USD'
+                      ? '💡 Contravalor dinámico calculado a la tasa oficial del día.'
+                      : '💡 El préstamo se registrará por su equivalente en USD a la tasa del día.'}
+                  </span>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic' }}>
-                  💡 Puedes ingresar el monto en cualquiera de los dos campos; el otro se calcula automáticamente con la tasa del día.
-                </span>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Fecha estimada de pago</label>

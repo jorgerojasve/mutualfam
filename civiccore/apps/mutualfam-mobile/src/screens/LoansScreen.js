@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView, Linking, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,7 +27,7 @@ export default function LoansScreen() {
   // Crear préstamo
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
-  const [amountBs, setAmountBs] = useState('');
+  const [loanCurrency, setLoanCurrency] = useState('USD'); // 'USD' | 'VES' (Opción A Optimizada)
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -34,6 +35,17 @@ export default function LoansScreen() {
   const [acceptedMethods, setAcceptedMethods] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('active');
+
+  // Cargar preferencia de moneda guardada en el dispositivo
+  useEffect(() => {
+    AsyncStorage.getItem('loan_currency_pref')
+      .then(pref => {
+        if (pref === 'USD' || pref === 'VES') {
+          setLoanCurrency(pref);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Prometer aporte
   const [showPledgeModal, setShowPledgeModal] = useState(false);
@@ -240,49 +252,42 @@ export default function LoansScreen() {
 
   const effectiveBcvRate = manualBcvRate ? parseFloat(manualBcvRate.replace(',', '.')) : bcvRate;
 
-  const handleAmountUsdChange = (text) => {
-    setAmount(text);
-    if (!text || text.trim() === '') {
-      setAmountBs('');
-      return;
+  const handleToggleCurrency = async (newCurr) => {
+    if (newCurr === loanCurrency) return;
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effectiveBcvRate && effectiveBcvRate > 0) {
+      if (newCurr === 'VES') {
+        // Cambiar de USD a VES
+        const calculatedBs = parsed * effectiveBcvRate;
+        setAmount(formatVE(calculatedBs));
+      } else {
+        // Cambiar de VES a USD
+        const calculatedUsd = parsed / effectiveBcvRate;
+        setAmount(formatVE(calculatedUsd));
+      }
     }
-    const parsed = parseVEAmount(text);
-    if (parsed !== null && !isNaN(parsed) && effectiveBcvRate && effectiveBcvRate > 0) {
-      const calculatedBs = parsed * effectiveBcvRate;
-      setAmountBs(formatVE(calculatedBs));
-    } else {
-      setAmountBs('');
-    }
-  };
-
-  const handleAmountBsChange = (text) => {
-    setAmountBs(text);
-    if (!text || text.trim() === '') {
-      setAmount('');
-      return;
-    }
-    const parsed = parseVEAmount(text);
-    if (parsed !== null && !isNaN(parsed) && effectiveBcvRate && effectiveBcvRate > 0) {
-      const calculatedUsd = parsed / effectiveBcvRate;
-      setAmount(formatVE(calculatedUsd));
-    } else {
-      setAmount('');
+    setLoanCurrency(newCurr);
+    try {
+      await AsyncStorage.setItem('loan_currency_pref', newCurr);
+    } catch (e) {
+      console.warn("Could not save currency preference", e);
     }
   };
 
-  const handleAmountUsdBlur = () => {
+  const handleAmountBlur = () => {
     const parsed = parseVEAmount(amount);
     if (parsed !== null && !isNaN(parsed) && parsed > 0) {
       setAmount(formatVE(parsed));
     }
   };
 
-  const handleAmountBsBlur = () => {
-    const parsed = parseVEAmount(amountBs);
-    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
-      setAmountBs(formatVE(parsed));
-    }
-  };
+  const parsedLoanAmount = parseVEAmount(amount);
+  const countervalueBs = (loanCurrency === 'USD' && parsedLoanAmount !== null && effectiveBcvRate && effectiveBcvRate > 0)
+    ? parsedLoanAmount * effectiveBcvRate
+    : null;
+  const countervalueUsd = (loanCurrency === 'VES' && parsedLoanAmount !== null && effectiveBcvRate && effectiveBcvRate > 0)
+    ? parsedLoanAmount / effectiveBcvRate
+    : null;
 
   const fetchLoans = async () => {
     setLoading(true);
@@ -493,7 +498,22 @@ export default function LoansScreen() {
         return;
       }
 
-      const roundedUsd = Math.round(parsedAmount * 100) / 100;
+      let finalUsd = parsedAmount;
+      if (loanCurrency === 'VES') {
+        if (!effectiveBcvRate || effectiveBcvRate <= 0) {
+          Alert.alert('Error', 'No se dispone de la tasa oficial del día para convertir el monto en bolívares a dólares.');
+          setSubmitting(false);
+          return;
+        }
+        finalUsd = parsedAmount / effectiveBcvRate;
+      }
+
+      const roundedUsd = Math.round(finalUsd * 100) / 100;
+      if (roundedUsd <= 0) {
+        Alert.alert('Error', 'El monto equivalente en dólares debe ser mayor a cero');
+        setSubmitting(false);
+        return;
+      }
 
       await loansApi.createLoan({
         amount_usd: roundedUsd,
@@ -503,7 +523,6 @@ export default function LoansScreen() {
       });
       setShowModal(false);
       setAmount('');
-      setAmountBs('');
       setMotive('');
       setEstimatedDate('');
       setAcceptedMethods([]);
@@ -1074,60 +1093,80 @@ export default function LoansScreen() {
             >
               <Text style={styles.modalTitle}>Solicitar Préstamo</Text>
               
-              <View style={styles.dualCurrencyContainer}>
-                {/* Campo 1: Monto en Dólares */}
+              <View style={styles.currencySelectorContainer}>
+                {/* Selector Toggle [ $ USD | Bs. VES ] con memoria */}
+                <Text style={styles.label}>Moneda del préstamo</Text>
+                <View style={styles.toggleContainer}>
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, loanCurrency === 'USD' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleCurrency('USD')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, loanCurrency === 'USD' && styles.toggleBtnTextActive]}>
+                      $ USD (Dólares)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, loanCurrency === 'VES' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleCurrency('VES')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, loanCurrency === 'VES' && styles.toggleBtnTextActive]}>
+                      Bs. VES (Bolívares)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Campo de Entrada Único */}
                 <View style={styles.currencyFieldBlock}>
                   <View style={styles.currencyHeaderRow}>
-                    <Text style={styles.label}>Monto en Dólares</Text>
-                    <View style={styles.currencyBadgeUsd}>
-                      <Text style={styles.currencyBadgeTextUsd}>USD ($)</Text>
+                    <Text style={styles.label}>
+                      {loanCurrency === 'USD' ? 'Monto a solicitar en Dólares' : 'Monto a solicitar en Bolívares'}
+                    </Text>
+                    <View style={[styles.currencyActiveBadge, { borderColor: theme.cardBorder, backgroundColor: theme.badgeBg }]}>
+                      <Text style={[styles.currencyActiveBadgeText, { color: theme.accent }]}>
+                        {loanCurrency === 'USD' ? 'USD ($)' : 'Bs. (VES)'}
+                      </Text>
                     </View>
                   </View>
+
                   <View style={styles.currencyInputRow}>
-                    <Text style={styles.currencyPrefixText}>$</Text>
+                    <Text style={styles.currencyPrefixText}>{loanCurrency === 'USD' ? '$' : 'Bs.'}</Text>
                     <TextInput 
-                      style={[styles.input, styles.currencyInnerInput]} 
+                      style={[styles.input, styles.currencyInnerInput, loanCurrency === 'VES' && { paddingLeft: 48 }]} 
                       keyboardType="decimal-pad" 
                       value={amount} 
-                      onChangeText={handleAmountUsdChange}
-                      onBlur={handleAmountUsdBlur}
-                      placeholder="Ej: 50,00"
+                      onChangeText={setAmount}
+                      onBlur={handleAmountBlur}
+                      placeholder={loanCurrency === 'USD' ? "Ej: 50,00" : "Ej: 2.710,00"}
                       placeholderTextColor="#64748b"
                     />
                   </View>
                 </View>
 
-                {/* Tasa del día informativa */}
-                <View style={styles.rateSyncBanner}>
-                  <Text style={styles.rateSyncBannerText}>
-                    🏦 Tasa del día: {effectiveBcvRate ? `${formatVE(effectiveBcvRate)} Bs/USD` : 'Consultando...'}
+                {/* Tarjeta de Contravalor Dinámico */}
+                <View style={styles.countervalueCard}>
+                  <View style={styles.countervalueHeader}>
+                    <Text style={styles.countervalueLabel}>
+                      {loanCurrency === 'USD' ? 'Equivalente en Bolívares:' : 'Equivalente en Dólares:'}
+                    </Text>
+                    <Text style={styles.countervalueRateTag}>
+                      Tasa: {effectiveBcvRate ? `${formatVE(effectiveBcvRate)} Bs/USD` : 'Consultando...'}
+                    </Text>
+                  </View>
+                  <Text style={styles.countervalueMainAmount}>
+                    {loanCurrency === 'USD'
+                      ? `≈ Bs. ${countervalueBs !== null ? formatVE(countervalueBs) : '0,00'}`
+                      : `≈ $ ${countervalueUsd !== null ? formatVE(countervalueUsd) : '0,00'} USD`
+                    }
+                  </Text>
+                  <Text style={styles.countervalueSubtext}>
+                    {loanCurrency === 'USD'
+                      ? '💡 Contravalor dinámico calculado a la tasa oficial del día.'
+                      : '💡 El préstamo se registrará por su equivalente en USD a la tasa del día.'}
                   </Text>
                 </View>
-
-                {/* Campo 2: Monto en Bolívares */}
-                <View style={styles.currencyFieldBlock}>
-                  <View style={styles.currencyHeaderRow}>
-                    <Text style={styles.label}>Monto en Bolívares</Text>
-                    <View style={styles.currencyBadgeBs}>
-                      <Text style={styles.currencyBadgeTextBs}>Bs. VES</Text>
-                    </View>
-                  </View>
-                  <View style={styles.currencyInputRow}>
-                    <Text style={styles.currencyPrefixText}>Bs.</Text>
-                    <TextInput 
-                      style={[styles.input, styles.currencyInnerInput]} 
-                      keyboardType="decimal-pad" 
-                      value={amountBs} 
-                      onChangeText={handleAmountBsChange}
-                      onBlur={handleAmountBsBlur}
-                      placeholder="Ej: 2.710,00"
-                      placeholderTextColor="#64748b"
-                    />
-                  </View>
-                </View>
-                <Text style={styles.dualCurrencyHelpText}>
-                  💡 Puedes ingresar el monto en cualquiera de los dos campos; el otro se calcula automáticamente con la tasa del día.
-                </Text>
               </View>
               
               <Text style={styles.label}>Fecha Límite Sugerida</Text>
@@ -2154,16 +2193,44 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
   input: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', padding: 12, marginBottom: 15 },
-  dualCurrencyContainer: {
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 12,
+  currencySelectorContainer: {
     marginBottom: 15,
   },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.accent,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  toggleBtnText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  toggleBtnTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   currencyFieldBlock: {
-    marginBottom: 2,
+    marginBottom: 6,
   },
   currencyHeaderRow: {
     flexDirection: 'row',
@@ -2171,29 +2238,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  currencyBadgeUsd: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+  currencyActiveBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-  },
-  currencyBadgeTextUsd: {
-    color: '#34d399',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  currencyBadgeBs: {
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.4)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
   },
-  currencyBadgeTextBs: {
-    color: '#60a5fa',
+  currencyActiveBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },
@@ -2213,42 +2264,55 @@ const styles = StyleSheet.create({
   },
   currencyInnerInput: {
     flex: 1,
-    paddingLeft: 44,
-    marginBottom: 6,
+    paddingLeft: 36,
+    marginBottom: 4,
     fontSize: 16,
     fontWeight: '600',
   },
-  rateSyncBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.85)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginVertical: 6,
+  countervalueCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 4,
   },
-  rateSyncBannerText: {
+  countervalueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  countervalueLabel: {
     color: '#94a3b8',
     fontSize: 12,
     fontWeight: '600',
   },
-  dualCurrencyHelpText: {
+  countervalueRateTag: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  countervalueMainAmount: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginVertical: 2,
+  },
+  countervalueSubtext: {
     color: '#64748b',
     fontSize: 11,
-    marginTop: 4,
     fontStyle: 'italic',
   },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
   modalCancel: { padding: 12, borderRadius: 8 },
   modalCancelText: { color: '#94a3b8', fontWeight: 'bold' },
-  modalSubmit: { backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
+  modalSubmit: { backgroundColor: theme.accent, padding: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   modalSubmitText: { color: '#fff', fontWeight: 'bold' },
-  methodChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#3b82f6', backgroundColor: 'transparent' },
-  methodChipSelected: { backgroundColor: '#3b82f6' },
-  methodChipText: { color: '#3b82f6', fontSize: 13, fontWeight: 'bold' },
+  methodChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.accent, backgroundColor: 'transparent' },
+  methodChipSelected: { backgroundColor: theme.accent },
+  methodChipText: { color: theme.accent, fontSize: 13, fontWeight: 'bold' },
   methodPill: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent', alignItems: 'center' },
   methodPillActive: { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' },
   methodPillText: { color: '#94a3b8', fontSize: 14 },
