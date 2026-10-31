@@ -11,6 +11,7 @@ import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage } from '../utils/errors';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { formatVE, parseVEAmount } from '../utils/currency';
+import theme from '../utils/theme';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -1925,10 +1926,10 @@ export default function LoansScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, backgroundColor: theme.screenBg },
   header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#f8fafc' },
-  addButton: { backgroundColor: '#3b82f6', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
+  addButton: { backgroundColor: theme.accent, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold' },
   bcvRateContainer: {
     flexDirection: 'row',
@@ -2001,11 +2002,11 @@ const styles = StyleSheet.create({
   },
   tabsContainer: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 15, gap: 15 },
   tab: { paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: '#3b82f6' },
+  activeTab: { borderBottomColor: theme.accent },
   tabText: { color: '#94a3b8', fontSize: 16, fontWeight: 'bold' },
-  activeTabText: { color: '#3b82f6' },
+  activeTabText: { color: theme.accent },
   emptyText: { color: '#94a3b8', textAlign: 'center', marginTop: 50 },
-  card: { backgroundColor: '#1e293b', borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  card: { backgroundColor: theme.cardBg, borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: theme.cardBorder },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   badge: { backgroundColor: 'rgba(59, 130, 246, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { color: '#60a5fa', fontSize: 12, fontWeight: 'bold' },
@@ -2143,13 +2144,13 @@ const styles = StyleSheet.create({
   smallActionBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   smallActionText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   cardFooter: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 15, marginTop: 5 },
-  actionButton: { backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, alignItems: 'center' },
+  actionButton: { backgroundColor: theme.accent, padding: 12, borderRadius: 8, alignItems: 'center' },
   actionButtonText: { color: '#fff', fontWeight: 'bold' },
   cancelButton: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' },
   cancelButtonText: { color: '#ef4444', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   modalOverlayShifted: { justifyContent: 'flex-start', paddingTop: Platform.OS === 'android' ? 35 : 55 },
-  modalContent: { backgroundColor: '#1e293b', borderRadius: 16, padding: 25 },
+  modalContent: { backgroundColor: theme.cardBg, borderRadius: 16, padding: 25 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
   input: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', padding: 12, marginBottom: 15 },
@@ -2265,7 +2266,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   receiptModalCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 16,
     maxHeight: '90%',
     overflow: 'hidden',

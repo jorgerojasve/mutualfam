@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { getErrorMessage, handleLimitError } from '../utils/errors';
+import theme from '../utils/theme';
 
 export default function InviteMembersScreen() {
   const [loading, setLoading] = useState(true);
@@ -203,13 +204,13 @@ export default function InviteMembersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 20,
   },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
   },
@@ -288,7 +289,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,

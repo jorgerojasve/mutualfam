@@ -5,6 +5,7 @@ import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
@@ -141,13 +142,13 @@ export default function SelectMutualScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 60,
   },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -181,12 +182,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   orgCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
     marginBottom: 15,
     borderLeftWidth: 4,
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: theme.accent,
   },
   orgName: {
     fontSize: 18,
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   primaryButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     backgroundColor: 'transparent',
-    borderColor: '#3b82f6',
+    borderColor: theme.accent,
     borderWidth: 1,
     padding: 15,
     borderRadius: 8,
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   secondaryButtonText: {
-    color: '#3b82f6',
+    color: theme.accent,
     fontWeight: 'bold',
     fontSize: 16,
   },

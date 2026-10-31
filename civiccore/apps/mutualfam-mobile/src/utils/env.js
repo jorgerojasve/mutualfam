@@ -47,31 +47,43 @@ export function getMobileEnvironment() {
 export function getMobileEnvironmentConfig() {
   const env = getMobileEnvironment();
   switch (env) {
-    case 'development':
-      return {
-        key: 'development',
-        label: 'Desarrollo (DEV)',
-        badgeText: 'DEV',
-        bannerText: '🛠️ ENTORNO DE DESARROLLO (DEV) • SERVIDOR LOCAL',
-        color: '#38bdf8',
-        bgColor: 'rgba(56, 189, 248, 0.15)',
-        borderColor: 'rgba(56, 189, 248, 0.4)',
-        isProd: false,
-        isQA: false,
-        isDev: true,
-      };
     case 'qa':
       return {
         key: 'qa',
         label: 'Pruebas (QA)',
         badgeText: 'QA',
         bannerText: '🧪 ENTORNO DE PRUEBAS (QA) • DATOS AISLADOS',
-        color: '#f59e0b',
-        bgColor: 'rgba(245, 158, 11, 0.15)',
-        borderColor: 'rgba(245, 158, 11, 0.4)',
+        color: '#10b981', // Verde esmeralda para QA
+        bgColor: 'rgba(16, 185, 129, 0.18)',
+        borderColor: 'rgba(16, 185, 129, 0.45)',
+        screenBg: '#06231c', // Verde bosque esmeralda oscuro
+        cardBg: '#0c332b',
+        cardBorder: 'rgba(16, 185, 129, 0.22)',
+        accentColor: '#10b981',
+        tabBarBg: '#082820',
+        headerBg: '#051c17',
         isProd: false,
         isQA: true,
         isDev: false,
+      };
+    case 'development':
+      return {
+        key: 'development',
+        label: 'Desarrollo (DEV)',
+        badgeText: 'DEV',
+        bannerText: '🛠️ ENTORNO DE DESARROLLO (DEV) • LOCAL',
+        color: '#f59e0b', // Ámbar/Amarillo para DEV
+        bgColor: 'rgba(245, 158, 11, 0.18)',
+        borderColor: 'rgba(245, 158, 11, 0.45)',
+        screenBg: '#1c150c', // Carbón ámbar oscuro
+        cardBg: '#2a1f10',
+        cardBorder: 'rgba(245, 158, 11, 0.22)',
+        accentColor: '#f59e0b',
+        tabBarBg: '#21170a',
+        headerBg: '#181208',
+        isProd: false,
+        isQA: false,
+        isDev: true,
       };
     case 'production':
     default:
@@ -80,9 +92,15 @@ export function getMobileEnvironmentConfig() {
         label: 'Producción',
         badgeText: '',
         bannerText: '',
-        color: '#10b981',
-        bgColor: 'rgba(16, 185, 129, 0.15)',
-        borderColor: 'rgba(16, 185, 129, 0.4)',
+        color: '#3b82f6', // Azul para Producción
+        bgColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: 'rgba(59, 130, 246, 0.4)',
+        screenBg: '#0f172a', // Slate 900 actual
+        cardBg: '#1e293b', // Slate 800 actual
+        cardBorder: 'rgba(255, 255, 255, 0.1)',
+        accentColor: '#3b82f6',
+        tabBarBg: '#1e293b',
+        headerBg: '#0b1220',
         isProd: true,
         isQA: false,
         isDev: false,

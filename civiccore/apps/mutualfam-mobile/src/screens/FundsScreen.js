@@ -6,6 +6,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage } from '../utils/errors';
+import theme from '../utils/theme';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
@@ -127,7 +128,7 @@ export default function FundsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={funds}
@@ -169,7 +170,7 @@ export default function FundsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
   },
   header: {
     paddingHorizontal: 20,
@@ -189,12 +190,12 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 15,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: theme.cardBorder,
   },
   fundName: {
     fontSize: 20,
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   },
   contributionLabel: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: 14,
     marginBottom: 5,
   },
   contributionAmount: {
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
   actionButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerAddButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 20,
   },
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   input: {
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     color: '#f8fafc',
     padding: 12,
     borderRadius: 8,
@@ -301,7 +302,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalSubmit: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 12,
     borderRadius: 8,
     minWidth: 80,

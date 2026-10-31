@@ -20,6 +20,7 @@ import UpdateModal from '../components/UpdateModal';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import { openSupportEmail, showSupportEmailFallback, SUPPORT_EMAIL } from '../utils/support';
 import { useBetaPhase, showBetaInfoAlert } from '../utils/beta';
+import theme from '../utils/theme';
 
 export default function ProfileScreen({ navigation }) {
   const { activeOrg, clearOrg } = useContext(OrgContext);
@@ -245,7 +246,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
   },
   contentContainer: {
     padding: 20,
@@ -253,12 +254,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 14,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: theme.cardBorder,
   },
   cardHeaderRow: {
     flexDirection: 'row',

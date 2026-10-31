@@ -37,6 +37,55 @@
   --font-heading: 'Outfit', system-ui, sans-serif;
 }
 
+/* ==========================================================================
+   Environment Themes (Option C: Hybrid System)
+   - QA: Dark Emerald Forest palette (#06231c background, #0c332b cards, #10b981 accents)
+   - Development: Dark Charcoal Amber palette (#1c150c background, #2a1f10 cards, #f59e0b accents)
+   - Production: Default root Dark Slate Navy palette (#0f172a background, #1e293b cards, #3b82f6 accents)
+   ========================================================================== */
+
+[data-env="qa"] {
+  --bg-primary: #06231c;
+  --bg-secondary: #0c332b;
+  --bg-tertiary: rgba(12, 51, 43, 0.78);
+  
+  --accent-primary: #10b981;
+  --accent-primary-hover: #059669;
+  --accent-secondary: #34d399;
+  
+  --border-light: rgba(16, 185, 129, 0.2);
+  --border-strong: rgba(16, 185, 129, 0.38);
+  --shadow-glow: 0 0 15px rgba(16, 185, 129, 0.45);
+}
+
+[data-env="qa"] .app-container {
+  background-color: var(--bg-primary);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.16) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(5, 150, 105, 0.12) 0px, transparent 50%);
+}
+
+[data-env="development"] {
+  --bg-primary: #1c150c;
+  --bg-secondary: #2a1f10;
+  --bg-tertiary: rgba(42, 31, 16, 0.78);
+  
+  --accent-primary: #f59e0b;
+  --accent-primary-hover: #d97706;
+  --accent-secondary: #fbbf24;
+  
+  --border-light: rgba(245, 158, 11, 0.2);
+  --border-strong: rgba(245, 158, 11, 0.38);
+  --shadow-glow: 0 0 15px rgba(245, 158, 11, 0.45);
+}
+
+[data-env="development"] .app-container {
+  background-color: var(--bg-primary);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.16) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(217, 119, 6, 0.12) 0px, transparent 50%);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -841,8 +890,8 @@ html, body, #root {
 }
 
 .mutual-modal-content {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 480px;

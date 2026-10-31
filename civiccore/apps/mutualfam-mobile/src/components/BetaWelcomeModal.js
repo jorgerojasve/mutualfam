@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useBetaPhase, hasSeenBetaWelcome, markBetaWelcomeSeen } from '../utils/beta';
 import { openSupportEmail } from '../utils/support';
+import theme from '../utils/theme';
 
 /**
  * Modal de Bienvenida para la Versión Beta (Onboarding Único).
@@ -147,7 +148,7 @@ export default function BetaWelcomeModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.82)', // Slate 900 con opacidad
+    backgroundColor: 'rgba(0, 0, 0, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     maxHeight: '90%',
-    backgroundColor: '#1e293b', // Slate 800
+    backgroundColor: theme.cardBg,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(129, 140, 248, 0.3)',

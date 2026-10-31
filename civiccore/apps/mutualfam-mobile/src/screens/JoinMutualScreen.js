@@ -12,6 +12,7 @@ import {
 import { OrgContext } from '../context/OrgContext';
 import { getErrorMessage, handleLimitError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 
 export default function JoinMutualScreen({ route, navigation }) {
   const [input, setInput] = useState('');
@@ -217,7 +218,7 @@ export default function JoinMutualScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 60,
   },
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   input: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     color: '#f8fafc',
     padding: 15,
     borderRadius: 8,
@@ -275,12 +276,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pasteText: {
-    color: '#60a5fa',
+    color: theme.accent,
     fontSize: 15,
     fontWeight: '600',
   },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -306,7 +307,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   infoCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',

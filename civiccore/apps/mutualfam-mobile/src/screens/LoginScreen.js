@@ -10,6 +10,7 @@ import { getErrorMessage } from '../utils/errors';
 import { OrgContext } from '../context/OrgContext';
 import { openSupportEmail } from '../utils/support';
 import BetaBadge from '../components/BetaBadge';
+import theme from '../utils/theme';
 
 export default function LoginScreen({ route, navigation }) {
   const { selectOrg, loadActiveOrg } = useContext(OrgContext);
@@ -270,7 +271,7 @@ export default function LoginScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: '#0f172a', // Slate 900
+    backgroundColor: theme.screenBg,
   },
   container: {
     flexGrow: 1,
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   card: {
-    backgroundColor: '#1e293b', // Slate 800
+    backgroundColor: theme.cardBg,
     padding: 30,
     borderRadius: 16,
     shadowColor: '#000',
@@ -383,7 +384,7 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',

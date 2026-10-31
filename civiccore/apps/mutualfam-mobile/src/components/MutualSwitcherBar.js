@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { OrgContext } from '../context/OrgContext';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 import BetaBadge from './BetaBadge';
 
 const WIDE_BREAKPOINT = 768;
@@ -140,14 +141,14 @@ export default function MutualSwitcherBar() {
                       </Text>
                       <Text style={styles.rowRole}>{roleLabel(item.role)}</Text>
                     </View>
-                    {selected && <Ionicons name="checkmark-circle" size={22} color="#3b82f6" />}
+                    {selected && <Ionicons name="checkmark-circle" size={22} color={theme.accent} />}
                   </TouchableOpacity>
                 );
               }}
             />
 
             <TouchableOpacity style={styles.manage} onPress={handleManage} activeOpacity={0.7}>
-              <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
+              <Ionicons name="add-circle-outline" size={20} color={theme.accent} />
               <Text style={styles.manageText}>Crear, unirse o gestionar mutuales</Text>
             </TouchableOpacity>
           </Pressable>
@@ -159,7 +160,7 @@ export default function MutualSwitcherBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: '#0b1220',
+    backgroundColor: theme.headerBg,
     paddingHorizontal: 12,
     paddingBottom: 8,
     borderBottomWidth: 1,
@@ -171,15 +172,15 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 10,
     borderRadius: 14,
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: theme.cardBorder,
   },
   avatar: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -198,7 +199,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   overlayNarrow: { justifyContent: 'flex-end' },
   overlayWide: { alignItems: 'flex-start', paddingLeft: 12 },
-  sheet: { backgroundColor: '#1e293b' },
+  sheet: { backgroundColor: theme.cardBg },
   sheetNarrow: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -230,11 +231,11 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  rowActive: { borderColor: '#3b82f6' },
+  rowActive: { borderColor: theme.accent },
   rowLabels: { flex: 1, marginHorizontal: 12 },
   rowName: { color: '#cbd5e1', fontSize: 16 },
   rowNameActive: { color: '#f8fafc', fontWeight: '700' },
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
-  manageText: { color: '#3b82f6', fontWeight: '600', fontSize: 14 },
+  manageText: { color: theme.accent, fontWeight: '600', fontSize: 14 },
   envBannerStrip: {
     flexDirection: 'row',
     alignItems: 'center',
