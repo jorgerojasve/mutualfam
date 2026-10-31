@@ -199,6 +199,8 @@ export default function InviteMembersScreen() {
             <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
               {timeLeft || 'Calculando...'}
             </Text>
+          </View>
+
           <View style={styles.singleUseNotice}>
             <Ionicons name="information-circle-outline" size={18} color="#38bdf8" style={{ marginRight: 8, marginTop: 2 }} />
             <Text style={styles.singleUseNoticeText}>

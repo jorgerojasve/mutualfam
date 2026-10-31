@@ -38,6 +38,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Cache de releases de GitHub (v1.0.32-qa)
 _github_releases_cache = {
     "timestamp": 0,
     "releases": []
