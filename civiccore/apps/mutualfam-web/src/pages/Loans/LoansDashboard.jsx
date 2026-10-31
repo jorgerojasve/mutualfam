@@ -962,9 +962,16 @@ export default function LoansDashboard() {
       {/* Modal para Solicitar Préstamo */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '480px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="glass-panel animate-slide-up modal-scrollable" style={{
+            width: '100%',
+            maxWidth: '500px',
+            padding: '1.75rem 2rem 1.75rem 1.75rem',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            scrollbarGutter: 'stable'
+          }}>
             <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '1.25rem' }}>Solicitar Préstamo</h2>
-            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '6px' }}>
               <div style={{
                 backgroundColor: 'rgba(0, 0, 0, 0.22)',
                 border: '1px solid var(--border-light)',
@@ -1114,7 +1121,7 @@ export default function LoansDashboard() {
                 ></textarea>
               </div>
               
-              <div className="flex justify-between items-center mt-6">
+              <div className="flex justify-between items-center mt-6" style={{ paddingRight: '2px' }}>
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)}
@@ -1134,7 +1141,14 @@ export default function LoansDashboard() {
       {/* Modal para Prometer Aporte (Web / iPhone) */}
       {showPledgeModal && selectedLoan && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-slide-up" style={{ width: '100%', maxWidth: '460px', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="glass-panel animate-slide-up modal-scrollable" style={{
+            width: '100%',
+            maxWidth: '480px',
+            padding: '1.75rem 2rem 1.75rem 1.75rem',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            scrollbarGutter: 'stable'
+          }}>
             <h2 className="text-gradient" style={{ fontSize: '1.35rem', marginBottom: '0.65rem' }}>Prometer Aporte 🤝</h2>
             <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
               Vas a aportar al préstamo de: <strong>{selectedLoan.requester_name}</strong>
@@ -1143,7 +1157,7 @@ export default function LoansDashboard() {
               Faltan por fondear: ${Math.max(0, selectedLoan.amount_usd - ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0))).toFixed(2)} (de ${selectedLoan.amount_usd} solicitados)
             </p>
 
-            <form onSubmit={handlePledgeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <form onSubmit={handlePledgeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingRight: '6px' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Monto a aportar (USD)</label>
                 <input 
@@ -1360,17 +1374,19 @@ export default function LoansDashboard() {
           onClick={() => setShowNotifyModal(false)}
         >
           <div
+            className="modal-scrollable"
             style={{
               backgroundColor: '#1e293b',
               border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: '16px',
-              padding: '1.5rem',
+              padding: '1.75rem 2rem 1.75rem 1.75rem',
               maxWidth: '30rem',
               width: '100%',
               color: '#f8fafc',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
               maxHeight: '90vh',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              scrollbarGutter: 'stable'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1682,17 +1698,19 @@ export default function LoansDashboard() {
           onClick={() => setShowRepayModal(false)}
         >
           <div
+            className="modal-scrollable"
             style={{
               backgroundColor: '#1e293b',
               border: '1px solid rgba(255, 255, 255, 0.12)',
               borderRadius: '16px',
-              padding: '1.5rem',
+              padding: '1.75rem 2rem 1.75rem 1.75rem',
               maxWidth: '30rem',
               width: '100%',
               color: '#f8fafc',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
               maxHeight: '90vh',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              scrollbarGutter: 'stable'
             }}
             onClick={(e) => e.stopPropagation()}
           >

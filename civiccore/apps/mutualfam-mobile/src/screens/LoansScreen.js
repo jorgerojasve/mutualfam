@@ -1089,7 +1089,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Solicitar Préstamo</Text>
               
@@ -1244,7 +1244,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 40 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 40 : 15 }}
             >
               {!selectedConfigMethod ? (
                 <>
@@ -1549,7 +1549,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Notificar Pago 💸</Text>
               <Text style={{color: '#94a3b8', marginBottom: 15}}>Notificando pago de ${selectedContrib?.amount_usd}</Text>
@@ -1718,7 +1718,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Devolver Dinero</Text>
               
@@ -2189,7 +2189,7 @@ const styles = StyleSheet.create({
   cancelButtonText: { color: '#ef4444', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   modalOverlayShifted: { justifyContent: 'flex-start', paddingTop: Platform.OS === 'android' ? 35 : 55 },
-  modalContent: { backgroundColor: theme.cardBg, borderRadius: 16, padding: 25 },
+  modalContent: { backgroundColor: theme.cardBg, borderRadius: 16, padding: 22, paddingRight: 14 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
   input: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', padding: 12, marginBottom: 15 },
@@ -2305,7 +2305,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: 'italic',
   },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10, paddingRight: 4 },
   modalCancel: { padding: 12, borderRadius: 8 },
   modalCancelText: { color: '#94a3b8', fontWeight: 'bold' },
   modalSubmit: { backgroundColor: theme.accent, padding: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
