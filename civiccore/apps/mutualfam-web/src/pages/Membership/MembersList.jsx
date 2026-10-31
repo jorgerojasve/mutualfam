@@ -156,45 +156,64 @@ const MembersList = () => {
               <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: 0 }}>No hay miembros que mostrar.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                {members.map((member) => (
-                  <div
-                    key={member.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.875rem',
-                      backgroundColor: '#0f172a',
-                      padding: '0.75rem 1rem',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
-                    }}
-                  >
+                {members.map((member) => {
+                  const isMe = (user?.id && member.id === user.id) ||
+                               (user?.email && member.email?.toLowerCase() === user.email?.toLowerCase());
+                  return (
                     <div
+                      key={member.id}
                       style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '21px',
-                        backgroundColor: '#3b82f6',
-                        display: 'grid',
-                        placeItems: 'center',
-                        color: '#ffffff',
-                        fontWeight: '700',
-                        fontSize: '1.1rem',
-                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.875rem',
+                        backgroundColor: isMe ? 'rgba(59, 130, 246, 0.12)' : '#0f172a',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '12px',
+                        border: isMe ? '1px solid rgba(59, 130, 246, 0.45)' : '1px solid rgba(255, 255, 255, 0.05)',
                       }}
                     >
-                      {(member.first_name || member.nombre || 'U')[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '1rem', fontWeight: '700', color: '#f8fafc' }}>
-                        {member.nombre}
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '21px',
+                          backgroundColor: isMe ? '#2563eb' : '#3b82f6',
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: '#ffffff',
+                          fontWeight: '700',
+                          fontSize: '1.1rem',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {(member.first_name || member.nombre || 'U')[0].toUpperCase()}
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                        {member.role === 'founder' ? 'Fundador' : 'Miembro'}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '1rem', fontWeight: '700', color: isMe ? '#60a5fa' : '#f8fafc' }}>
+                            {member.nombre}
+                          </span>
+                          {isMe && (
+                            <span style={{
+                              backgroundColor: '#3b82f6',
+                              color: '#ffffff',
+                              padding: '0.1rem 0.5rem',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: '700',
+                              letterSpacing: '0.02em',
+                            }}>
+                              Tú
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                          {member.role === 'founder' ? 'Fundador' : 'Miembro'}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -219,10 +238,24 @@ const MembersList = () => {
                 fontSize: '0.85rem',
                 color: '#94a3b8',
                 lineHeight: '1.45',
-                marginBottom: '1.25rem',
+                marginBottom: '1rem',
               }}>
                 Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
               </p>
+
+              <div style={{
+                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                marginBottom: '1.25rem',
+                fontSize: '0.82rem',
+                color: '#bae6fd',
+                lineHeight: '1.45'
+              }}>
+                <strong style={{ color: '#38bdf8' }}>Enlace único y personal: </strong>
+                Cada invitación es de un solo uso para una sola persona. Si deseas invitar a varios familiares, genera un enlace para cada uno.
+              </div>
 
               <button
                 type="button"
@@ -259,6 +292,20 @@ const MembersList = () => {
             <div className="bg-black/40 p-3 rounded-lg border border-white/10 mb-4">
               <span className="text-xs text-muted block mb-1">Código de invitación:</span>
               <strong className="text-lg text-blue-400 font-mono tracking-wider">{inviteCode}</strong>
+            </div>
+
+            <div style={{
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: '8px',
+              padding: '0.65rem 0.85rem',
+              marginBottom: '1rem',
+              fontSize: '0.78rem',
+              color: '#bae6fd',
+              lineHeight: '1.4'
+            }}>
+              <strong style={{ color: '#38bdf8' }}>Uso único por persona: </strong>
+              Este enlace y código solo puede ser utilizado por un único familiar. Para otro miembro, genera una invitación nueva.
             </div>
 
             <div className="flex gap-2 mb-4">

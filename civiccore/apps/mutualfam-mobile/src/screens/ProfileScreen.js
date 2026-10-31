@@ -80,6 +80,27 @@ export default function ProfileScreen({ navigation }) {
     >
       <ScreenTitle title="Perfil y Ajustes" />
 
+      {/* Tarjeta: Mi Cuenta / Perfil */}
+      <View style={styles.card}>
+        <View style={styles.userProfileHeader}>
+          <View style={styles.userAvatar}>
+            <Text style={styles.userAvatarText}>
+              {((currentUser?.first_name || currentUser?.email || 'U')[0]).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>
+              {[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') || 'Usuario'}
+            </Text>
+            <Text style={styles.userEmail}>{currentUser?.email || 'Cargando datos...'}</Text>
+          </View>
+          <View style={styles.userConnectedBadge}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.userConnectedText}>Conectado</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Tarjeta: Mi Mutual Activa */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
@@ -205,6 +226,20 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.authorBadge}>
             <Ionicons name="checkmark-done-circle-outline" size={16} color="#38bdf8" style={{ marginRight: 5 }} />
             <Text style={styles.authorText}>Martín Vieira</Text>
+          </View>
+        </View>
+
+        <View style={[styles.aboutRow, { alignItems: 'flex-start' }]}>
+          <Text style={[styles.aboutLabel, { marginTop: 3 }]}>Usuarios beta</Text>
+          <View style={{ flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <View style={styles.authorBadge}>
+              <Ionicons name="sparkles-outline" size={15} color="#fbbf24" style={{ marginRight: 5 }} />
+              <Text style={styles.authorText}>Nora Salazar</Text>
+            </View>
+            <View style={styles.authorBadge}>
+              <Ionicons name="sparkles-outline" size={15} color="#fbbf24" style={{ marginRight: 5 }} />
+              <Text style={styles.authorText}>Nilso Rafael Salazar</Text>
+            </View>
           </View>
         </View>
 
@@ -393,6 +428,56 @@ const styles = StyleSheet.create({
   },
   copyEmailButton: {
     padding: 4,
+  },
+  userProfileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  userName: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#f8fafc',
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: '#94a3b8',
+  },
+  userConnectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10b981',
+  },
+  userConnectedText: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });
 

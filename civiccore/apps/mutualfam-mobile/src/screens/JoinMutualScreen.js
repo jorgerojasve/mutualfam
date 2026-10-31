@@ -66,7 +66,9 @@ export default function JoinMutualScreen({ route, navigation }) {
       setMutualInfo(data);
     } catch (e) {
       if (!handleLimitError(e, 'Capacidad Máxima Alcanzada')) {
-        Alert.alert('Invitación no encontrada', getErrorMessage(e, 'El código es inválido o ya expiró. Pide una nueva invitación.'));
+        const detail = e.response?.data?.detail || '';
+        const title = detail.includes('utilizada') ? 'Invitación ya utilizada' : 'Invitación no válida';
+        Alert.alert(title, getErrorMessage(e, 'El código es inválido o ya expiró. Pide una nueva invitación.'));
       }
       setMutualInfo(null);
       setFromClipboard(false);
@@ -114,7 +116,9 @@ export default function JoinMutualScreen({ route, navigation }) {
         Alert.alert('Sesión expirada', 'Debes iniciar sesión nuevamente para unirte.');
         navigation.replace('Login');
       } else if (!handleLimitError(e, 'Capacidad Máxima Alcanzada', { mutualName: mutualInfo?.organization_name })) {
-        Alert.alert('Error', getErrorMessage(e, 'No se pudo procesar la invitación'));
+        const detail = e.response?.data?.detail || '';
+        const title = detail.includes('utilizada') ? 'Invitación ya utilizada' : 'Error';
+        Alert.alert(title, getErrorMessage(e, 'No se pudo procesar la invitación'));
       }
     } finally {
       setLoading(false);

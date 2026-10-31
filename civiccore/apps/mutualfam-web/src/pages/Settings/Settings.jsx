@@ -14,13 +14,14 @@ import {
   ChevronDown,
   ChevronUp,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = '1.0.27';
+const APP_VERSION = '1.0.32';
 
 export default function ProfileAndSettings() {
   const { user, activeOrg, logout } = useAuthStore();
@@ -84,6 +85,48 @@ export default function ProfileAndSettings() {
   return (
     <div className="profile-container animate-fade-in">
       <h1 className="profile-screen-title">Perfil y Ajustes</h1>
+
+      {/* Tarjeta: Mi Cuenta / Perfil Conectado */}
+      <div className="profile-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          borderRadius: '50%',
+          backgroundColor: '#3b82f6',
+          color: '#ffffff',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: '1.3rem',
+          fontWeight: '700',
+          boxShadow: '0 4px 12px rgba(59, 130, 246, 0.35)',
+          flexShrink: 0
+        }}>
+          {((user?.first_name || user?.nombre || user?.email || 'U')[0]).toUpperCase()}
+        </div>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#f8fafc', margin: 0 }}>
+            {`${user?.first_name || user?.nombre || ''} ${user?.last_name || user?.apellido || ''}`.trim() || user?.email || 'Usuario'}
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0.2rem 0 0 0' }}>
+            {user?.email}
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          backgroundColor: 'rgba(16, 185, 129, 0.15)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          padding: '0.25rem 0.65rem',
+          borderRadius: '999px',
+          color: '#34d399',
+          fontSize: '0.75rem',
+          fontWeight: '600'
+        }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+          <span>Conectado</span>
+        </div>
+      </div>
 
       {/* Tarjeta 1: Mi Mutual Activa (Homologada con Android) */}
       <div className="profile-card">
@@ -186,6 +229,20 @@ export default function ProfileAndSettings() {
           <div className="profile-badge-author">
             <CheckCircle size={15} className="text-green-400" />
             <span>Martín Vieira</span>
+          </div>
+        </div>
+
+        <div className="profile-about-row" style={{ alignItems: 'flex-start' }}>
+          <span className="profile-about-label" style={{ marginTop: '0.2rem' }}>Usuarios beta</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+            <div className="profile-badge-author">
+              <Sparkles size={14} className="text-yellow-400" />
+              <span>Nora Salazar</span>
+            </div>
+            <div className="profile-badge-author">
+              <Sparkles size={14} className="text-yellow-400" />
+              <span>Nilso Rafael Salazar</span>
+            </div>
           </div>
         </div>
 

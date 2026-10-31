@@ -3,13 +3,13 @@
     "name": "Mutual Familiar",
     "slug": "mutualfam-mobile",
     "scheme": "mutualfam",
-    "version": "1.0.31",
+    "version": "1.0.32",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "sdkVersion": "57.0.0",
     "android": {
       "package": "com.jorgerojasve.mutualfammobile",
-      "versionCode": 10031,
+      "versionCode": 10032,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

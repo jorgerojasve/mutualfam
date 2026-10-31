@@ -77,6 +77,10 @@ const Register = () => {
           setSuccessInfo("¡Cuenta creada y unido a tu mutual exitosamente!");
         } catch (joinErr) {
           console.warn("Auto-join error:", joinErr);
+          const detail = joinErr?.response?.data?.detail || joinErr?.message || '';
+          if (detail && detail.includes('utilizada')) {
+            alert(detail);
+          }
           setSuccessInfo("¡Cuenta creada exitosamente!");
         }
       } else {

@@ -170,6 +170,7 @@ export default function InviteLanding() {
 
   const [invite, setInvite] = useState(null); // { organization_name, code }
   const [status, setStatus] = useState(token ? 'loading' : 'direct'); // direct | loading | ok | invalid | offline
+  const [errorMessage, setErrorMessage] = useState('');
   const [toast, setToast] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [downloadStarted, setDownloadStarted] = useState(false);
@@ -258,7 +259,9 @@ export default function InviteLanding() {
     fetch(`${API_URL}/membership/invites/${encodeURIComponent(token)}`)
       .then(async (res) => {
         if (cancelled) return;
-        if (res.status === 404) {
+        if (res.status === 404 || res.status === 400) {
+          const errData = await res.json().catch(() => ({}));
+          setErrorMessage(errData?.detail || '');
           setStatus('invalid');
           return;
         }
@@ -359,9 +362,11 @@ export default function InviteLanding() {
           <div className="il-badge il-badge--danger">
             <AlertTriangle aria-hidden="true" />
           </div>
-          <h1 className="il-title">Invitación no válida</h1>
+          <h1 className="il-title">
+            {errorMessage?.includes('utilizada') ? 'Invitación ya utilizada' : 'Invitación no válida'}
+          </h1>
           <p className="il-lead">
-            Esta invitación ya expiró o no corresponde a este entorno de pruebas. Pide a quien te invitó que te envíe una nueva.
+            {errorMessage || 'Esta invitación ya expiró o no corresponde a este entorno de pruebas. Pide a quien te invitó que te envíe una nueva.'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', width: '100%', marginTop: '1.25rem' }}>
             <a href="/login" className="il-btn il-btn--primary">

@@ -202,7 +202,7 @@ def create_invite(org_id: int, current_org_member: dict = Depends(get_current_or
         organization_id=org.id,
         created_by_user_id=current_org_member["user"].id,
         token=token,
-        max_uses=None,
+        max_uses=1,  # Las invitaciones son estrictamente únicas y de un solo uso por persona
         expires_at=org.grace_period_ends_at,
         status=InviteStatus.ACTIVE
     )
@@ -218,14 +218,8 @@ class JoinRequest(BaseModel):
 def join_organization(req: JoinRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invite = find_invite(db, req.token)
     
-    if not invite or invite.status != InviteStatus.ACTIVE:
-        raise HTTPException(status_code=400, detail="Invitación inválida o inactiva")
-        
-    if invite_is_expired(invite, db):
-        raise HTTPException(status_code=400, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
-        
-    if invite.max_uses and invite.uses_count >= invite.max_uses:
-        raise HTTPException(status_code=400, detail="Invitación agotada")
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitación no encontrada")
         
     existing_membership = db.query(OrganizationMembership).filter(
         OrganizationMembership.user_id == current_user.id,
@@ -234,6 +228,24 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
     
     if existing_membership:
         return {"message": "Ya eres miembro de esta mutual", "organization_id": invite.organization_id}
+
+    # Validar si esta invitación ya fue consumida por otro usuario
+    used_by_other = db.query(OrganizationMembership).filter(
+        OrganizationMembership.invited_by_token == invite.token,
+        OrganizationMembership.user_id != current_user.id
+    ).first()
+    
+    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_by_other:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta invitación ya fue utilizada por otra persona. Comunícate con el fundador de la mutual para que te genere una nueva invitación."
+        )
+
+    if invite.status != InviteStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Invitación inválida o inactiva")
+        
+    if invite_is_expired(invite, db):
+        raise HTTPException(status_code=400, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
 
     # Regla 2: Validar si la mutual ya alcanzó su límite máximo de miembros
     check_can_join_organization(db, invite.organization_id)
@@ -277,10 +289,24 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
 @router.get("/invites/{token}")
 def get_invite_info(token: str, db: Session = Depends(get_db)):
     invite = find_invite(db, token)
-    if not invite or invite.status != InviteStatus.ACTIVE:
-        raise HTTPException(status_code=404, detail="Invitación inválida o expirada")
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitación inválida o no encontrada")
+
+    # Validar si ya fue utilizada por algún miembro
+    used_membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.invited_by_token == invite.token
+    ).first()
+    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_membership:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta invitación ya fue utilizada por otra persona. Comunícate con el fundador de la mutual para que te genere una nueva invitación."
+        )
+
+    if invite.status != InviteStatus.ACTIVE:
+        raise HTTPException(status_code=404, detail="Invitación inválida o inactiva")
+
     if invite_is_expired(invite, db):
-        raise HTTPException(status_code=404, detail="Invitación expirada")
+        raise HTTPException(status_code=404, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
         
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     
