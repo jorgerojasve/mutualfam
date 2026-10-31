@@ -9,6 +9,7 @@ export const OrgContext = createContext();
 export const OrgProvider = ({ children }) => {
   const [activeOrg, setActiveOrg] = useState(null);
   const [organizations, setOrganizations] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -17,16 +18,29 @@ export const OrgProvider = ({ children }) => {
     try {
       const data = await authApi.me();
       const orgs = data.organizations || [];
+      const userProfile = {
+        id: data.id,
+        email: data.email,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        identifier: data.identifier,
+      };
+      setCurrentUser(userProfile);
       setOrganizations(orgs);
       setIsOffline(false);
       await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
+      await AsyncStorage.setItem('cached_user_profile', JSON.stringify(userProfile));
       return orgs;
     } catch (e) {
       console.warn("Error fetching organizations", e);
       if (isNetworkError(e)) {
         setIsOffline(true);
-        // Si hay fallo de red, rescatar organizaciones cacheadas
+        // Si hay fallo de red, rescatar organizaciones y perfil cacheados
         try {
+          const cachedUser = await AsyncStorage.getItem('cached_user_profile');
+          if (cachedUser) {
+            setCurrentUser(JSON.parse(cachedUser));
+          }
           const cached = await AsyncStorage.getItem('cached_organizations');
           if (cached) {
             const parsed = JSON.parse(cached);
@@ -103,8 +117,10 @@ export const OrgProvider = ({ children }) => {
     await AsyncStorage.removeItem('org_id');
     await AsyncStorage.removeItem('cached_active_org');
     await AsyncStorage.removeItem('cached_organizations');
+    await AsyncStorage.removeItem('cached_user_profile');
     setActiveOrg(null);
     setOrganizations([]);
+    setCurrentUser(null);
     setIsOffline(false);
   };
 
@@ -122,6 +138,8 @@ export const OrgProvider = ({ children }) => {
     <OrgContext.Provider value={{
       activeOrg,
       organizations,
+      currentUser,
+      setCurrentUser,
       loading,
       isOffline,
       setIsOffline,

@@ -124,14 +124,31 @@ export default function App() {
         if (token) {
           try {
             // Validar sesión contra el backend antes de navegar optimísticamente
-            await authApi.me();
+            const me = await authApi.me();
+            try {
+              await AsyncStorage.setItem('cached_user_profile', JSON.stringify({
+                id: me.id,
+                email: me.email,
+                first_name: me.first_name,
+                last_name: me.last_name,
+                identifier: me.identifier,
+              }));
+            } catch (_) {}
             const orgId = await AsyncStorage.getItem('active_org_id');
             setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
             await registerForPushNotificationsAsync();
           } catch (authError) {
             // Si el servidor confirma que el usuario o sesión no es válida (401 o 404)
             if (authError?.response?.status === 401 || authError?.response?.status === 404) {
-              await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'active_org_id', 'org_id']);
+              await AsyncStorage.multiRemove([
+                'jwt_token',
+                'refresh_token',
+                'active_org_id',
+                'org_id',
+                'cached_user_profile',
+                'cached_active_org',
+                'cached_organizations',
+              ]);
               setInitialRoute('Login');
             } else {
               // Si fue fallo de red/conexión temporal, permitimos navegación tentativa según lo guardado

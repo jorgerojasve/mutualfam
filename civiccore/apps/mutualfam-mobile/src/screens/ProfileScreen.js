@@ -23,14 +23,34 @@ import { useBetaPhase, showBetaInfoAlert } from '../utils/beta';
 import theme from '../utils/theme';
 
 export default function ProfileScreen({ navigation }) {
-  const { activeOrg, clearOrg } = useContext(OrgContext);
+  const { activeOrg, clearOrg, isOffline, currentUser: contextUser } = useContext(OrgContext);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(contextUser);
 
   useEffect(() => {
-    authApi.me().then(setCurrentUser).catch(() => {});
-  }, []);
+    if (contextUser) {
+      setCurrentUser(contextUser);
+    }
+    // Cargar inmediatamente desde AsyncStorage para evitar "Cargando datos..."
+    AsyncStorage.getItem('cached_user_profile')
+      .then(cached => {
+        if (cached) {
+          try {
+            setCurrentUser(JSON.parse(cached));
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    // Actualizar con datos en vivo si hay conexión
+    authApi.me()
+      .then(user => {
+        setCurrentUser(user);
+        AsyncStorage.setItem('cached_user_profile', JSON.stringify(user)).catch(() => {});
+      })
+      .catch(() => {});
+  }, [contextUser]);
 
   const currentVersion = getCurrentAppVersion();
   const envConfig = getMobileEnvironmentConfig();
@@ -41,7 +61,7 @@ export default function ProfileScreen({ navigation }) {
       await unregisterPushNotificationsAsync();
     } catch (_) {}
     await clearOrg();
-    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'cached_user_profile']);
     navigation.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -90,13 +110,17 @@ export default function ProfileScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.userName}>
-              {[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') || 'Usuario'}
+              {[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') || currentUser?.email || 'Usuario'}
             </Text>
-            <Text style={styles.userEmail}>{currentUser?.email || 'Cargando datos...'}</Text>
+            <Text style={styles.userEmail}>
+              {currentUser?.email || (isOffline ? 'Modo sin conexión' : 'Cargando datos...')}
+            </Text>
           </View>
-          <View style={styles.userConnectedBadge}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.userConnectedText}>Conectado</Text>
+          <View style={[styles.userConnectedBadge, isOffline && styles.userOfflineBadge]}>
+            <View style={[styles.onlineDot, isOffline && styles.offlineDot]} />
+            <Text style={[styles.userConnectedText, isOffline && styles.userOfflineText]}>
+              {isOffline ? 'Sin conexión' : 'Conectado'}
+            </Text>
           </View>
         </View>
       </View>
@@ -476,6 +500,18 @@ const styles = StyleSheet.create({
   },
   userConnectedText: {
     color: '#34d399',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  userOfflineBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  offlineDot: {
+    backgroundColor: '#f59e0b',
+  },
+  userOfflineText: {
+    color: '#fbbf24',
     fontSize: 11,
     fontWeight: '600',
   },

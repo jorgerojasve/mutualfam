@@ -41,6 +41,7 @@ export const useAuthStore = create((set, get) => ({
       if (token) {
         const rawUser = await authApi.me();
         const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+        await storage.setItem('cached_user_profile', JSON.stringify(user));
         const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
         set({ isAuthenticated: true, isOffline: false, user, organizations: orgs, activeOrg: targetOrg, isLoading: false });
         
@@ -67,11 +68,14 @@ export const useAuthStore = create((set, get) => ({
         // En fallo de red temporal no eliminamos token ni expulsamos al usuario
         let cachedOrg = null;
         let cachedOrgs = [];
+        let cachedUser = null;
         try {
           const rawCachedOrg = await storage.getItem('cached_active_org');
           if (rawCachedOrg) cachedOrg = JSON.parse(rawCachedOrg);
           const rawCachedOrgs = await storage.getItem('cached_organizations');
           if (rawCachedOrgs) cachedOrgs = JSON.parse(rawCachedOrgs);
+          const rawCachedUser = await storage.getItem('cached_user_profile');
+          if (rawCachedUser) cachedUser = JSON.parse(rawCachedUser);
         } catch (_) {}
 
         const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
@@ -79,6 +83,7 @@ export const useAuthStore = create((set, get) => ({
           isAuthenticated: true,
           isOffline: true,
           isLoading: false,
+          user: cachedUser,
           activeOrg: cachedOrg || (storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null),
           organizations: cachedOrgs.length > 0 ? cachedOrgs : []
         });
@@ -204,6 +209,9 @@ export const useAuthStore = create((set, get) => ({
     await storage.removeItem('biometric_email');
     await storage.removeItem('biometric_password');
     await storage.removeItem('active_org_id');
+    await storage.removeItem('cached_user_profile');
+    await storage.removeItem('cached_active_org');
+    await storage.removeItem('cached_organizations');
     set({ isAuthenticated: false, user: null, activeOrg: null, organizations: [] });
     
     wsClient.disconnect();

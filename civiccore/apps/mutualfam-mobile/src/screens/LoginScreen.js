@@ -119,6 +119,15 @@ export default function LoginScreen({ route, navigation }) {
         }
 
         const me = await authApi.me();
+        try {
+          await AsyncStorage.setItem('cached_user_profile', JSON.stringify({
+            id: me.id,
+            email: me.email,
+            first_name: me.first_name,
+            last_name: me.last_name,
+            identifier: me.identifier,
+          }));
+        } catch (_) {}
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {
              if (selectOrg) {

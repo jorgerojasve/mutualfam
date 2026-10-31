@@ -21,10 +21,10 @@ import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = '1.0.32';
+const APP_VERSION = '1.0.35';
 
 export default function ProfileAndSettings() {
-  const { user, activeOrg, logout } = useAuthStore();
+  const { user, activeOrg, logout, isOffline } = useAuthStore();
   const envConfig = getEnvironmentConfig();
 
   const [copiedEmail, setCopiedEmail] = useState(false);
@@ -108,23 +108,28 @@ export default function ProfileAndSettings() {
             {`${user?.first_name || user?.nombre || ''} ${user?.last_name || user?.apellido || ''}`.trim() || user?.email || 'Usuario'}
           </h2>
           <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0.2rem 0 0 0' }}>
-            {user?.email}
+            {user?.email || (isOffline ? 'Modo sin conexión' : 'Cargando datos...')}
           </p>
         </div>
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '0.4rem',
-          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-          border: '1px solid rgba(16, 185, 129, 0.3)',
+          backgroundColor: isOffline ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+          border: isOffline ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(16, 185, 129, 0.3)',
           padding: '0.25rem 0.65rem',
           borderRadius: '999px',
-          color: '#34d399',
+          color: isOffline ? '#fbbf24' : '#34d399',
           fontSize: '0.75rem',
           fontWeight: '600'
         }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#10b981' }} />
-          <span>Conectado</span>
+          <span style={{
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            backgroundColor: isOffline ? '#f59e0b' : '#10b981'
+          }} />
+          <span>{isOffline ? 'Sin conexión' : 'Conectado'}</span>
         </div>
       </div>
 
