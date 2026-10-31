@@ -4,12 +4,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
+import { isNetworkError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import theme from '../utils/theme';
+import { OfflineEmptyState } from '../components/OfflineNotice';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
   const { selectOrg, loadActiveOrg, clearOrg } = React.useContext(OrgContext);
   const envConfig = getMobileEnvironmentConfig();
@@ -19,15 +23,37 @@ export default function SelectMutualScreen({ navigation }) {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
+    setConnectionError(false);
     try {
       const data = await authApi.me();
       const orgs = data.organizations || [];
       setOrganizations(orgs);
+      await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
       if (orgs.length === 0) detectInvite();
     } catch (e) {
-      Alert.alert('Error', 'No se pudo cargar la información del usuario');
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        try {
+          const cached = await AsyncStorage.getItem('cached_organizations');
+          if (cached) {
+            setOrganizations(JSON.parse(cached));
+          }
+        } catch (_) {}
+      } else {
+        Alert.alert('Error', 'No se pudo cargar la información del usuario');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      await fetchData();
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -91,6 +117,14 @@ export default function SelectMutualScreen({ navigation }) {
               <Text style={styles.orgRole}>Rol: {item.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
             </TouchableOpacity>
           )}
+        />
+      ) : connectionError ? (
+        <OfflineEmptyState
+          title="Sin conexión de red"
+          message="No se pudieron cargar tus mutuales. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+          onRetry={handleRetry}
+          loading={retrying}
+          style={{ marginHorizontal: 0 }}
         />
       ) : (
         <View style={styles.emptyState}>

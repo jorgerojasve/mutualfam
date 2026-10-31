@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { loansApi, useAuthStore } from '@civiccore/sdk';
-import { X, Check, Copy } from 'lucide-react';
+import { X, Check, Copy, WifiOff, RefreshCw } from 'lucide-react';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 import { formatVE, parseVEAmount } from '../../utils/currency.js';
 
@@ -56,15 +56,31 @@ export default function LoansDashboard() {
   const [showReceiptViewer, setShowReceiptViewer] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState(null);
 
-  const { user, activeOrg } = useAuthStore();
+  const { user, activeOrg, isOffline } = useAuthStore();
+  const [connectionError, setConnectionError] = useState(false);
 
   const fetchLoans = async () => {
     setLoading(true);
+    setConnectionError(false);
+    setError('');
     try {
       const data = await loansApi.getLoans();
       setLoans(data);
     } catch (err) {
-      setError(err.message || 'Error al cargar los préstamos.');
+      const isNet = !err?.response && (
+        Boolean(err?.request) ||
+        Boolean(err?.message && (
+          err.message.includes('Network Error') ||
+          err.message.includes('Failed to fetch') ||
+          err.message.includes('Network request failed') ||
+          err.code === 'ERR_NETWORK'
+        ))
+      );
+      if (isNet) {
+        setConnectionError(true);
+      } else {
+        setError(err.message || 'Error al cargar los préstamos.');
+      }
     } finally {
       setLoading(false);
     }
@@ -628,9 +644,49 @@ export default function LoansDashboard() {
       ) : (
         <div>
           {displayedLoans.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#94a3b8', fontSize: '1rem' }}>
-              No hay préstamos para esta vista
-            </div>
+            (isOffline || connectionError) ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '3rem 1.5rem',
+                margin: '1.5rem auto',
+                maxWidth: '440px',
+                backgroundColor: 'rgba(30, 41, 59, 0.7)',
+                borderRadius: '1rem',
+                border: '1px solid rgba(251, 191, 36, 0.3)',
+              }}>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem auto',
+                  color: '#fbbf24'
+                }}>
+                  <WifiOff size={32} />
+                </div>
+                <h3 style={{ color: '#f8fafc', fontSize: '1.2rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+                  Sin conexión de red
+                </h3>
+                <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '1.5rem' }}>
+                  No se pudieron cargar los datos de la mutual ni los préstamos. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={fetchLoans}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <RefreshCw size={16} /> Reintentar conexión
+                </button>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#94a3b8', fontSize: '1rem' }}>
+                No hay préstamos para esta vista
+              </div>
+            )
           ) : (
             <div className="dashboard-grid">
               {displayedLoans.map(loan => {

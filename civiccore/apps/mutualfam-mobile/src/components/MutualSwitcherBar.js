@@ -31,7 +31,7 @@ const roleLabel = (role) => (role === 'founder' ? 'Fundador' : 'Miembro');
  * - Pantallas anchas: el panel se muestra como tarjeta anclada arriba.
  */
 export default function MutualSwitcherBar() {
-  const { activeOrg, organizations, selectOrg } = useContext(OrgContext);
+  const { activeOrg, organizations, selectOrg, isOffline, retrying, retryConnection } = useContext(OrgContext);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -66,6 +66,22 @@ export default function MutualSwitcherBar() {
           </Text>
         </View>
       ) : null}
+      {isOffline ? (
+        <TouchableOpacity
+          style={styles.offlineBannerStrip}
+          activeOpacity={0.8}
+          onPress={retryConnection}
+          disabled={retrying}
+          accessibilityRole="button"
+          accessibilityLabel="Sin conexión de red. Toca para reintentar"
+        >
+          <Ionicons name="cloud-offline-outline" size={15} color="#fbbf24" style={{ marginRight: 6 }} />
+          <Text style={styles.offlineBannerText} numberOfLines={1}>
+            {retrying ? 'Reconectando con el servidor...' : 'Sin conexión de red · Toca para reintentar'}
+          </Text>
+          <Ionicons name="reload-outline" size={13} color="#fbbf24" style={{ marginLeft: 6 }} />
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity
         style={styles.trigger}
         activeOpacity={0.7}
@@ -83,6 +99,12 @@ export default function MutualSwitcherBar() {
           </Text>
         </View>
         <BetaBadge orgName={activeOrg?.name} style={{ marginRight: 6 }} />
+        {isOffline ? (
+          <View style={styles.offlineBadge}>
+            <Ionicons name="cloud-offline-outline" size={12} color="#fbbf24" style={{ marginRight: 4 }} />
+            <Text style={styles.offlineBadgeText}>Sin red</Text>
+          </View>
+        ) : null}
         {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDotSmall, { backgroundColor: envConfig.color }]} />
@@ -291,5 +313,38 @@ const styles = StyleSheet.create({
   envBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  offlineBannerStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    marginBottom: 6,
+  },
+  offlineBannerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fbbf24',
+  },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    marginRight: 6,
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fbbf24',
   },
 });

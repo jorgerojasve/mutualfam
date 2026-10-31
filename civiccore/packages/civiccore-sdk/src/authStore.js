@@ -25,6 +25,7 @@ const resolveActiveOrg = async (rawUser, storage) => {
 
 export const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
+  isOffline: false,
   user: null,
   activeOrg: null,
   organizations: [],
@@ -38,7 +39,7 @@ export const useAuthStore = create((set, get) => ({
         const rawUser = await authApi.me();
         const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
         const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
-        set({ isAuthenticated: true, user, organizations: orgs, activeOrg: targetOrg, isLoading: false });
+        set({ isAuthenticated: true, isOffline: false, user, organizations: orgs, activeOrg: targetOrg, isLoading: false });
         
         // Conectar WS
         if (targetOrg?.id) {
@@ -49,12 +50,34 @@ export const useAuthStore = create((set, get) => ({
       }
     } catch (error) {
       const { storage } = getConfig();
+      const isNetError = !error?.response && (
+        Boolean(error?.request) ||
+        Boolean(error?.message && (
+          error.message.includes('Network Error') ||
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('Network request failed') ||
+          error.code === 'ERR_NETWORK'
+        ))
+      );
+
+      if (isNetError) {
+        // En fallo de red temporal no eliminamos token ni expulsamos al usuario
+        const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
+        set({
+          isAuthenticated: true,
+          isOffline: true,
+          isLoading: false,
+          activeOrg: storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null
+        });
+        return;
+      }
+
       try {
         await storage.removeItem('jwt_token');
       } catch (storageError) {
         console.warn('Error al limpiar el token:', storageError);
       }
-      set({ isAuthenticated: false, user: null, activeOrg: null, organizations: [], isLoading: false });
+      set({ isAuthenticated: false, isOffline: false, user: null, activeOrg: null, organizations: [], isLoading: false });
     }
   },
 

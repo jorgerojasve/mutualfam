@@ -9,10 +9,11 @@ import { loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { formatVE, parseVEAmount } from '../utils/currency';
 import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -20,7 +21,9 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryingLoans, setRetryingLoans] = useState(false);
   
   const serverUrl = baseURL.replace('/api/v1', '');
   
@@ -291,13 +294,42 @@ export default function LoansScreen() {
 
   const fetchLoans = async () => {
     setLoading(true);
+    setConnectionError(false);
     try {
       const data = await loansApi.getLoans();
       setLoans(data);
+      if (setIsOffline) setIsOffline(false);
+      if (activeOrg?.id) {
+        AsyncStorage.setItem(`cached_loans_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los préstamos');
+      if (isNetworkError(error)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        // Rescatar préstamos cacheados si existen
+        if (activeOrg?.id) {
+          try {
+            const cached = await AsyncStorage.getItem(`cached_loans_${activeOrg.id}`);
+            if (cached) {
+              setLoans(JSON.parse(cached));
+            }
+          } catch (_) {}
+        }
+      } else {
+        Alert.alert('Error', 'No se pudieron cargar los préstamos');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetryLoans = async () => {
+    setRetryingLoans(true);
+    try {
+      await fetchLoans();
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetryingLoans(false);
     }
   };
 
@@ -1050,6 +1082,14 @@ export default function LoansScreen() {
         </TouchableOpacity>
       )}
 
+      {(isOffline || connectionError) && loans.length > 0 ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando préstamos guardados"
+          onRetry={handleRetryLoans}
+          loading={retryingLoans}
+        />
+      ) : null}
+
       <View style={styles.tabsContainer}>
         <TouchableOpacity style={[styles.tab, filter === 'active' && styles.activeTab]} onPress={() => setFilter('active')}>
           <Text style={[styles.tabText, filter === 'active' && styles.activeTabText]}>Vigentes</Text>
@@ -1071,9 +1111,18 @@ export default function LoansScreen() {
           renderItem={renderLoanCard}
           contentContainerStyle={{ padding: 15 }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
-            </Text>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar los datos de la mutual ni los préstamos. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryLoans}
+                loading={retryingLoans}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
+              </Text>
+            )
           }
         />
       )}
