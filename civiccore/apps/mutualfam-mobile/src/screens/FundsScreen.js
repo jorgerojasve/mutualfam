@@ -22,6 +22,7 @@ import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
+import { VENEZUELAN_BANKS } from '../utils/banks';
 
 export default function FundsScreen() {
   const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
@@ -29,6 +30,8 @@ export default function FundsScreen() {
   const [currentUser, setCurrentUser] = useState(null);
   const [connectionError, setConnectionError] = useState(false);
   const [retryingFunds, setRetryingFunds] = useState(false);
+  const [paymentBankCode, setPaymentBankCode] = useState('0102');
+
 
   // Estados de Colectas
   const [colectas, setColectas] = useState([]);
@@ -374,6 +377,7 @@ export default function FundsScreen() {
       const compromisoId = targetColecta.mi_compromiso.id;
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
         payment_method: paymentMethod,
+        codigo_banco: paymentBankCode,
         referencia_pago: paymentRef.trim() || undefined,
         comprobante_url: finalComprobanteUrl,
         nota_pago: paymentNote.trim() || undefined,
@@ -1142,6 +1146,25 @@ export default function FundsScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
+
+                  {(paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={styles.inputLabel}>Banco Emisor (Venezuela)</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginVertical: 4 }}>
+                        {VENEZUELAN_BANKS.slice(0, 8).map((b) => (
+                          <TouchableOpacity
+                            key={b.code}
+                            style={[styles.rateTypeBtn, paymentBankCode === b.code && styles.rateTypeBtnActive, { marginRight: 6 }]}
+                            onPress={() => setPaymentBankCode(b.code)}
+                          >
+                            <Text style={[styles.rateTypeBtnText, paymentBankCode === b.code && styles.rateTypeBtnTextActive]}>
+                              {b.name.replace('Banco ', '')} ({b.code})
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
 
                   <Text style={styles.inputLabel}>Número de Referencia Bancaria</Text>
                   <TextInput

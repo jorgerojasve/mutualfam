@@ -13,6 +13,7 @@ import {
   RefreshControl,
   Share
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,11 +21,15 @@ import { governanceApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
+import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 export default function AssemblyScreen({ embedded = false }) {
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
   const [currentUser, setCurrentUser] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   // Propuestas y pestañas
   const [activeTab, setActiveTab] = useState('activas'); // 'activas' | 'historial'
@@ -78,16 +83,39 @@ export default function AssemblyScreen({ embedded = false }) {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
+      setConnectionError(false);
 
       const data = await governanceApi.getPropuestas();
       setPropuestas(data);
+      if (setIsOffline) setIsOffline(false);
+      AsyncStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
     } catch (e) {
-      console.warn('Error fetching propuestas', e);
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        try {
+          const cached = await AsyncStorage.getItem(`cached_asambleas_${activeOrg.id}`);
+          if (cached) setPropuestas(JSON.parse(cached));
+        } catch (_) {}
+      } else {
+        console.warn('Error fetching propuestas', e);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
+
+  const handleRetryAsambleas = async () => {
+    setRetrying(true);
+    try {
+      await fetchPropuestas();
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchUser();
@@ -550,10 +578,19 @@ export default function AssemblyScreen({ embedded = false }) {
         </TouchableOpacity>
       </View>
 
+      {/* Aviso Offline */}
+      {(isOffline || connectionError) && propuestasFiltradas.length > 0 ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando asambleas guardadas"
+          onRetry={handleRetryAsambleas}
+          loading={retrying}
+        />
+      ) : null}
+
       {/* Lista de propuestas */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <ActivityIndicator size="large" color={theme.accent || '#10b981'} />
         </View>
       ) : (
         <FlatList
@@ -565,21 +602,30 @@ export default function AssemblyScreen({ embedded = false }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => fetchPropuestas(true)}
-              tintColor="#3b82f6"
+              tintColor={theme.accent || '#10b981'}
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🏛️</Text>
-              <Text style={styles.emptyTitle}>
-                {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
-              </Text>
-              <Text style={styles.emptySubtext}>
-                {activeTab === 'activas'
-                  ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
-                  : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
-              </Text>
-            </View>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar las propuestas de asamblea. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryAsambleas}
+                loading={retrying}
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyIcon}>🏛️</Text>
+                <Text style={styles.emptyTitle}>
+                  {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {activeTab === 'activas'
+                    ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
+                    : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
+                </Text>
+              </View>
+            )
           }
         />
       )}

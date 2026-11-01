@@ -558,6 +558,100 @@ async function executeTestSuite() {
   });
 
   // ============================================================================
+  // SUITE 9: Colectas Solidarias ("Vacas" Familiares)
+  // ============================================================================
+  console.log(`\n${c.bold}${c.magenta}▶ MÓDULO 9: Colectas Solidarias ("Vacas" Familiares)${c.reset}`);
+
+  let testColectaId = null;
+  let testCompromisoId = null;
+
+  await runTest('Colectas', 'GET /colectas/tasas retorna tasas de cambio venezolanas (BCV, USDT, Paralelo)', async () => {
+    const { status, data } = await apiGet('/colectas/tasas', ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.bcv, 'Debe incluir tasa BCV');
+    assert.ok(data.bcv.rate > 0, 'La tasa BCV debe ser positiva');
+  });
+
+  await runTest('Colectas', 'POST /colectas/ crea una colecta solidaria con meta en USD y tasa BCV', async () => {
+    const { status, data } = await apiPost('/colectas/', {
+      titulo: 'Medicinas para la abuela',
+      proposito: 'Compra de medicamentos para el tratamiento mensual',
+      monto_meta_usd: 50.0,
+      tipo_tasa: 'bcv',
+      beneficiario_nombre: 'Abuela Carmen'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.id);
+    assert.equal(data.estado, 'abierta');
+    assert.equal(data.monto_meta_usd, 50.0);
+    testColectaId = data.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos registra compromiso de aporte de familiar', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaId}/compromisos`, {
+      monto_usd: 25.0
+    }, ctx.extraUserTokens[0], ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.compromisos && data.compromisos.length > 0);
+    const c = data.compromisos.find(x => x.monto_usd === 25.0);
+    assert.ok(c);
+    testCompromisoId = c.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos/{id}/confirmar-pago registra y confirma pago en Bs', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaId}/compromisos/${testCompromisoId}/confirmar-pago`, {
+      payment_method: 'pago_movil',
+      codigo_banco: '0102',
+      referencia_pago: '998877',
+      estado: 'confirmado'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.equal(data.monto_recaudado_usd, 25.0);
+  });
+
+  // ============================================================================
+  // SUITE 10: Gobernanza y Asambleas (Admisión y Expulsión con Veto)
+  // ============================================================================
+  console.log(`\n${c.bold}${c.magenta}▶ MÓDULO 10: Gobernanza y Asambleas (Admisión y Expulsión con Veto)${c.reset}`);
+
+  let testPropuestaId = null;
+
+  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso crea propuesta de admisión con período de 15 días', async () => {
+    const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
+      candidate_name: 'Rosa Salazar',
+      candidate_email: 'rosa.salazar@qa.mutual.org',
+      motive: 'Tía paterna y evaluadora familiar'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.status, 'DEBATE');
+    testPropuestaId = data.id;
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/votar permite votar A Favor', async () => {
+    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/votar`, {
+      voto: 'for'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.equal(data.tally?.for, 1);
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/votar con Veto nominativo bloquea la propuesta', async () => {
+    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/votar`, {
+      voto: 'veto'
+    }, ctx.extraUserTokens[0], ctx.org1Id);
+    assert.equal(status, 200);
+    assert.equal(data.tally?.veto, 1);
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas lista las propuestas activas de la mutual', async () => {
+    const { status, data } = await apiGet('/gobernanza/propuestas', ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(data));
+    assert.ok(data.some(p => p.id === testPropuestaId));
+  });
+
+  // ============================================================================
   // RESUMEN Y REPORTE FINAL
   // ============================================================================
   console.log(`\n${c.bold}${c.cyan}====================================================================${c.reset}`);

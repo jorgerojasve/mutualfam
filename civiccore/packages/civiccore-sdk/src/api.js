@@ -163,6 +163,40 @@ export const fundsApi = {
 };
 
 // ─────────────────────────────────────────────
+// Módulo: Colectas Solidarias ("Vacas")
+// ─────────────────────────────────────────────
+
+export const colectasApi = {
+  getColectas: (estado = null) => request(estado ? `/colectas/?estado=${encodeURIComponent(estado)}` : '/colectas/'),
+  getColecta: (id) => request(`/colectas/${id}`),
+  getRates: (tasaFija = null) => request(tasaFija ? `/colectas/tasas?tasa_fija=${encodeURIComponent(tasaFija)}` : '/colectas/tasas'),
+  createColecta: (data) => request('/colectas/', { method: 'POST', body: JSON.stringify(data) }),
+  pledgeCommitment: (colectaId, montoUsd) => request(`/colectas/${colectaId}/compromisos`, { method: 'POST', body: JSON.stringify({ monto_usd: montoUsd }) }),
+  cancelCommitment: (colectaId, compromisoId) => request(`/colectas/${colectaId}/compromisos/${compromisoId}`, { method: 'DELETE' }),
+  triggerPaymentNotifications: (colectaId) => request(`/colectas/${colectaId}/notificar-cobro`, { method: 'POST' }),
+  confirmPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, { method: 'POST', body: JSON.stringify(data) }),
+  validateExpense: (colectaId, data) => request(`/colectas/${colectaId}/validar-gasto`, { method: 'POST', body: JSON.stringify(data) }),
+  cancelColecta: (colectaId) => request(`/colectas/${colectaId}/cancelar`, { method: 'PATCH' }),
+};
+
+// ─────────────────────────────────────────────
+// Módulo: Asambleas Familiares (Gobernanza)
+// ─────────────────────────────────────────────
+
+export const asambleasApi = {
+  getPropuestas: () => request('/gobernanza/propuestas'),
+  getPropuesta: (id) => request(`/gobernanza/propuestas/${id}`),
+  proponerIngreso: (data) => request('/gobernanza/proponer-ingreso', { method: 'POST', body: JSON.stringify(data) }),
+  proponerExpulsion: (data) => request('/gobernanza/proponer-expulsion', { method: 'POST', body: JSON.stringify(data) }),
+  votar: (id, voto) => request(`/gobernanza/propuestas/${id}/votar`, { method: 'POST', body: JSON.stringify({ voto }) }),
+  publicarDefensa: (id, defense_text) => request(`/gobernanza/propuestas/${id}/defensa`, { method: 'POST', body: JSON.stringify({ defense_text }) }),
+  cerrarPropuesta: (id) => request(`/gobernanza/propuestas/${id}/cerrar`, { method: 'POST' }),
+  getCandidatosDisponibles: (search = '') => request(search ? `/gobernanza/candidatos-disponibles?q=${encodeURIComponent(search)}` : '/gobernanza/candidatos-disponibles'),
+  getMiembrosExpulsables: () => request('/gobernanza/miembros-expulsables'),
+};
+
+
+// ─────────────────────────────────────────────
 // Módulo: Fusión
 // ─────────────────────────────────────────────
 
