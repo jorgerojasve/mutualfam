@@ -65,10 +65,15 @@ if [ -z "$CURRENT_USER" ]; then
 fi
 echo "✔ Sesión activa como: $CURRENT_USER"
 
-# 2. Asegurar directorio de respaldos
+# 2. Asegurar que la máquina Fly.io esté activa (waking up auto-stop machines)
+echo "⚡ Verificando estado activo de la máquina en Fly.io..."
+curl -s -m 8 "https://${APP_NAME}.fly.dev/api/v1/config/" > /dev/null 2>&1 || true
+sleep 2
+
+# 3. Asegurar directorio de respaldos
 mkdir -p "$BACKUP_DIR"
 
-# 3. Descarga vía SFTP seguro de Fly.io
+# 4. Descarga vía SFTP seguro de Fly.io
 echo "⬇️  Descargando /app/data/mutualfam.db desde $APP_NAME..."
 flyctl ssh sftp get /app/data/mutualfam.db "$TARGET_FILE" -a "$APP_NAME"
 
