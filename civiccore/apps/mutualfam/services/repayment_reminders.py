@@ -31,7 +31,7 @@ def format_ve_amount(amount: float) -> str:
     except Exception:
         return f"${amount}"
 
-def check_and_send_repayment_reminders(db) -> dict:
+def check_and_send_repayment_reminders(db, force: bool = False) -> dict:
     """
     Evalúa todos los préstamos activos y envía recordatorios push según la cadencia aprobada:
     - D-3: 3 días antes de la fecha estimada
@@ -66,8 +66,8 @@ def check_and_send_repayment_reminders(db) -> dict:
             # Préstamo en espera de fondos: no se exige devolución si no se le ha entregado dinero
             continue
 
-        # Evitar más de un recordatorio el mismo día para el mismo préstamo
-        if loan.last_repayment_reminder_date == today:
+        # Evitar más de un recordatorio el mismo día para el mismo préstamo (a menos que se fuerce para pruebas)
+        if not force and loan.last_repayment_reminder_date == today:
             continue
 
         # Diferencia de días: (hoy - fecha_estimada)

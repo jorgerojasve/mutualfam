@@ -657,8 +657,8 @@ def verify_return_payment(
 
 
 @router.post("/check-reminders")
-def trigger_repayment_reminders(db: Session = Depends(get_db)):
+def trigger_repayment_reminders(force: bool = False, db: Session = Depends(get_db)):
     """Ejecuta la verificación y envío de recordatorios push de vencimiento de préstamos."""
     from services.repayment_reminders import check_and_send_repayment_reminders
-    return check_and_send_repayment_reminders(db)
+    return check_and_send_repayment_reminders(db, force=force)
 

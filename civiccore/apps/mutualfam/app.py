@@ -26,6 +26,10 @@ async def start_repayment_reminders_task():
     async def reminder_loop():
         # Esperar brevemente al arranque del servidor
         await asyncio.sleep(15)
+        # En QA/Sandbox revisar cada 60 segundos para permitir pruebas rápidas; en Producción cada hora (3600s)
+        is_sandbox = os.getenv("CIVICCORE_ENV") == "sandbox"
+        interval = int(os.getenv("REMINDER_CHECK_INTERVAL_SECONDS", "60" if is_sandbox else "3600"))
+        print(f"⏰ [REPAYMENT REMINDERS] Ciclo de evaluación iniciado con intervalo de {interval}s (sandbox={is_sandbox})", flush=True)
         while True:
             try:
                 from services.repayment_reminders import check_and_send_repayment_reminders
@@ -34,8 +38,7 @@ async def start_repayment_reminders_task():
                     check_and_send_repayment_reminders(db)
             except Exception as e:
                 print(f"⚠️ [REPAYMENT REMINDERS] Error en ciclo periódico: {e}", flush=True)
-            # Reevaluar cada hora (evita duplicados con last_repayment_reminder_date)
-            await asyncio.sleep(3600)
+            await asyncio.sleep(interval)
 
     asyncio.create_task(reminder_loop())
 
