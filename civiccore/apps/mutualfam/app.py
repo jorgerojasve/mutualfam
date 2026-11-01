@@ -18,6 +18,8 @@ from routers import auth, membership, config
 Base.metadata.create_all(bind=engine)
 from services.repayment_reminders import ensure_reminder_column_exists
 ensure_reminder_column_exists(engine)
+from services.colectas_migration import ensure_colectas_columns_exist
+ensure_colectas_columns_exist(engine)
 
 load_dotenv()
 

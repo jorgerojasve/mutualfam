@@ -284,6 +284,7 @@ Para mantener 100% la privacidad familiar y la ligereza del sistema:
 - **Alcance de Cambios:**
   - **Backend (`FastAPI`):**
     - Modelo `Colecta`: Campos `monto_meta_ves` y `moneda_origen`.
+    - Auto-migración idempotente en `colectas_migration.py` para sincronizar columnas en bases de datos SQLite/PostgreSQL activas.
     - `POST /colectas/`: Acepta `currency: "USD" | "VES"`, calculando el contravalor automático a la tasa acordada (`bcv`, `usdt`, `euro`, `paralelo` o `fija`).
     - `POST /colectas/{id}/compromisos`: Acepta `currency: "USD" | "VES"` y `monto_ves` / `monto_usd`.
     - `_serialize_colecta`: Incluye `monto_recaudado_bs` y `moneda_origen`.
@@ -299,5 +300,6 @@ Para mantener 100% la privacidad familiar y la ligereza del sistema:
     - Validación 100% limpia de sintaxis y bundle Babel React Native.
   - **Certificación Automatizada:**
     - Suite de pruebas E2E ampliada con pruebas de creación de colectas y promesas en moneda VES.
+
 
 

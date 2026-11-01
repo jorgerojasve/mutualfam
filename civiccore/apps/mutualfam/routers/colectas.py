@@ -275,9 +275,6 @@ def create_colecta(
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
 
-    if req.monto_meta_usd <= 0:
-        raise HTTPException(status_code=400, detail="El monto meta debe ser mayor a 0 USD.")
-
     # Validar tipo de tasa
     tipo_tasa_enum = TipoTasaColecta.BCV
     try:
