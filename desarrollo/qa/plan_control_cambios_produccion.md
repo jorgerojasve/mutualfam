@@ -222,10 +222,10 @@ La comunicación destaca de forma transparente las 5 mejoras y enfatiza la **act
 > ---
 > **⚠️ ACTUALIZACIÓN INMEDIATA REQUERIDA:**  
 > Por favor actualicen sus aplicaciones ahora mismo para disfrutar de estas mejoras:  
-> 📲 **Si usas Android (APK):** Ingresa a `https://mutualfam.vercel.app` para descargar la nueva APK directa o haz clic en la notificación de Firebase App Distribution.  
+> 📲 **Si usas Android (APK):** Ingresa en `https://mutualfam.vercel.app/download` para descargar la nueva APK directa o haz clic en la notificación de Firebase App Distribution.  
 > 🍎 **Si usas iPhone / Web:** Solo abre la app desde la pantalla de inicio y recarga; se actualizará automáticamente a la versión 1.0.35.  
 >
-> *¡Gracias a Nora, Nilso, Martín, Maira y a toda la familia por su apoyo y por ayudarnos a probar cada detalle! ❤️"*
+> *¡Gracias a Nora, Nilso, Martín y a toda la familia por su apoyo y por ayudarnos a probar cada detalle! ❤️"*
 
 ---
 
