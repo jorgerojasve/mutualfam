@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { fundsApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
+import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 export default function FundsScreen() {
   const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryingFunds, setRetryingFunds] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [newFundName, setNewFundName] = useState('');
   const [newFundType, setNewFundType] = useState('emergency');
@@ -42,13 +47,41 @@ export default function FundsScreen() {
 
   const fetchFunds = async () => {
     setLoading(true);
+    setConnectionError(false);
     try {
       const data = await fundsApi.getFunds();
       setFunds(data);
+      if (setIsOffline) setIsOffline(false);
+      if (activeOrg?.id) {
+        AsyncStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los fondos');
+      if (isNetworkError(error)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        if (activeOrg?.id) {
+          try {
+            const cached = await AsyncStorage.getItem(`cached_funds_${activeOrg.id}`);
+            if (cached) {
+              setFunds(JSON.parse(cached));
+            }
+          } catch (_) {}
+        }
+      } else {
+        Alert.alert('Error', 'No se pudieron cargar los fondos');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetryFunds = async () => {
+    setRetryingFunds(true);
+    try {
+      await fetchFunds();
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetryingFunds(false);
     }
   };
 
@@ -126,8 +159,16 @@ export default function FundsScreen() {
         />
       </View>
 
+      {(isOffline || connectionError) && funds.length > 0 ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando fondos guardados"
+          onRetry={handleRetryFunds}
+          loading={retryingFunds}
+        />
+      ) : null}
+
       {loading ? (
-        <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={funds}
@@ -135,9 +176,18 @@ export default function FundsScreen() {
           renderItem={renderFundCard}
           contentContainerStyle={{ padding: 15 }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {!activeOrg ? 'Selecciona una mutual arriba para ver los fondos' : 'No hay fondos creados'}
-            </Text>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar los fondos comunes. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryFunds}
+                loading={retryingFunds}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                {!activeOrg ? 'Selecciona una mutual arriba para ver los fondos' : 'No hay fondos creados'}
+              </Text>
+            )
           }
         />
       )}
@@ -169,7 +219,7 @@ export default function FundsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
   },
   header: {
     paddingHorizontal: 20,
@@ -189,12 +239,12 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 15,
     marginBottom: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: theme.cardBorder,
   },
   fundName: {
     fontSize: 20,
@@ -218,7 +268,7 @@ const styles = StyleSheet.create({
   },
   contributionLabel: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: 14,
     marginBottom: 5,
   },
   contributionAmount: {
@@ -236,7 +286,7 @@ const styles = StyleSheet.create({
     paddingTop: 15,
   },
   actionButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -246,7 +296,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerAddButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -263,7 +313,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 12,
     padding: 20,
   },
@@ -279,7 +329,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   input: {
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     color: '#f8fafc',
     padding: 12,
     borderRadius: 8,
@@ -301,7 +351,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalSubmit: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 12,
     borderRadius: 8,
     minWidth: 80,

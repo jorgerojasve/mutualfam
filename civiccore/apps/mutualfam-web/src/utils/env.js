@@ -48,9 +48,11 @@ export function getEnvironmentConfig() {
         badgeText: 'QA',
         appName: 'MutualFam QA',
         tagline: 'Entorno de Validación y Pruebas (QA)',
-        color: '#f59e0b', // Amber 500
-        bgColor: 'rgba(245, 158, 11, 0.15)',
-        borderColor: 'rgba(245, 158, 11, 0.4)',
+        color: '#10b981', // Emerald 500 (Opción C)
+        bgColor: 'rgba(16, 185, 129, 0.18)',
+        borderColor: 'rgba(16, 185, 129, 0.45)',
+        screenBg: '#06231c',
+        cardBg: '#0c332b',
         bannerText: '🧪 Entorno de Pruebas (QA) • Los datos son ficticios y no representan dinero real',
         isProd: false,
         isQA: true,
@@ -63,9 +65,11 @@ export function getEnvironmentConfig() {
         badgeText: 'DEV',
         appName: 'MutualFam Dev',
         tagline: 'Entorno Local de Desarrollo (DEV)',
-        color: '#3b82f6', // Blue 500
-        bgColor: 'rgba(59, 130, 246, 0.15)',
-        borderColor: 'rgba(59, 130, 246, 0.4)',
+        color: '#f59e0b', // Amber 500 (Opción C)
+        bgColor: 'rgba(245, 158, 11, 0.18)',
+        borderColor: 'rgba(245, 158, 11, 0.45)',
+        screenBg: '#1c150c',
+        cardBg: '#2a1f10',
         bannerText: '🛠️ Modo de Desarrollo Local (DEV) • Base de datos local',
         isProd: false,
         isQA: false,
@@ -79,9 +83,11 @@ export function getEnvironmentConfig() {
         badgeText: '',
         appName: 'MutualFam',
         tagline: 'Gestión de préstamos y aportes familiares',
-        color: '#10b981', // Emerald 500
-        bgColor: 'rgba(16, 185, 129, 0.15)',
-        borderColor: 'rgba(16, 185, 129, 0.4)',
+        color: '#3b82f6', // Blue 500 (Opción C)
+        bgColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: 'rgba(59, 130, 246, 0.4)',
+        screenBg: '#0f172a',
+        cardBg: '#1e293b',
         bannerText: null,
         isProd: true,
         isQA: false,

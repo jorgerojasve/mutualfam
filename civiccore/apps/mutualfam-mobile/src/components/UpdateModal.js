@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import theme from '../utils/theme';
 
 export default function UpdateModal({ updateInfo, onDismiss }) {
   if (!updateInfo || !updateInfo.hasUpdate) {
@@ -160,7 +161,7 @@ export default function UpdateModal({ updateInfo, onDismiss }) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -168,11 +169,11 @@ const styles = StyleSheet.create({
   dialog: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 20,
     padding: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: theme.cardBorder,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
   },
   versionBox: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   notesContainer: {
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     borderRadius: 10,
     padding: 12,
     marginBottom: 18,

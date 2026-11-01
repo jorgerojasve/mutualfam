@@ -85,3 +85,35 @@ export function handleLimitError(error, fallbackTitle = 'Límite alcanzado', use
   return true;
 }
 
+/**
+ * Determina si el error corresponde a una falla de red, falta de conexión o timeout.
+ */
+export function isNetworkError(error) {
+  if (!error) return false;
+  // Axios: petición realizada pero no se recibió respuesta
+  if (!error.response && error.request) return true;
+  // Códigos de error estándar de red
+  if (
+    error.code === 'ERR_NETWORK' ||
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ENOTFOUND' ||
+    error.code === 'ETIMEDOUT'
+  ) {
+    return true;
+  }
+  // Mensajes de texto comunes de errores de conectividad
+  if (typeof error.message === 'string') {
+    const msg = error.message.toLowerCase();
+    if (
+      msg.includes('network error') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('network request failed') ||
+      msg.includes('timeout') ||
+      msg.includes('sin conexión') ||
+      msg.includes('connection refused')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

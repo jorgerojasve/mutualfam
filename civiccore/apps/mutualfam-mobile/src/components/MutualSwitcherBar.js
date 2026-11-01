@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { OrgContext } from '../context/OrgContext';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 import BetaBadge from './BetaBadge';
 
 const WIDE_BREAKPOINT = 768;
@@ -30,7 +31,7 @@ const roleLabel = (role) => (role === 'founder' ? 'Fundador' : 'Miembro');
  * - Pantallas anchas: el panel se muestra como tarjeta anclada arriba.
  */
 export default function MutualSwitcherBar() {
-  const { activeOrg, organizations, selectOrg } = useContext(OrgContext);
+  const { activeOrg, organizations, selectOrg, isOffline, retrying, retryConnection } = useContext(OrgContext);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -65,6 +66,22 @@ export default function MutualSwitcherBar() {
           </Text>
         </View>
       ) : null}
+      {isOffline ? (
+        <TouchableOpacity
+          style={styles.offlineBannerStrip}
+          activeOpacity={0.8}
+          onPress={retryConnection}
+          disabled={retrying}
+          accessibilityRole="button"
+          accessibilityLabel="Sin conexión de red. Toca para reintentar"
+        >
+          <Ionicons name="cloud-offline-outline" size={15} color="#fbbf24" style={{ marginRight: 6 }} />
+          <Text style={styles.offlineBannerText} numberOfLines={1}>
+            {retrying ? 'Reconectando con el servidor...' : 'Sin conexión de red · Toca para reintentar'}
+          </Text>
+          <Ionicons name="reload-outline" size={13} color="#fbbf24" style={{ marginLeft: 6 }} />
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity
         style={styles.trigger}
         activeOpacity={0.7}
@@ -82,6 +99,12 @@ export default function MutualSwitcherBar() {
           </Text>
         </View>
         <BetaBadge orgName={activeOrg?.name} style={{ marginRight: 6 }} />
+        {isOffline ? (
+          <View style={styles.offlineBadge}>
+            <Ionicons name="cloud-offline-outline" size={12} color="#fbbf24" style={{ marginRight: 4 }} />
+            <Text style={styles.offlineBadgeText}>Sin red</Text>
+          </View>
+        ) : null}
         {!envConfig.isProd && envConfig.badgeText ? (
           <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <View style={[styles.envDotSmall, { backgroundColor: envConfig.color }]} />
@@ -140,14 +163,14 @@ export default function MutualSwitcherBar() {
                       </Text>
                       <Text style={styles.rowRole}>{roleLabel(item.role)}</Text>
                     </View>
-                    {selected && <Ionicons name="checkmark-circle" size={22} color="#3b82f6" />}
+                    {selected && <Ionicons name="checkmark-circle" size={22} color={theme.accent} />}
                   </TouchableOpacity>
                 );
               }}
             />
 
             <TouchableOpacity style={styles.manage} onPress={handleManage} activeOpacity={0.7}>
-              <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
+              <Ionicons name="add-circle-outline" size={20} color={theme.accent} />
               <Text style={styles.manageText}>Crear, unirse o gestionar mutuales</Text>
             </TouchableOpacity>
           </Pressable>
@@ -159,7 +182,7 @@ export default function MutualSwitcherBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: '#0b1220',
+    backgroundColor: theme.headerBg,
     paddingHorizontal: 12,
     paddingBottom: 8,
     borderBottomWidth: 1,
@@ -171,15 +194,15 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 10,
     borderRadius: 14,
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: theme.cardBorder,
   },
   avatar: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -198,7 +221,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   overlayNarrow: { justifyContent: 'flex-end' },
   overlayWide: { alignItems: 'flex-start', paddingLeft: 12 },
-  sheet: { backgroundColor: '#1e293b' },
+  sheet: { backgroundColor: theme.cardBg },
   sheetNarrow: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -230,11 +253,11 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  rowActive: { borderColor: '#3b82f6' },
+  rowActive: { borderColor: theme.accent },
   rowLabels: { flex: 1, marginHorizontal: 12 },
   rowName: { color: '#cbd5e1', fontSize: 16 },
   rowNameActive: { color: '#f8fafc', fontWeight: '700' },
@@ -249,7 +272,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
-  manageText: { color: '#3b82f6', fontWeight: '600', fontSize: 14 },
+  manageText: { color: theme.accent, fontWeight: '600', fontSize: 14 },
   envBannerStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -290,5 +313,38 @@ const styles = StyleSheet.create({
   envBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  offlineBannerStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    marginBottom: 6,
+  },
+  offlineBannerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fbbf24',
+  },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    marginRight: 6,
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fbbf24',
   },
 });

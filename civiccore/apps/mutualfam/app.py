@@ -13,10 +13,34 @@ from routers import auth, membership, config
 
 # Crear todas las tablas en la base de datos SQLite aislada de MutualFam
 Base.metadata.create_all(bind=engine)
+from services.repayment_reminders import ensure_reminder_column_exists
+ensure_reminder_column_exists(engine)
 
 load_dotenv()
 
 app = FastAPI(title="Mutual Familiar API", version="1.0.0")
+
+@app.on_event("startup")
+async def start_repayment_reminders_task():
+    """Inicia tarea en segundo plano para evaluar y enviar recordatorios de vencimiento de préstamos."""
+    async def reminder_loop():
+        # Esperar brevemente al arranque del servidor
+        await asyncio.sleep(15)
+        # En QA/Sandbox revisar cada 60 segundos para permitir pruebas rápidas; en Producción cada hora (3600s)
+        is_sandbox = os.getenv("CIVICCORE_ENV") == "sandbox"
+        interval = int(os.getenv("REMINDER_CHECK_INTERVAL_SECONDS", "60" if is_sandbox else "3600"))
+        print(f"⏰ [REPAYMENT REMINDERS] Ciclo de evaluación iniciado con intervalo de {interval}s (sandbox={is_sandbox})", flush=True)
+        while True:
+            try:
+                from services.repayment_reminders import check_and_send_repayment_reminders
+                from civiccore.core.database import SessionLocal
+                with SessionLocal() as db:
+                    check_and_send_repayment_reminders(db)
+            except Exception as e:
+                print(f"⚠️ [REPAYMENT REMINDERS] Error en ciclo periódico: {e}", flush=True)
+            await asyncio.sleep(interval)
+
+    asyncio.create_task(reminder_loop())
 
 class PathSanitizerMiddleware:
     """Sanea rutas entrantes eliminando saltos de línea codificados (%0A, \n, \r) o espacios accidentales."""

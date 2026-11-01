@@ -1,12 +1,38 @@
 import { create } from 'zustand';
-import { authApi } from './api.js';
+import { authApi, membershipApi } from './api.js';
 import { getConfig } from './config.js';
 import { wsClient } from './wsClient.js';
 
-export const useAuthStore = create((set) => ({
+const resolveActiveOrg = async (rawUser, storage) => {
+  const orgs = rawUser.organizations || [];
+  const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
+  
+  let targetOrg = null;
+  if (orgs.length > 0) {
+    if (storedOrgId) {
+      targetOrg = orgs.find(o => String(o.id) === String(storedOrgId)) || null;
+    }
+    if (!targetOrg) {
+      targetOrg = orgs[0];
+    }
+    await storage.setItem('organizationId', String(targetOrg.id));
+    await storage.setItem('active_org_id', String(targetOrg.id));
+    await storage.setItem('cached_active_org', JSON.stringify(targetOrg));
+    await storage.setItem('cached_organizations', JSON.stringify(orgs));
+  } else {
+    await storage.removeItem('active_org_id');
+    await storage.removeItem('cached_active_org');
+  }
+  return { orgs, targetOrg };
+};
+
+export const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
+  isOffline: false,
   user: null,
-  isLoading: true,  // Empieza en true para la pantalla de splash
+  activeOrg: null,
+  organizations: [],
+  isLoading: true,
 
   loadUser: async () => {
     try {
@@ -15,23 +41,116 @@ export const useAuthStore = create((set) => ({
       if (token) {
         const rawUser = await authApi.me();
         const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
-        set({ isAuthenticated: true, user, isLoading: false });
+        await storage.setItem('cached_user_profile', JSON.stringify(user));
+        const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+        set({ isAuthenticated: true, isOffline: false, user, organizations: orgs, activeOrg: targetOrg, isLoading: false });
         
         // Conectar WS
-        const orgId = await storage.getItem('organizationId');
-        wsClient.connect(token, orgId);
+        if (targetOrg?.id) {
+          wsClient.connect(token, String(targetOrg.id));
+        }
       } else {
         set({ isLoading: false });
       }
     } catch (error) {
       const { storage } = getConfig();
+      const isNetError = !error?.response && (
+        Boolean(error?.request) ||
+        Boolean(error?.message && (
+          error.message.includes('Network Error') ||
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('Network request failed') ||
+          error.code === 'ERR_NETWORK'
+        ))
+      );
+
+      if (isNetError) {
+        // En fallo de red temporal no eliminamos token ni expulsamos al usuario
+        let cachedOrg = null;
+        let cachedOrgs = [];
+        let cachedUser = null;
+        try {
+          const rawCachedOrg = await storage.getItem('cached_active_org');
+          if (rawCachedOrg) cachedOrg = JSON.parse(rawCachedOrg);
+          const rawCachedOrgs = await storage.getItem('cached_organizations');
+          if (rawCachedOrgs) cachedOrgs = JSON.parse(rawCachedOrgs);
+          const rawCachedUser = await storage.getItem('cached_user_profile');
+          if (rawCachedUser) cachedUser = JSON.parse(rawCachedUser);
+        } catch (_) {}
+
+        const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
+        set({
+          isAuthenticated: true,
+          isOffline: true,
+          isLoading: false,
+          user: cachedUser,
+          activeOrg: cachedOrg || (storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null),
+          organizations: cachedOrgs.length > 0 ? cachedOrgs : []
+        });
+        return;
+      }
+
       try {
         await storage.removeItem('jwt_token');
       } catch (storageError) {
         console.warn('Error al limpiar el token:', storageError);
       }
-      set({ isAuthenticated: false, user: null, isLoading: false });
+      set({ isAuthenticated: false, isOffline: false, user: null, activeOrg: null, organizations: [], isLoading: false });
     }
+  },
+
+  selectOrg: async (org) => {
+    if (!org) return;
+    const { storage } = getConfig();
+    await storage.setItem('organizationId', String(org.id));
+    await storage.setItem('active_org_id', String(org.id));
+    set({ activeOrg: org });
+    
+    const token = await storage.getItem('jwt_token');
+    if (token) {
+      wsClient.connect(token, String(org.id));
+    }
+  },
+
+  refreshUser: async () => {
+    try {
+      const { storage } = getConfig();
+      const rawUser = await authApi.me();
+      const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+      const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+      set({ user, organizations: orgs, activeOrg: targetOrg });
+      return { user, organizations: orgs, activeOrg: targetOrg };
+    } catch (e) {
+      console.warn("Could not refresh user", e);
+    }
+  },
+
+  joinOrg: async (tokenOrCode) => {
+    const res = await membershipApi.joinOrganization(tokenOrCode);
+    const { storage } = getConfig();
+    if (res?.organization_id) {
+      await storage.setItem('organizationId', String(res.organization_id));
+      await storage.setItem('active_org_id', String(res.organization_id));
+    }
+    const rawUser = await authApi.me();
+    const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ user, organizations: orgs, activeOrg: targetOrg });
+    return res;
+  },
+
+  createOrg: async (name, description = '') => {
+    const res = await membershipApi.createOrganization({ name, description });
+    const { storage } = getConfig();
+    if (res?.organization_id) {
+      await storage.setItem('organizationId', String(res.organization_id));
+      await storage.setItem('active_org_id', String(res.organization_id));
+    }
+    const rawUser = await authApi.me();
+    const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ user, organizations: orgs, activeOrg: targetOrg });
+    return res;
   },
 
   login: async (email, password) => {
@@ -42,10 +161,12 @@ export const useAuthStore = create((set) => ({
     await storage.setItem('biometric_password', password);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
-    set({ isAuthenticated: true, user });
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ isAuthenticated: true, user, organizations: orgs, activeOrg: targetOrg });
 
-    const orgId = await storage.getItem('organizationId');
-    wsClient.connect(tokenResponse.access_token, orgId);
+    if (targetOrg?.id) {
+      wsClient.connect(tokenResponse.access_token, String(targetOrg.id));
+    }
   },
 
   loginBiometric: async () => {
@@ -57,10 +178,12 @@ export const useAuthStore = create((set) => ({
     await storage.setItem('jwt_token', tokenResponse.access_token);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
-    set({ isAuthenticated: true, user });
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ isAuthenticated: true, user, organizations: orgs, activeOrg: targetOrg });
 
-    const orgId = await storage.getItem('organizationId');
-    wsClient.connect(tokenResponse.access_token, orgId);
+    if (targetOrg?.id) {
+      wsClient.connect(tokenResponse.access_token, String(targetOrg.id));
+    }
   },
 
   register: async (userData) => {
@@ -72,10 +195,12 @@ export const useAuthStore = create((set) => ({
     await storage.setItem('biometric_password', userData.password);
     const rawUser = await authApi.me();
     const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
-    set({ isAuthenticated: true, user });
+    const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
+    set({ isAuthenticated: true, user, organizations: orgs, activeOrg: targetOrg });
 
-    const orgId = await storage.getItem('organizationId');
-    wsClient.connect(tokenResponse.access_token, orgId);
+    if (targetOrg?.id) {
+      wsClient.connect(tokenResponse.access_token, String(targetOrg.id));
+    }
   },
 
   logout: async () => {
@@ -83,8 +208,26 @@ export const useAuthStore = create((set) => ({
     await storage.removeItem('jwt_token');
     await storage.removeItem('biometric_email');
     await storage.removeItem('biometric_password');
-    set({ isAuthenticated: false, user: null });
+    await storage.removeItem('active_org_id');
+    await storage.removeItem('cached_user_profile');
+    await storage.removeItem('cached_active_org');
+    await storage.removeItem('cached_organizations');
+    set({ isAuthenticated: false, user: null, activeOrg: null, organizations: [] });
     
     wsClient.disconnect();
   },
+
+  setIsOffline: (offline) => set({ isOffline: offline }),
 }));
+
+// Escuchadores globales del navegador (Safari en iOS, Chrome en Android/PC)
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    useAuthStore.getState().setIsOffline(false);
+    useAuthStore.getState().refreshUser?.();
+  });
+  window.addEventListener('offline', () => {
+    useAuthStore.getState().setIsOffline(true);
+  });
+}
+

@@ -151,7 +151,7 @@ const FundPage = () => {
                         required
                         value={amountBs}
                         onChange={(e) => setAmountBs(e.target.value)}
-                        placeholder="Monto exacto transferido" 
+                        placeholder="Monto en Bolívares" 
                         className="form-input"
                         style={{ paddingLeft: '3rem' }}
                       />

@@ -5,11 +5,14 @@ import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import InviteLanding from './pages/Auth/InviteLanding';
+import SelectMutual from './pages/Auth/SelectMutual';
 import LoansDashboard from './pages/Loans/LoansDashboard';
 import FundsDashboard from './pages/Funds/FundsDashboard';
 import Settings from './pages/Settings/Settings';
 import DbManager from './pages/Dev/DbManager';
 import { useConfigStore } from '@civiccore/sdk';
+
+import MembersList from './pages/Membership/MembersList';
 
 function App() {
   const { loadUser } = useAuthStore();
@@ -27,6 +30,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/invite" element={<InviteLanding />} />
         <Route path="/download" element={<InviteLanding />} />
+        <Route path="/select-mutual" element={<SelectMutual />} />
         
         {/* Protected Routes */}
         <Route path="/" element={<MainLayout />}>
@@ -35,8 +39,11 @@ function App() {
           {/* Mutual Fam Routes */}
           <Route path="loans" element={<LoansDashboard />} />
           <Route path="funds" element={<FundsDashboard />} />
+          <Route path="members" element={<MembersList />} />
+          <Route path="family" element={<Navigate to="/members" replace />} />
           
-          <Route path="settings" element={<Settings />} />
+          <Route path="profile" element={<Settings />} />
+          <Route path="settings" element={<Navigate to="/profile" replace />} />
           
           {/* Dev Routes */}
           <Route path="dev/db-manager" element={<DbManager />} />

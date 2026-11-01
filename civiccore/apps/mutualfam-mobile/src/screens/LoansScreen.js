@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Image, ScrollView, Linking, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,8 +9,11 @@ import { loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
+import { formatVE, parseVEAmount } from '../utils/currency';
+import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -17,13 +21,16 @@ export default function LoansScreen() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryingLoans, setRetryingLoans] = useState(false);
   
   const serverUrl = baseURL.replace('/api/v1', '');
   
   // Crear préstamo
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
+  const [loanCurrency, setLoanCurrency] = useState('USD'); // 'USD' | 'VES' (Opción A Optimizada)
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -31,6 +38,17 @@ export default function LoansScreen() {
   const [acceptedMethods, setAcceptedMethods] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [filter, setFilter] = useState('active');
+
+  // Cargar preferencia de moneda guardada en el dispositivo
+  useEffect(() => {
+    AsyncStorage.getItem('loan_currency_pref')
+      .then(pref => {
+        if (pref === 'USD' || pref === 'VES') {
+          setLoanCurrency(pref);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Prometer aporte
   const [showPledgeModal, setShowPledgeModal] = useState(false);
@@ -237,15 +255,81 @@ export default function LoansScreen() {
 
   const effectiveBcvRate = manualBcvRate ? parseFloat(manualBcvRate.replace(',', '.')) : bcvRate;
 
+  const handleToggleCurrency = async (newCurr) => {
+    if (newCurr === loanCurrency) return;
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effectiveBcvRate && effectiveBcvRate > 0) {
+      if (newCurr === 'VES') {
+        // Cambiar de USD a VES
+        const calculatedBs = parsed * effectiveBcvRate;
+        setAmount(formatVE(calculatedBs));
+      } else {
+        // Cambiar de VES a USD
+        const calculatedUsd = parsed / effectiveBcvRate;
+        setAmount(formatVE(calculatedUsd));
+      }
+    }
+    setLoanCurrency(newCurr);
+    try {
+      await AsyncStorage.setItem('loan_currency_pref', newCurr);
+    } catch (e) {
+      console.warn("Could not save currency preference", e);
+    }
+  };
+
+  const handleAmountBlur = () => {
+    const parsed = parseVEAmount(amount);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0) {
+      setAmount(formatVE(parsed));
+    }
+  };
+
+  const parsedLoanAmount = parseVEAmount(amount);
+  const countervalueBs = (loanCurrency === 'USD' && parsedLoanAmount !== null && effectiveBcvRate && effectiveBcvRate > 0)
+    ? parsedLoanAmount * effectiveBcvRate
+    : null;
+  const countervalueUsd = (loanCurrency === 'VES' && parsedLoanAmount !== null && effectiveBcvRate && effectiveBcvRate > 0)
+    ? parsedLoanAmount / effectiveBcvRate
+    : null;
+
   const fetchLoans = async () => {
     setLoading(true);
+    setConnectionError(false);
     try {
       const data = await loansApi.getLoans();
       setLoans(data);
+      if (setIsOffline) setIsOffline(false);
+      if (activeOrg?.id) {
+        AsyncStorage.setItem(`cached_loans_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
     } catch (error) {
-      Alert.alert('Error', 'No se pudieron cargar los préstamos');
+      if (isNetworkError(error)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        // Rescatar préstamos cacheados si existen
+        if (activeOrg?.id) {
+          try {
+            const cached = await AsyncStorage.getItem(`cached_loans_${activeOrg.id}`);
+            if (cached) {
+              setLoans(JSON.parse(cached));
+            }
+          } catch (_) {}
+        }
+      } else {
+        Alert.alert('Error', 'No se pudieron cargar los préstamos');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetryLoans = async () => {
+    setRetryingLoans(true);
+    try {
+      await fetchLoans();
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetryingLoans(false);
     }
   };
 
@@ -439,15 +523,32 @@ export default function LoansScreen() {
          return;
       }
 
-      const parsedAmount = parseFloat(amount);
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      const parsedAmount = parseVEAmount(amount);
+      if (parsedAmount === null || isNaN(parsedAmount) || parsedAmount <= 0) {
         Alert.alert('Error', 'El monto debe ser un número válido mayor a cero');
         setSubmitting(false);
         return;
       }
 
+      let finalUsd = parsedAmount;
+      if (loanCurrency === 'VES') {
+        if (!effectiveBcvRate || effectiveBcvRate <= 0) {
+          Alert.alert('Error', 'No se dispone de la tasa oficial del día para convertir el monto en bolívares a dólares.');
+          setSubmitting(false);
+          return;
+        }
+        finalUsd = parsedAmount / effectiveBcvRate;
+      }
+
+      const roundedUsd = Math.round(finalUsd * 100) / 100;
+      if (roundedUsd <= 0) {
+        Alert.alert('Error', 'El monto equivalente en dólares debe ser mayor a cero');
+        setSubmitting(false);
+        return;
+      }
+
       await loansApi.createLoan({
-        amount_usd: parsedAmount,
+        amount_usd: roundedUsd,
         motive: motive,
         estimated_repayment_date: estimatedDate || null,
         accepted_payment_methods: acceptedMethods
@@ -494,6 +595,15 @@ export default function LoansScreen() {
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Error', 'El monto debe ser válido'); return;
     }
+
+    const totalContributed = selectedLoan ? ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0)) : 0;
+    const remainingToFund = selectedLoan ? Math.max(0, selectedLoan.amount_usd - totalContributed) : 0;
+
+    if (parsedAmount > remainingToFund + 0.01) {
+      Alert.alert('Monto Excedido', `El monto máximo restante para fondear este préstamo es de $${remainingToFund.toFixed(2)}.`);
+      return;
+    }
+
     setPledging(true);
     try {
       await loansApi.contributeToLoan(selectedLoan.id, parsedAmount);
@@ -522,7 +632,7 @@ export default function LoansScreen() {
       return;
     }
     if (!notifyMethod) {
-      Alert.alert('Error', 'Debes elegir el método de pago que usaste'); return;
+      Alert.alert('Error', 'Debes elegir el método de pago'); return;
     }
     setNotifying(true);
     try {
@@ -704,18 +814,30 @@ export default function LoansScreen() {
     const isMine = user && user.id === item.requester_id;
     const canRepay = isMine && (item.status === 'funded' || item.status === 'partial');
     
+    const totalContributed = (item.amount_pledged || 0) + (item.amount_paid || 0) + (item.amount_verified || 0);
+    const percentage = item.amount_usd > 0 ? Math.min(100, Math.round((totalContributed / item.amount_usd) * 100)) : 0;
+    const isFullyFunded = item.status === 'funded' || percentage >= 100;
+
     let statusLabel = item.status;
     if (item.status === 'pending') statusLabel = 'Buscando fondeo';
-    if (item.status === 'partial') statusLabel = 'Fondeo parcial';
-    if (item.status === 'funded') statusLabel = '100% Fondeado';
+    if (item.status === 'partial') statusLabel = `${percentage}% Fondeado`;
+    if (item.status === 'funded') statusLabel = percentage < 100 ? `${percentage}% Fondeado` : '100% Fondeado';
     if (item.status === 'repaid') statusLabel = 'Saldado ✅';
     if (item.status === 'cancelled') statusLabel = 'Cancelado';
     
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={[styles.badge, item.status === 'funded' && {backgroundColor: 'rgba(34, 197, 94, 0.2)'}]}>
-            <Text style={[styles.badgeText, item.status === 'funded' && {color: '#4ade80'}]}>
+          <View style={[
+            styles.badge, 
+            isFullyFunded && {backgroundColor: 'rgba(34, 197, 94, 0.2)'},
+            (!isFullyFunded && percentage > 0) && {backgroundColor: 'rgba(59, 130, 246, 0.2)'}
+          ]}>
+            <Text style={[
+              styles.badgeText, 
+              isFullyFunded && {color: '#4ade80'},
+              (!isFullyFunded && percentage > 0) && {color: '#60a5fa'}
+            ]}>
               {statusLabel}
             </Text>
           </View>
@@ -746,25 +868,59 @@ export default function LoansScreen() {
         {item.contributions && item.contributions.length > 0 && (
           <View style={styles.contribsList}>
             <Text style={styles.contribsTitle}>Aportes en curso:</Text>
-            {item.contributions.map(c => (
-              <View key={c.id} style={styles.contribRow}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.contribName}>{c.funder_name} - ${c.amount_usd}</Text>
-                  <Text style={styles.contribStatus}>
-                    {c.status === 'pledged' ? '⏳ Prometido (Por pagar)' : 
-                     c.status === 'paid' ? '🟡 Pagado (Por validar)' : 
-                     c.status === 'repay_notified' ? '🔄 Devolución notificada (Por validar)' :
-                     c.status === 'repaid' ? '🎉 Devuelto' : '✅ Validado'}
-                  </Text>
-                  {c.payment_method ? (
-                    <Text style={{color: '#94a3b8', fontSize: 12}}>Vía {c.payment_method}</Text>
-                  ) : null}
-                  {c.reference_text ? (
-                    <Text style={{color: '#94a3b8', fontSize: 12}}>Referencia: {c.reference_text}</Text>
-                  ) : null}
+            {item.contributions.map(c => {
+              // Paleta de color según estado del aporte
+              const csMap = {
+                pledged:       { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+                paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+                verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+                repay_notified:{ bg: 'rgba(168, 85, 247, 0.10)', border: '#a855f7', badgeBg: '#7e22ce', badgeText: '#e9d5ff', icon: '🔄', label: 'Devolución en revisión' },
+                repaid:        { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
+              };
+              const cs = csMap[c.status] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: c.status };
+              return (
+                <View key={c.id} style={[styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}>
+                  {/* Cabecera: nombre + monto + badge de estado */}
+                  <View style={styles.contribCardHeader}>
+                    <View style={styles.contribAvatarWrap}>
+                      <View style={[styles.contribAvatar, { backgroundColor: cs.border + '33', borderColor: cs.border }]}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: cs.border }}>
+                          {c.funder_name ? c.funder_name.trim()[0].toUpperCase() : '?'}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.contribName}>{c.funder_name}</Text>
+                        <Text style={styles.contribAmountLine}>${c.amount_usd} USD</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
+                      <Text style={{ fontSize: 11 }}>{cs.icon}</Text>
+                      <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
+                    </View>
+                  </View>
+
+                  {/* Detalles de pago */}
+                  {(c.payment_method || c.reference_text) && (
+                    <View style={styles.contribMeta}>
+                      {c.payment_method ? (
+                        <View style={styles.contribMetaRow}>
+                          <Text style={styles.contribMetaIcon}>💳</Text>
+                          <Text style={styles.contribMetaText}>{c.payment_method}</Text>
+                        </View>
+                      ) : null}
+                      {c.reference_text ? (
+                        <View style={styles.contribMetaRow}>
+                          <Text style={styles.contribMetaIcon}>#</Text>
+                          <Text style={styles.contribMetaText}>{c.reference_text}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
+
+                  {/* Comprobante de aporte */}
                   {c.receipt_url ? (
                     <TouchableOpacity 
-                      style={styles.receiptLinkBtn} 
+                      style={[styles.receiptLinkBtn, { borderColor: cs.border + '55', marginTop: 8 }]} 
                       onPress={() => openReceiptViewer(c.receipt_url, `Comprobante de Aporte - ${c.funder_name}`, {
                         method: c.payment_method,
                         reference: c.reference_text,
@@ -774,68 +930,76 @@ export default function LoansScreen() {
                       <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
                     </TouchableOpacity>
                   ) : null}
-                  {c.repayments && c.repayments.map(r => (
-                     <View key={r.id} style={{marginTop: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 5}}>
-                        <Text style={{color: '#f8fafc', fontSize: 12}}>↪ Devolución de ${r.amount_usd}</Text>
-                        <Text style={{color: r.status === 'paid' ? '#eab308' : '#10b981', fontSize: 11}}>
-                           Estatus: {r.status === 'paid' ? 'Por validar' : 'Validada'}
-                        </Text>
-                        {r.payment_method ? (
-                          <Text style={{color: '#94a3b8', fontSize: 11}}>Vía {r.payment_method}</Text>
-                        ) : null}
-                        {r.reference_text ? (
-                          <Text style={{color: '#94a3b8', fontSize: 11}}>Ref: {r.reference_text}</Text>
-                        ) : null}
-                        {r.receipt_url ? (
-                          <TouchableOpacity 
-                            style={styles.receiptLinkBtnSmall}
-                            onPress={() => openReceiptViewer(r.receipt_url, 'Comprobante de Devolución', {
-                              method: r.payment_method,
-                              reference: r.reference_text,
-                              amount: `$${r.amount_usd}`
-                            })}
-                          >
-                            <Text style={styles.receiptLinkTextSmall}>🧾 Ver comprobante</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {c.funder_id === user?.id && r.status === 'paid' && (
-                          <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981', marginTop: 5, alignSelf: 'flex-start'}]} onPress={() => handleVerifyRepayment(r.id)}>
-                            <Text style={styles.smallActionText}>Validar Devolución</Text>
-                          </TouchableOpacity>
-                        )}
-                     </View>
-                  ))}
-                </View>
-                
-                <View style={{flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'wrap', marginTop: 5}}>
-                  {c.funder_id === user?.id && c.status === 'pledged' && (
-                    <>
-                      <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#ef4444'}]} onPress={() => handleCancelContribution(c.id)}>
-                        <Text style={{color: '#ef4444', fontSize: 12, fontWeight: 'bold'}}>❌</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => handlePressNotify(c, item)}>
-                        <Text style={styles.smallActionText}>Notificar Pago</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                  {isMine && c.status === 'paid' && (
-                    <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#10b981'}]} onPress={() => handleVerify(c.id)}>
-                      <Text style={styles.smallActionText}>Validar</Text>
-                    </TouchableOpacity>
-                  )}
-                  {isMine && c.status === 'verified' && (
-                    <TouchableOpacity style={[styles.smallActionBtn, {backgroundColor: '#f59e0b'}]} onPress={() => handlePressRepay(c, item)}>
-                      <Text style={styles.smallActionText}>Devolver</Text>
-                    </TouchableOpacity>
-                  )}
-                  {isMine && c.status === 'repay_notified' && (
-                    <View style={[styles.smallActionBtn, {backgroundColor: 'rgba(234, 179, 8, 0.15)', borderWidth: 1, borderColor: '#eab308'}]}>
-                      <Text style={{color: '#eab308', fontSize: 12, fontWeight: '600'}}>⏳ Devolución en validación</Text>
+
+                  {/* Devoluciones anidadas */}
+                  {c.repayments && c.repayments.length > 0 && (
+                    <View style={styles.repaymentsList}>
+                      {c.repayments.map(r => {
+                        const repayPending = r.status === 'paid';
+                        return (
+                          <View key={r.id} style={[styles.repaymentRow, { borderColor: repayPending ? '#eab308' : '#10b981' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <Text style={{ fontSize: 13 }}>{repayPending ? '⏳' : '✅'}</Text>
+                              <Text style={[styles.repaymentAmount, { color: repayPending ? '#facc15' : '#34d399' }]}>
+                                Devolución ${r.amount_usd}
+                              </Text>
+                              <View style={[styles.repaymentBadge, { backgroundColor: repayPending ? 'rgba(202,138,4,0.2)' : 'rgba(16,185,129,0.2)', borderColor: repayPending ? '#ca8a04' : '#059669' }]}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: repayPending ? '#fde047' : '#6ee7b7' }}>
+                                  {repayPending ? 'Por validar' : 'Validada'}
+                                </Text>
+                              </View>
+                            </View>
+                            {r.payment_method ? (<Text style={styles.contribMetaText}>💳 {r.payment_method}</Text>) : null}
+                            {r.reference_text ? (<Text style={styles.contribMetaText}># {r.reference_text}</Text>) : null}
+                            {r.receipt_url ? (
+                              <TouchableOpacity 
+                                style={styles.receiptLinkBtnSmall}
+                                onPress={() => openReceiptViewer(r.receipt_url, 'Comprobante de Devolución', {
+                                  method: r.payment_method,
+                                  reference: r.reference_text,
+                                  amount: `$${r.amount_usd}`
+                                })}
+                              >
+                                <Text style={styles.receiptLinkTextSmall}>🧾 Ver comprobante</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            {c.funder_id === user?.id && r.status === 'paid' && (
+                              <TouchableOpacity style={[styles.smallActionBtn, { backgroundColor: '#10b981', marginTop: 6, alignSelf: 'flex-start' }]} onPress={() => handleVerifyRepayment(r.id)}>
+                                <Text style={styles.smallActionText}>Validar Devolución</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        );
+                      })}
                     </View>
                   )}
+
+                  {/* Acciones */}
+                  <View style={styles.contribActions}>
+                    {c.funder_id === user?.id && c.status === 'pledged' && (
+                      <>
+                        <TouchableOpacity style={styles.contribActionDanger} onPress={() => handleCancelContribution(c.id)}>
+                          <Text style={styles.contribActionDangerText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.contribActionPrimary} onPress={() => handlePressNotify(c, item)}>
+                          <Text style={styles.contribActionPrimaryText}>📤 Notificar Pago</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {isMine && c.status === 'paid' && (
+                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]} onPress={() => handleVerify(c.id)}>
+                        <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isMine && c.status === 'verified' && (
+                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#b45309' }]} onPress={() => handlePressRepay(c, item)}>
+                        <Text style={styles.contribActionPrimaryText}>↩ Devolver</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
         
@@ -849,7 +1013,7 @@ export default function LoansScreen() {
               )}
             </View>
           ) : (
-            (item.status === 'pending' || item.status === 'partial') && (
+            (!isFullyFunded && item.status !== 'repaid' && item.status !== 'cancelled') && (
               <TouchableOpacity 
                 style={styles.actionButton} 
                 onPress={() => handlePressPledge(item)}
@@ -918,6 +1082,14 @@ export default function LoansScreen() {
         </TouchableOpacity>
       )}
 
+      {(isOffline || connectionError) && loans.length > 0 ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando préstamos guardados"
+          onRetry={handleRetryLoans}
+          loading={retryingLoans}
+        />
+      ) : null}
+
       <View style={styles.tabsContainer}>
         <TouchableOpacity style={[styles.tab, filter === 'active' && styles.activeTab]} onPress={() => setFilter('active')}>
           <Text style={[styles.tabText, filter === 'active' && styles.activeTabText]}>Vigentes</Text>
@@ -939,9 +1111,18 @@ export default function LoansScreen() {
           renderItem={renderLoanCard}
           contentContainerStyle={{ padding: 15 }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
-            </Text>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar los datos de la mutual ni los préstamos. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryLoans}
+                loading={retryingLoans}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                {!activeOrg ? 'Selecciona una mutual arriba para ver los préstamos' : 'No hay préstamos para esta vista'}
+              </Text>
+            )
           }
         />
       )}
@@ -957,12 +1138,85 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Solicitar Préstamo</Text>
               
-              <Text style={styles.label}>Monto (USD)</Text>
-              <TextInput style={styles.input} keyboardType="numeric" value={amount} onChangeText={setAmount} />
+              <View style={styles.currencySelectorContainer}>
+                {/* Selector Toggle [ $ USD | Bs. VES ] con memoria */}
+                <Text style={styles.label}>Moneda del préstamo</Text>
+                <View style={styles.toggleContainer}>
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, loanCurrency === 'USD' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleCurrency('USD')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, loanCurrency === 'USD' && styles.toggleBtnTextActive]}>
+                      $ USD (Dólares)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, loanCurrency === 'VES' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleCurrency('VES')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, loanCurrency === 'VES' && styles.toggleBtnTextActive]}>
+                      Bs. VES (Bolívares)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Campo de Entrada Único */}
+                <View style={styles.currencyFieldBlock}>
+                  <View style={styles.currencyHeaderRow}>
+                    <Text style={styles.label}>
+                      {loanCurrency === 'USD' ? 'Monto a solicitar en Dólares' : 'Monto a solicitar en Bolívares'}
+                    </Text>
+                    <View style={[styles.currencyActiveBadge, { borderColor: theme.cardBorder, backgroundColor: theme.badgeBg }]}>
+                      <Text style={[styles.currencyActiveBadgeText, { color: theme.accent }]}>
+                        {loanCurrency === 'USD' ? 'USD ($)' : 'Bs. (VES)'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.currencyInputRow}>
+                    <Text style={styles.currencyPrefixText}>{loanCurrency === 'USD' ? '$' : 'Bs.'}</Text>
+                    <TextInput 
+                      style={[styles.input, styles.currencyInnerInput, loanCurrency === 'VES' && { paddingLeft: 48 }]} 
+                      keyboardType="decimal-pad" 
+                      value={amount} 
+                      onChangeText={setAmount}
+                      onBlur={handleAmountBlur}
+                      placeholder={loanCurrency === 'USD' ? "Ej: 50,00" : "Ej: 2.710,00"}
+                      placeholderTextColor="#64748b"
+                    />
+                  </View>
+                </View>
+
+                {/* Tarjeta de Contravalor Dinámico */}
+                <View style={styles.countervalueCard}>
+                  <View style={styles.countervalueHeader}>
+                    <Text style={styles.countervalueLabel}>
+                      {loanCurrency === 'USD' ? 'Equivalente en Bolívares:' : 'Equivalente en Dólares:'}
+                    </Text>
+                    <Text style={styles.countervalueRateTag}>
+                      Tasa: {effectiveBcvRate ? `${formatVE(effectiveBcvRate)} Bs/USD` : 'Consultando...'}
+                    </Text>
+                  </View>
+                  <Text style={styles.countervalueMainAmount}>
+                    {loanCurrency === 'USD'
+                      ? `≈ Bs. ${countervalueBs !== null ? formatVE(countervalueBs) : '0,00'}`
+                      : `≈ $ ${countervalueUsd !== null ? formatVE(countervalueUsd) : '0,00'} USD`
+                    }
+                  </Text>
+                  <Text style={styles.countervalueSubtext}>
+                    {loanCurrency === 'USD'
+                      ? '💡 Contravalor dinámico calculado a la tasa oficial del día.'
+                      : '💡 El préstamo se registrará por su equivalente en USD a la tasa del día.'}
+                  </Text>
+                </View>
+              </View>
               
               <Text style={styles.label}>Fecha Límite Sugerida</Text>
               <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
@@ -1039,7 +1293,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 40 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 40 : 15 }}
             >
               {!selectedConfigMethod ? (
                 <>
@@ -1313,7 +1567,12 @@ export default function LoansScreen() {
         >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Prometer Aporte 🤝</Text>
-            <Text style={{color: '#94a3b8', marginBottom: 15}}>Vas a prometer un aporte para: {selectedLoan?.requester_name}</Text>
+            <Text style={{color: '#94a3b8', marginBottom: 5}}>Vas a prometer un aporte para: {selectedLoan?.requester_name}</Text>
+            {selectedLoan && (
+              <Text style={{color: '#38bdf8', fontSize: 13, fontWeight: '600', marginBottom: 15}}>
+                Faltan por fondear: ${Math.max(0, selectedLoan.amount_usd - ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0))).toFixed(2)} (de ${selectedLoan.amount_usd})
+              </Text>
+            )}
             
             <Text style={styles.label}>Monto a prometer (USD)</Text>
             <TextInput style={styles.input} keyboardType="numeric" value={pledgeAmount} onChangeText={setPledgeAmount} placeholder="Ej: 50" placeholderTextColor="#475569" />
@@ -1339,7 +1598,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Notificar Pago 💸</Text>
               <Text style={{color: '#94a3b8', marginBottom: 15}}>Notificando pago de ${selectedContrib?.amount_usd}</Text>
@@ -1359,7 +1618,7 @@ export default function LoansScreen() {
                 </View>
               )}
               
-              <Text style={styles.label}>Método que usaste</Text>
+              <Text style={styles.label}>¿Cómo transfieres?</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
@@ -1508,7 +1767,7 @@ export default function LoansScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={true}
               nestedScrollEnabled={true}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              contentContainerStyle={{ flexGrow: 1, paddingRight: 12, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>Devolver Dinero</Text>
               
@@ -1537,7 +1796,7 @@ export default function LoansScreen() {
               <Text style={styles.label}>Monto a devolver (USD)</Text>
               <TextInput style={styles.input} keyboardType="numeric" value={repayAmount} onChangeText={setRepayAmount} placeholder="Ej. 10" placeholderTextColor="#475569" />
 
-              <Text style={styles.label}>¿Cómo le transferiste?</Text>
+              <Text style={styles.label}>¿Cómo transfieres?</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15}}>
                 {selectedContrib?.funder_payment_methods_json && Object.keys(JSON.parse(selectedContrib.funder_payment_methods_json)).map(method => {
                   const isSelected = notifyMethod === method;
@@ -1755,10 +2014,10 @@ export default function LoansScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, backgroundColor: theme.screenBg },
   header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   title: { fontSize: 28, fontWeight: 'bold', color: '#f8fafc' },
-  addButton: { backgroundColor: '#3b82f6', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
+  addButton: { backgroundColor: theme.accent, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, justifyContent: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold' },
   bcvRateContainer: {
     flexDirection: 'row',
@@ -1831,11 +2090,11 @@ const styles = StyleSheet.create({
   },
   tabsContainer: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 15, gap: 15 },
   tab: { paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: '#3b82f6' },
+  activeTab: { borderBottomColor: theme.accent },
   tabText: { color: '#94a3b8', fontSize: 16, fontWeight: 'bold' },
-  activeTabText: { color: '#3b82f6' },
+  activeTabText: { color: theme.accent },
   emptyText: { color: '#94a3b8', textAlign: 'center', marginTop: 50 },
-  card: { backgroundColor: '#1e293b', borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  card: { backgroundColor: theme.cardBg, borderRadius: 12, padding: 15, marginBottom: 15, borderWidth: 1, borderColor: theme.cardBorder },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   badge: { backgroundColor: 'rgba(59, 130, 246, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeText: { color: '#60a5fa', fontSize: 12, fontWeight: 'bold' },
@@ -1846,11 +2105,100 @@ const styles = StyleSheet.create({
   methodsText: { color: '#cbd5e1', fontSize: 12, marginBottom: 10, fontStyle: 'italic' },
   progressContainer: { backgroundColor: 'rgba(0,0,0,0.2)', padding: 10, borderRadius: 8, marginBottom: 10 },
   progressText: { color: '#cbd5e1', fontSize: 13, marginBottom: 2 },
-  contribsList: { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.02)', padding: 10, borderRadius: 8 },
-  contribsTitle: { color: '#f8fafc', fontWeight: 'bold', marginBottom: 8, fontSize: 13 },
-  contribRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  contribName: { color: '#e2e8f0', fontSize: 14, fontWeight: 'bold' },
-  contribStatus: { color: '#94a3b8', fontSize: 12 },
+  contribsList: { marginTop: 12, gap: 8 },
+  contribsTitle: { color: '#94a3b8', fontWeight: '700', marginBottom: 6, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
+  // Nuevo diseño de tarjeta de aporte
+  contribCard: {
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 0,
+  },
+  contribCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  contribAvatarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  contribAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contribName: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
+  contribAmountLine: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
+  contribStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  contribStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  contribMeta: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 6,
+    padding: 7,
+    marginTop: 4,
+    gap: 3,
+  },
+  contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  contribMetaIcon: { fontSize: 12, width: 16 },
+  contribMetaText: { color: '#94a3b8', fontSize: 12 },
+  contribActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  contribActionPrimary: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  contribActionPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  contribActionDanger: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  contribActionDangerText: { color: '#f87171', fontSize: 13, fontWeight: '700' },
+  repaymentsList: { marginTop: 8, gap: 6 },
+  repaymentRow: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 6,
+    borderWidth: 1,
+    padding: 8,
+  },
+  repaymentAmount: { fontSize: 13, fontWeight: '700' },
+  repaymentBadge: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   receiptLinkBtn: {
     backgroundColor: 'rgba(59, 130, 246, 0.12)',
     borderWidth: 1,
@@ -1884,24 +2232,136 @@ const styles = StyleSheet.create({
   smallActionBtn: { backgroundColor: '#3b82f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   smallActionText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   cardFooter: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 15, marginTop: 5 },
-  actionButton: { backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, alignItems: 'center' },
+  actionButton: { backgroundColor: theme.accent, padding: 12, borderRadius: 8, alignItems: 'center' },
   actionButtonText: { color: '#fff', fontWeight: 'bold' },
   cancelButton: { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' },
   cancelButtonText: { color: '#ef4444', fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   modalOverlayShifted: { justifyContent: 'flex-start', paddingTop: Platform.OS === 'android' ? 35 : 55 },
-  modalContent: { backgroundColor: '#1e293b', borderRadius: 16, padding: 25 },
+  modalContent: { backgroundColor: theme.cardBg, borderRadius: 16, padding: 22, paddingRight: 14 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
   label: { color: '#94a3b8', marginBottom: 5, fontSize: 14 },
   input: { backgroundColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', padding: 12, marginBottom: 15 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 },
+  currencySelectorContainer: {
+    marginBottom: 15,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.accent,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  toggleBtnText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  toggleBtnTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  currencyFieldBlock: {
+    marginBottom: 6,
+  },
+  currencyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  currencyActiveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  currencyActiveBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  currencyInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  currencyPrefixText: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 1,
+    color: '#94a3b8',
+    fontWeight: '700',
+    fontSize: 15,
+    top: 13,
+  },
+  currencyInnerInput: {
+    flex: 1,
+    paddingLeft: 36,
+    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  countervalueCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  countervalueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  countervalueLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  countervalueRateTag: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  countervalueMainAmount: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginVertical: 2,
+  },
+  countervalueSubtext: {
+    color: '#64748b',
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10, paddingRight: 4 },
   modalCancel: { padding: 12, borderRadius: 8 },
   modalCancelText: { color: '#94a3b8', fontWeight: 'bold' },
-  modalSubmit: { backgroundColor: '#3b82f6', padding: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
+  modalSubmit: { backgroundColor: theme.accent, padding: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   modalSubmitText: { color: '#fff', fontWeight: 'bold' },
-  methodChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#3b82f6', backgroundColor: 'transparent' },
-  methodChipSelected: { backgroundColor: '#3b82f6' },
-  methodChipText: { color: '#3b82f6', fontSize: 13, fontWeight: 'bold' },
+  methodChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.accent, backgroundColor: 'transparent' },
+  methodChipSelected: { backgroundColor: theme.accent },
+  methodChipText: { color: theme.accent, fontSize: 13, fontWeight: 'bold' },
   methodPill: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent', alignItems: 'center' },
   methodPillActive: { borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' },
   methodPillText: { color: '#94a3b8', fontSize: 14 },
@@ -1919,7 +2379,7 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   receiptModalCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 16,
     maxHeight: '90%',
     overflow: 'hidden',
