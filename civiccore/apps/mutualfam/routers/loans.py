@@ -7,7 +7,7 @@ from datetime import date
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import User
 import json
-from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig, RepaymentStatus, LoanRepayment
+from models import LoanRequest, LoanStatus, LoanContribution, ContributionStatus, UserPaymentConfig, RepaymentStatus, LoanRepayment, utcnow
 from routers.membership import get_current_org_member
 from services.telegram_bot import send_telegram_notification, send_telegram_photo
 from services.realtime import notify_org
@@ -67,6 +67,25 @@ class LoanRequestResponse(BaseModel):
     class Config:
         from_attributes = True
 
+def user_has_payment_methods(user_id: int, db: Session) -> bool:
+    """Verifica si el usuario tiene al menos un método de pago configurado y con datos válidos."""
+    config = db.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == user_id).first()
+    if not config or not config.payment_methods_json:
+        return False
+    try:
+        data = json.loads(config.payment_methods_json)
+        if not isinstance(data, dict):
+            return False
+        for method, val in data.items():
+            if method == "Pago Móvil" and isinstance(val, dict):
+                if val.get("banco") and val.get("cedula") and val.get("telefono"):
+                    return True
+            elif isinstance(val, str) and val.strip():
+                return True
+        return False
+    except Exception:
+        return False
+
 @router.post("/", response_model=LoanRequestResponse)
 def create_loan_request(
     loan: LoanRequestCreate, 
@@ -75,6 +94,12 @@ def create_loan_request(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de pedir prestado o solicitar un préstamo."
+        )
         
     new_loan = LoanRequest(
         organization_id=org_member["organization"].id,
@@ -187,6 +212,24 @@ def get_loan_requests(
             accepted_pm = json.loads(l.accepted_payment_methods)
         except:
             accepted_pm = []
+
+        # Auto-corrección y sincronización del estatus real del préstamo
+        total_active = amt_pledged + amt_paid + amt_verified
+        if l.status in [LoanStatus.PENDING, LoanStatus.PARTIAL, LoanStatus.FUNDED]:
+            if total_active >= (l.amount_usd - 0.001):
+                expected_status = LoanStatus.FUNDED
+            elif total_active > 0:
+                expected_status = LoanStatus.PARTIAL
+            else:
+                expected_status = LoanStatus.PENDING
+
+            if l.status != expected_status:
+                l.status = expected_status
+                if expected_status == LoanStatus.FUNDED and not l.funded_at:
+                    l.funded_at = utcnow()
+                elif expected_status != LoanStatus.FUNDED:
+                    l.funded_at = None
+                db.commit()
             
         response.append({
             "id": l.id,
@@ -254,6 +297,12 @@ def contribute_to_loan(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de aportar a un préstamo."
+        )
         
     loan = db.query(LoanRequest).filter(
         LoanRequest.id == loan_id,
@@ -262,9 +311,25 @@ def contribute_to_loan(
     
     if not loan:
         raise HTTPException(status_code=404, detail="Préstamo no encontrado")
-        
-    if loan.status in [LoanStatus.FUNDED, LoanStatus.REPAID, LoanStatus.CANCELLED]:
-        raise HTTPException(status_code=400, detail="Este préstamo ya no acepta aportes")
+
+    from sqlalchemy import func
+    total_current = db.query(func.sum(LoanContribution.amount_usd)).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.status != ContributionStatus.REJECTED
+    ).scalar() or 0.0
+
+    if total_current >= (loan.amount_usd - 0.001) or loan.status in [LoanStatus.REPAID, LoanStatus.CANCELLED]:
+        raise HTTPException(status_code=400, detail="Este préstamo ya no acepta aportes porque ya está 100% fondeado.")
+
+    remaining = loan.amount_usd - total_current
+    if contrib.amount_usd <= 0:
+        raise HTTPException(status_code=400, detail="El monto del aporte debe ser mayor a 0.")
+
+    if contrib.amount_usd > (remaining + 0.001):
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto a aportar (${contrib.amount_usd:.2f}) supera el restante por fondear (${max(0.0, remaining):.2f})."
+        )
         
     existing_contrib = db.query(LoanContribution).filter(
         LoanContribution.loan_request_id == loan.id,
@@ -275,8 +340,6 @@ def contribute_to_loan(
     if existing_contrib:
         existing_contrib.amount_usd += contrib.amount_usd
         new_contrib = existing_contrib
-        db.commit()
-        db.refresh(new_contrib)
     else:
         new_contrib = LoanContribution(
             loan_request_id=loan.id,
@@ -285,21 +348,19 @@ def contribute_to_loan(
             status=ContributionStatus.PLEDGED
         )
         db.add(new_contrib)
-        db.commit()
-        db.refresh(new_contrib)
+
+    db.commit()
+    db.refresh(new_contrib)
     
-    # Validar sumatoria de aportes
-    from sqlalchemy import func
-    
+    # Recalcular sumatoria real de aportes en la base de datos
     total_contributed = db.query(func.sum(LoanContribution.amount_usd)).filter(
         LoanContribution.loan_request_id == loan.id,
         LoanContribution.status != ContributionStatus.REJECTED
     ).scalar() or 0.0
     
-    total_contributed += contrib.amount_usd
-    
-    if total_contributed >= loan.amount_usd:
+    if total_contributed >= (loan.amount_usd - 0.001):
         loan.status = LoanStatus.FUNDED
+        loan.funded_at = utcnow()
     else:
         loan.status = LoanStatus.PARTIAL
         
@@ -368,6 +429,12 @@ def notify_payment(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de notificar pagos."
+        )
         
     contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
     if not contrib:
@@ -458,6 +525,12 @@ def notify_return_payment(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    if not user_has_payment_methods(org_member["user"].id, db):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes cargar por lo menos un dato de pago antes de devolver un préstamo."
+        )
         
     contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
     if not contrib:
@@ -581,4 +654,11 @@ def verify_return_payment(
     
     notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
     return {"message": "Devolución verificada exitosamente"}
+
+
+@router.post("/check-reminders")
+def trigger_repayment_reminders(force: bool = False, db: Session = Depends(get_db)):
+    """Ejecuta la verificación y envío de recordatorios push de vencimiento de préstamos."""
+    from services.repayment_reminders import check_and_send_repayment_reminders
+    return check_and_send_repayment_reminders(db, force=force)
 

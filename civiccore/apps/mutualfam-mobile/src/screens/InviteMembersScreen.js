@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Share, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import apiClient, { authApi } from '../api/client';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenTitle from '../components/ScreenTitle';
 import AssemblyScreen from './AssemblyScreen';
 import { OrgContext } from '../context/OrgContext';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, handleLimitError } from '../utils/errors';
+import theme from '../utils/theme';
 
 export default function InviteMembersScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('miembros'); // 'miembros' | 'asamblea'
@@ -19,6 +21,7 @@ export default function InviteMembersScreen({ navigation }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [debugOrgId, setDebugOrgId] = useState('');
   const [members, setMembers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
 
   useEffect(() => {
@@ -74,8 +77,12 @@ export default function InviteMembersScreen({ navigation }) {
       }
       setOrgData(activeOrg);
       try {
-        const membersData = await authApi.getMembers(activeOrg.id);
+        const [membersData, meData] = await Promise.all([
+          authApi.getMembers(activeOrg.id).catch(() => []),
+          authApi.me().catch(() => null)
+        ]);
         setMembers(membersData);
+        if (meData) setCurrentUser(meData);
       } catch (memErr) {
         console.warn("Could not fetch members", memErr);
       }
@@ -109,15 +116,17 @@ export default function InviteMembersScreen({ navigation }) {
       
       const code = data.code || data.token;
       const shareMessage = (!__DEV__ && process.env.EXPO_PUBLIC_INVITE_URL_BASE)
-        ? `¡Únete a nuestra Mutual Familiar! 🤝\n\n1️⃣ Abre este enlace y sigue los pasos para instalar la app:\n${inviteUrl}\n\n2️⃣ Si la app te pide un código de invitación, usa:\n*${code}*`
-        : inviteUrl;
+        ? `¡Únete a nuestra Mutual Familiar! 🤝\n\n1️⃣ Abre este enlace y sigue los pasos para instalar la app:\n${inviteUrl}\n\n2️⃣ Si la app te pide un código de invitación, usa:\n*${code}*\n\n🔒 Nota: Este enlace y código es personal y de un solo uso para una persona.`
+        : `¡Únete a nuestra Mutual Familiar! 🤝\n${inviteUrl}\nCódigo: *${code}*\n\n🔒 Nota: Este enlace y código es personal y de un solo uso para una persona.`;
       
       await Share.share({
         message: shareMessage,
       });
     } catch (e) {
       console.error('Error generating invite:', e);
-      Alert.alert('Error', getErrorMessage(e, 'No se pudo generar la invitación'));
+      if (!handleLimitError(e, 'Límite de Miembros', { mutualName: activeOrg?.name })) {
+        Alert.alert('Error', getErrorMessage(e, 'No se pudo generar la invitación'));
+      }
     } finally {
       setGenerating(false);
     }
@@ -173,21 +182,37 @@ export default function InviteMembersScreen({ navigation }) {
       ) : (
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <View style={[styles.card, { marginBottom: 20 }]}>
-            <Text style={styles.cardTitle}>Miembros Actuales</Text>
+            <Text style={styles.cardTitle}>Miembros Actuales ({members.length})</Text>
             {members.length === 0 ? (
               <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
             ) : (
-              members.map(member => (
-                <View key={member.id} style={styles.memberRow}>
-                  <View style={styles.memberAvatar}>
-                    <Text style={styles.memberAvatarText}>{(member.first_name || 'U')[0]}</Text>
+              members.map(member => {
+                const isMe = (currentUser?.id && member.id === currentUser.id) ||
+                             (currentUser?.email && member.email?.toLowerCase() === currentUser.email?.toLowerCase());
+                return (
+                  <View
+                    key={member.id}
+                    style={[styles.memberRow, isMe && styles.memberRowHighlight]}
+                  >
+                    <View style={[styles.memberAvatar, isMe && styles.memberAvatarHighlight]}>
+                      <Text style={styles.memberAvatarText}>{(member.first_name || 'U')[0]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.memberName, isMe && styles.memberNameHighlight]}>
+                          {member.first_name} {member.last_name}
+                        </Text>
+                        {isMe && (
+                          <View style={styles.youBadge}>
+                            <Text style={styles.youBadgeText}>Tú</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.memberRole}>{member.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.memberName}>{member.first_name} {member.last_name}</Text>
-                    <Text style={styles.memberRole}>{member.role === 'founder' ? 'Fundador' : 'Miembro'}</Text>
-                  </View>
-                </View>
-              ))
+                );
+              })
             )}
           </View>
 
@@ -195,8 +220,16 @@ export default function InviteMembersScreen({ navigation }) {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
               <Text style={styles.cardText}>
-                Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas.
+                Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante los primeros 15 días.
               </Text>
+
+              <View style={styles.singleUseNotice}>
+                <Ionicons name="information-circle-outline" size={18} color="#38bdf8" style={{ marginRight: 8, marginTop: 2 }} />
+                <Text style={styles.singleUseNoticeText}>
+                  <Text style={{ fontWeight: 'bold', color: '#38bdf8' }}>Enlace único y personal: </Text>
+                  Cada invitación es de un solo uso para una persona. Si deseas invitar a varios familiares, genera un enlace para cada uno.
+                </Text>
+              </View>
               
               <View style={styles.timerContainer}>
                 <Text style={styles.timerLabel}>Tiempo restante:</Text>
@@ -238,7 +271,7 @@ export default function InviteMembersScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 16,
     paddingTop: 16,
   },
@@ -269,9 +302,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700'
   },
+  },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -282,7 +316,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
   },
@@ -350,7 +384,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -368,5 +402,43 @@ const styles = StyleSheet.create({
   memberRole: {
     color: '#94a3b8',
     fontSize: 14,
-  }
+  },
+  memberRowHighlight: {
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.45)',
+  },
+  memberAvatarHighlight: {
+    backgroundColor: '#2563eb',
+  },
+  memberNameHighlight: {
+    color: '#60a5fa',
+  },
+  youBadge: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  youBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  singleUseNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  singleUseNoticeText: {
+    flex: 1,
+    color: '#bae6fd',
+    fontSize: 13,
+    lineHeight: 18,
+  },
 });

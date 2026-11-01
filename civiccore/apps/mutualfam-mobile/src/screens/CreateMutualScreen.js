@@ -3,8 +3,9 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { OrgContext } from '../context/OrgContext';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, handleLimitError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 
 export default function CreateMutualScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -37,7 +38,9 @@ export default function CreateMutualScreen({ navigation }) {
         navigation.replace('SelectMutual');
       }
     } catch (e) {
-      Alert.alert('Error', getErrorMessage(e, 'No se pudo crear la mutual'));
+      if (!handleLimitError(e, 'Límite de Creación')) {
+        Alert.alert('Error', getErrorMessage(e, 'No se pudo crear la mutual'));
+      }
     } finally {
       setLoading(false);
     }
@@ -58,6 +61,11 @@ export default function CreateMutualScreen({ navigation }) {
       </View>
       <Text style={styles.subtitle}>Inicia tu propia familia y administra sus préstamos y fondos.</Text>
       
+      <View style={styles.policyNotice}>
+        <Text style={styles.policyNoticeText}>
+          📌 Cada miembro de la mutual inicial puede crear hasta 1 mutual adicional. Si deseas desplegar tu propia instancia o bot, contáctanos por soporte.
+        </Text>
+      </View>
       <TextInput
         style={styles.input}
         placeholder="Nombre de la familia (ej. Familia Pérez)"
@@ -96,7 +104,7 @@ export default function CreateMutualScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 60,
   },
@@ -132,10 +140,23 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#94a3b8',
-    marginBottom: 30,
+    marginBottom: 16,
+  },
+  policyNotice: {
+    backgroundColor: theme.badgeBg,
+    borderColor: theme.badgeBorder,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  policyNoticeText: {
+    color: theme.accent,
+    fontSize: 13,
+    lineHeight: 18,
   },
   input: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     color: '#f8fafc',
     padding: 15,
     borderRadius: 8,
@@ -143,7 +164,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',

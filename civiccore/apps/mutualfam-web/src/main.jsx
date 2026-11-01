@@ -20,6 +20,23 @@ if (faviconEl) {
   faviconEl.href = envConfig.isQA ? '/favicon-qa.png' : '/favicon.png';
 }
 
+const appleTouchIconEl = document.getElementById('apple-touch-icon');
+if (appleTouchIconEl) {
+  appleTouchIconEl.href = envConfig.isQA ? '/favicon-qa.png' : '/favicon.png';
+}
+
+// Atributo data-env en <html> para tematización CSS (Opción C Híbrida)
+document.documentElement.setAttribute('data-env', envConfig.key);
+
+// Meta theme-color para navegadores
+let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+if (!metaThemeColor) {
+  metaThemeColor = document.createElement('meta');
+  metaThemeColor.name = 'theme-color';
+  document.head.appendChild(metaThemeColor);
+}
+metaThemeColor.content = envConfig.screenBg;
+
 // Adaptador de LocalStorage para la Web
 initCivicCore({
   manifest,

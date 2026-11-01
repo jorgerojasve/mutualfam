@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import User, OrganizationMembership, Organization, OrganizationInvite, InviteStatus, MemberStatus
@@ -106,7 +107,11 @@ def get_current_org_member(request: Request, current_user: User = Depends(get_cu
 class RegisterRequest(BaseModel):
     email: str
     password: str
-    full_name: str
+    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    identifier: Optional[str] = None
+    phone: Optional[str] = None
 
 @router.post("/register")
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
@@ -115,16 +120,28 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="El email ya está registrado")
     
     hashed_pw = get_password_hash(req.password)
-    parts = req.full_name.split(" ", 1)
-    first_name = parts[0]
-    last_name = parts[1] if len(parts) > 1 else ""
     
+    first_name = (req.first_name or "").strip()
+    last_name = (req.last_name or "").strip()
+    
+    if not first_name and req.full_name:
+        parts = req.full_name.strip().split(" ", 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+    elif not last_name and not req.full_name and first_name:
+        parts = first_name.split(" ", 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+
+    if not first_name:
+        first_name = req.email.split("@")[0]
+
     new_user = User(
         email=req.email,
         hashed_password=hashed_pw,
         first_name=first_name,
         last_name=last_name,
-        phone=""
+        phone=req.phone or ""
     )
     db.add(new_user)
     db.commit()
@@ -132,12 +149,22 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     
     return {"message": "Usuario registrado exitosamente", "user_id": new_user.id}
 
+from services.limits import (
+    check_can_create_organization,
+    check_can_join_organization,
+    check_can_create_invite,
+    get_max_members_per_mutual,
+)
+
 class CreateOrgRequest(BaseModel):
     name: str
     description: str = ""
 
 @router.post("/organizations/create")
 def create_organization(req: CreateOrgRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Regla 1: Validar si el usuario puede crear una nueva mutual
+    check_can_create_organization(db, current_user)
+
     org = Organization(
         name=req.name, 
         description=req.description,
@@ -169,13 +196,16 @@ def create_invite(org_id: int, current_org_member: dict = Depends(get_current_or
         
     if not org.grace_period_ends_at or utcnow() > org.grace_period_ends_at.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=403, detail="El período de gracia de 24 horas ha expirado. Debe proponerse en asamblea.")
+
+    # Regla 2: Validar si la mutual ya llegó a su capacidad máxima antes de emitir invitación
+    check_can_create_invite(db, org.id)
         
     token = generate_invite_code(db)
     invite = OrganizationInvite(
         organization_id=org.id,
         created_by_user_id=current_org_member["user"].id,
         token=token,
-        max_uses=None,
+        max_uses=1,  # Las invitaciones son estrictamente únicas y de un solo uso por persona
         expires_at=org.grace_period_ends_at,
         status=InviteStatus.ACTIVE
     )
@@ -191,14 +221,8 @@ class JoinRequest(BaseModel):
 def join_organization(req: JoinRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     invite = find_invite(db, req.token)
     
-    if not invite or invite.status != InviteStatus.ACTIVE:
-        raise HTTPException(status_code=400, detail="Invitación inválida o inactiva")
-        
-    if invite_is_expired(invite, db):
-        raise HTTPException(status_code=400, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
-        
-    if invite.max_uses and invite.uses_count >= invite.max_uses:
-        raise HTTPException(status_code=400, detail="Invitación agotada")
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitación no encontrada")
         
     existing_membership = db.query(OrganizationMembership).filter(
         OrganizationMembership.user_id == current_user.id,
@@ -206,7 +230,28 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
     ).first()
     
     if existing_membership and existing_membership.status == MemberStatus.ACTIVE:
-        raise HTTPException(status_code=400, detail="Ya perteneces a esta mutual como miembro activo")
+        return {"message": "Ya eres miembro de esta mutual", "organization_id": invite.organization_id}
+
+    # Validar si esta invitación ya fue consumida por otro usuario
+    used_by_other = db.query(OrganizationMembership).filter(
+        OrganizationMembership.invited_by_token == invite.token,
+        OrganizationMembership.user_id != current_user.id
+    ).first()
+    
+    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_by_other:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta invitación ya fue utilizada por otra persona. Comunícate con el fundador de la mutual para que te genere una nueva invitación."
+        )
+
+    if invite.status != InviteStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Invitación inválida o inactiva")
+        
+    if invite_is_expired(invite, db):
+        raise HTTPException(status_code=400, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
+
+    # Regla 2: Validar si la mutual ya alcanzó su límite máximo de miembros
+    check_can_join_organization(db, invite.organization_id)
 
     # Si la invitación está vinculada a una propuesta de ingreso de asamblea
     if invite.proposal_id:
@@ -312,22 +357,50 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
 @router.get("/invites/{token}")
 def get_invite_info(token: str, db: Session = Depends(get_db)):
     invite = find_invite(db, token)
-    if not invite or invite.status != InviteStatus.ACTIVE:
-        raise HTTPException(status_code=404, detail="Invitación inválida o expirada")
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitación inválida o no encontrada")
+
+    # Validar si ya fue utilizada por algún miembro
+    used_membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.invited_by_token == invite.token
+    ).first()
+    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_membership:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta invitación ya fue utilizada por otra persona. Comunícate con el fundador de la mutual para que te genere una nueva invitación."
+        )
+
+    if invite.status != InviteStatus.ACTIVE:
+        raise HTTPException(status_code=404, detail="Invitación inválida o inactiva")
+
     if invite_is_expired(invite, db):
-        raise HTTPException(status_code=404, detail="Invitación expirada")
+        raise HTTPException(status_code=404, detail="Invitación expirada. Pídele a quien te invitó que te envíe una nueva.")
         
     org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
     
+    # Validar si la mutual está llena
+    check_can_join_organization(db, invite.organization_id)
+
+    active_count = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == invite.organization_id,
+        OrganizationMembership.status == MemberStatus.ACTIVE
+    ).count()
+
     return {
         "organization_name": org.name,
         "organization_id": org.id,
         "token": invite.token,
-        "code": format_invite_code(invite.token)
+        "code": format_invite_code(invite.token),
+        "member_count": active_count,
+        "max_members": get_max_members_per_mutual()
     }
 
+@router.get("")
+@router.get("/")
 @router.get("/members")
 def get_organization_members(org_member: dict = Depends(get_current_org_member), db: Session = Depends(get_db)):
+    if not org_member or not org_member.get("organization"):
+        return []
     org_id = org_member["organization"].id
     memberships = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).all()
     
@@ -339,6 +412,7 @@ def get_organization_members(org_member: dict = Depends(get_current_org_member),
                 "id": user.id,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
+                "email": user.email,
                 "role": m.role,
                 "status": m.status,
                 "joined_at": str(m.joined_at) if m.joined_at else None

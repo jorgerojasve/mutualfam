@@ -10,8 +10,9 @@ import {
   dismissClipboardInvite,
 } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, handleLimitError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
 
 export default function JoinMutualScreen({ route, navigation }) {
   const [input, setInput] = useState('');
@@ -64,7 +65,11 @@ export default function JoinMutualScreen({ route, navigation }) {
       setToken(data.token || code);
       setMutualInfo(data);
     } catch (e) {
-      Alert.alert('Invitación no encontrada', getErrorMessage(e, 'El código es inválido o ya expiró. Pide una nueva invitación.'));
+      if (!handleLimitError(e, 'Capacidad Máxima Alcanzada')) {
+        const detail = e.response?.data?.detail || '';
+        const title = detail.includes('utilizada') ? 'Invitación ya utilizada' : 'Invitación no válida';
+        Alert.alert(title, getErrorMessage(e, 'El código es inválido o ya expiró. Pide una nueva invitación.'));
+      }
       setMutualInfo(null);
       setFromClipboard(false);
     } finally {
@@ -110,8 +115,10 @@ export default function JoinMutualScreen({ route, navigation }) {
         await AsyncStorage.setItem('pending_join_token', token);
         Alert.alert('Sesión expirada', 'Debes iniciar sesión nuevamente para unirte.');
         navigation.replace('Login');
-      } else {
-        Alert.alert('Error', getErrorMessage(e, 'No se pudo procesar la invitación'));
+      } else if (!handleLimitError(e, 'Capacidad Máxima Alcanzada', { mutualName: mutualInfo?.organization_name })) {
+        const detail = e.response?.data?.detail || '';
+        const title = detail.includes('utilizada') ? 'Invitación ya utilizada' : 'Error';
+        Alert.alert(title, getErrorMessage(e, 'No se pudo procesar la invitación'));
       }
     } finally {
       setLoading(false);
@@ -185,6 +192,11 @@ export default function JoinMutualScreen({ route, navigation }) {
           <Text style={styles.infoTitle}>Has sido invitado a:</Text>
           <Text style={styles.orgName}>{mutualInfo.organization_name}</Text>
           {!!mutualInfo.code && <Text style={styles.codeText}>Código {mutualInfo.code}</Text>}
+          {mutualInfo.max_members ? (
+            <Text style={styles.capacityBadge}>
+              👥 Capacidad: {mutualInfo.member_count ?? '0'} de {mutualInfo.max_members} miembros
+            </Text>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.button, styles.fullWidth, { marginTop: 20 }]}
@@ -210,7 +222,7 @@ export default function JoinMutualScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 60,
   },
@@ -250,7 +262,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   input: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     color: '#f8fafc',
     padding: 15,
     borderRadius: 8,
@@ -268,12 +280,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pasteText: {
-    color: '#60a5fa',
+    color: theme.accent,
     fontSize: 15,
     fontWeight: '600',
   },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -299,7 +311,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   infoCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
@@ -326,6 +338,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
     letterSpacing: 1,
+  },
+  capacityBadge: {
+    color: '#60a5fa',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   linkButton: {
     marginTop: 14,

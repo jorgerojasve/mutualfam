@@ -4,11 +4,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
 import { extractInviteCode, getInviteFromClipboard } from '../utils/invite';
 import { OrgContext } from '../context/OrgContext';
+import { isNetworkError } from '../utils/errors';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import theme from '../utils/theme';
+import { OfflineEmptyState } from '../components/OfflineNotice';
 
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
   const { selectOrg, loadActiveOrg, clearOrg } = React.useContext(OrgContext);
   const envConfig = getMobileEnvironmentConfig();
@@ -18,15 +23,37 @@ export default function SelectMutualScreen({ navigation }) {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
+    setConnectionError(false);
     try {
       const data = await authApi.me();
       const orgs = data.organizations || [];
       setOrganizations(orgs);
+      await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
       if (orgs.length === 0) detectInvite();
     } catch (e) {
-      Alert.alert('Error', 'No se pudo cargar la información del usuario');
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        try {
+          const cached = await AsyncStorage.getItem('cached_organizations');
+          if (cached) {
+            setOrganizations(JSON.parse(cached));
+          }
+        } catch (_) {}
+      } else {
+        Alert.alert('Error', 'No se pudo cargar la información del usuario');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      await fetchData();
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -91,6 +118,14 @@ export default function SelectMutualScreen({ navigation }) {
             </TouchableOpacity>
           )}
         />
+      ) : connectionError ? (
+        <OfflineEmptyState
+          title="Sin conexión de red"
+          message="No se pudieron cargar tus mutuales. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+          onRetry={handleRetry}
+          loading={retrying}
+          style={{ marginHorizontal: 0 }}
+        />
       ) : (
         <View style={styles.emptyState}>
           {detectedInvite ? (
@@ -141,13 +176,13 @@ export default function SelectMutualScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     padding: 20,
     paddingTop: 60,
   },
   centerContainer: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -181,12 +216,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   orgCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 12,
     marginBottom: 15,
     borderLeftWidth: 4,
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: theme.accent,
   },
   orgName: {
     fontSize: 18,
@@ -244,7 +279,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   primaryButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -257,7 +292,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     backgroundColor: 'transparent',
-    borderColor: '#3b82f6',
+    borderColor: theme.accent,
     borderWidth: 1,
     padding: 15,
     borderRadius: 8,
@@ -265,7 +300,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   secondaryButtonText: {
-    color: '#3b82f6',
+    color: theme.accent,
     fontWeight: 'bold',
     fontSize: 16,
   },

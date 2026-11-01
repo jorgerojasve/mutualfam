@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore, useManifest } from '@civiccore/sdk';
+import { useAuthStore, useManifest, membershipApi } from '@civiccore/sdk';
 import { LogIn, Mail, Lock } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
@@ -16,10 +16,10 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !isLoading) {
       navigate('/', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isLoading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,9 +27,27 @@ const Login = () => {
     setIsLoading(true);
     try {
       await login(email, password);
-      // login success will trigger isAuthenticated -> navigate('/')
+      
+      // Auto-join si había una invitación pendiente
+      const pendingToken = (() => {
+        try { return localStorage.getItem('pending_join_token'); } catch (_) { return null; }
+      })();
+      if (pendingToken) {
+        try {
+          const joinRes = await membershipApi.joinOrganization(pendingToken);
+          localStorage.removeItem('pending_join_token');
+          if (joinRes?.organization_id) {
+            localStorage.setItem('organizationId', String(joinRes.organization_id));
+            localStorage.setItem('active_org_id', String(joinRes.organization_id));
+          }
+        } catch (joinErr) {
+          console.warn("Auto-join post-login error:", joinErr);
+        }
+      }
+
+      navigate('/', { replace: true });
     } catch (err) {
-      setError(err.message || "Error al iniciar sesión");
+      setError(err?.message || "Error al iniciar sesión");
     } finally {
       setIsLoading(false);
     }

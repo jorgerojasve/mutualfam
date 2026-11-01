@@ -12,18 +12,23 @@ import {
   ScrollView,
   Image
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { fundsApi, colectasApi, loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
+import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 export default function FundsScreen() {
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
   const [activeTab, setActiveTab] = useState('colectas'); // 'colectas' | 'periodicos'
   const [currentUser, setCurrentUser] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryingFunds, setRetryingFunds] = useState(false);
 
   // Estados de Colectas
   const [colectas, setColectas] = useState([]);
@@ -89,14 +94,30 @@ export default function FundsScreen() {
   const fetchColectas = async () => {
     try {
       setLoadingColectas(true);
+      setConnectionError(false);
       const [data, ratesData] = await Promise.all([
         colectasApi.getColectas(),
         colectasApi.getRates().catch(() => ({}))
       ]);
       setColectas(data);
       setRates(ratesData);
+      if (setIsOffline) setIsOffline(false);
+      if (activeOrg?.id) {
+        AsyncStorage.setItem(`cached_colectas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
     } catch (e) {
-      console.warn('Error loading colectas', e);
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        if (activeOrg?.id) {
+          try {
+            const cached = await AsyncStorage.getItem(`cached_colectas_${activeOrg.id}`);
+            if (cached) setColectas(JSON.parse(cached));
+          } catch (_) {}
+        }
+      } else {
+        console.warn('Error loading colectas', e);
+      }
     } finally {
       setLoadingColectas(false);
     }
@@ -106,12 +127,38 @@ export default function FundsScreen() {
   const fetchFunds = async () => {
     try {
       setLoadingFunds(true);
+      setConnectionError(false);
       const data = await fundsApi.getFunds();
       setFunds(data);
+      if (setIsOffline) setIsOffline(false);
+      if (activeOrg?.id) {
+        AsyncStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
     } catch (e) {
-      console.warn('Error loading funds', e);
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        if (activeOrg?.id) {
+          try {
+            const cached = await AsyncStorage.getItem(`cached_funds_${activeOrg.id}`);
+            if (cached) setFunds(JSON.parse(cached));
+          } catch (_) {}
+        }
+      } else {
+        console.warn('Error loading funds', e);
+      }
     } finally {
       setLoadingFunds(false);
+    }
+  };
+
+  const handleRetryFunds = async () => {
+    setRetryingFunds(true);
+    try {
+      await Promise.all([fetchColectas(), fetchFunds()]);
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetryingFunds(false);
     }
   };
 
@@ -633,6 +680,13 @@ export default function FundsScreen() {
     </View>
   );
 
+  const handleCreateFundPress = () => {
+    Alert.alert(
+      'En Construcción',
+      'La creación y propuesta de fondos comunes se encuentra actualmente en desarrollo y estará disponible en una próxima versión.'
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Cabecera principal */}
@@ -657,6 +711,7 @@ export default function FundsScreen() {
                 </TouchableOpacity>
               )
             )
+          }
           }
         />
 
@@ -693,10 +748,18 @@ export default function FundsScreen() {
         </View>
       </View>
 
+      {(isOffline || connectionError) ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando datos guardados"
+          onRetry={handleRetryFunds}
+          loading={retryingFunds}
+        />
+      ) : null}
+
       {/* Contenido según pestaña */}
       {activeTab === 'colectas' ? (
         loadingColectas ? (
-          <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 50 }} />
+          <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
         ) : (
           <FlatList
             data={colectas}
@@ -704,24 +767,33 @@ export default function FundsScreen() {
             renderItem={renderColectaCard}
             contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>🐮</Text>
-                <Text style={styles.emptyTitle}>No hay colectas activas</Text>
-                <Text style={styles.emptyText}>
-                  Las colectas ("hacer una vaca") permiten financiar gastos familiares específicos con aportes voluntarios.
-                </Text>
-                <TouchableOpacity
-                  style={[styles.btnPrimary, { marginTop: 16 }]}
-                  onPress={() => setShowCreateModal(true)}
-                >
-                  <Text style={styles.btnPrimaryText}>+ Proponer una Colecta</Text>
-                </TouchableOpacity>
-              </View>
+              (isOffline || connectionError) ? (
+                <OfflineEmptyState
+                  title="Sin conexión de red"
+                  message="No se pudieron cargar las colectas. Tus datos están seguros y no se han eliminado."
+                  onRetry={handleRetryFunds}
+                  loading={retryingFunds}
+                />
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyEmoji}>🐮</Text>
+                  <Text style={styles.emptyTitle}>No hay colectas activas</Text>
+                  <Text style={styles.emptyText}>
+                    Las colectas ("hacer una vaca") permiten financiar gastos familiares específicos con aportes voluntarios.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.btnPrimary, { marginTop: 16 }]}
+                    onPress={() => setShowCreateModal(true)}
+                  >
+                    <Text style={styles.btnPrimaryText}>+ Proponer una Colecta</Text>
+                  </TouchableOpacity>
+                </View>
+              )
             }
           />
         )
       ) : loadingFunds ? (
-        <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={funds}
@@ -729,13 +801,22 @@ export default function FundsScreen() {
           renderItem={renderFundCard}
           contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>🏛️</Text>
-              <Text style={styles.emptyTitle}>Fondos Comunes Familiares</Text>
-              <Text style={styles.emptyText}>
-                Fondo de emergencia y aportes periódicos continuos con participación de todos los miembros.
-              </Text>
-            </View>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar los fondos comunes. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryFunds}
+                loading={retryingFunds}
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>🏛️</Text>
+                <Text style={styles.emptyTitle}>Fondos Comunes Familiares</Text>
+                <Text style={styles.emptyText}>
+                  Fondo de emergencia y aportes periódicos continuos con participación de todos los miembros.
+                </Text>
+              </View>
+            )
           }
         />
       )}
@@ -1213,7 +1294,7 @@ export default function FundsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
   },
   header: {
     paddingHorizontal: 16,
@@ -1528,7 +1609,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   modalContent: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
@@ -1553,7 +1634,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   input: {
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
+    color: '#f8fafc',
+    padding: 10,
     borderRadius: 8,
     padding: 10,
     color: '#f8fafc',
@@ -1610,7 +1693,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalSubmit: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,

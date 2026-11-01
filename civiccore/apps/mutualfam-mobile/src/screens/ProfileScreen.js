@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,30 +7,61 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
+import { authApi } from '../api/client';
 import { unregisterPushNotificationsAsync } from '../services/notifications';
 import { getCurrentAppVersion, checkForAppUpdate } from '../services/appUpdates';
 import UpdateModal from '../components/UpdateModal';
 import { getMobileEnvironmentConfig } from '../utils/env';
+import { openSupportEmail, showSupportEmailFallback, SUPPORT_EMAIL } from '../utils/support';
+import { useBetaPhase, showBetaInfoAlert } from '../utils/beta';
+import theme from '../utils/theme';
 
 export default function ProfileScreen({ navigation }) {
-  const { activeOrg, clearOrg } = useContext(OrgContext);
+  const { activeOrg, clearOrg, isOffline, currentUser: contextUser } = useContext(OrgContext);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [currentUser, setCurrentUser] = useState(contextUser);
+
+  useEffect(() => {
+    if (contextUser) {
+      setCurrentUser(contextUser);
+    }
+    // Cargar inmediatamente desde AsyncStorage para evitar "Cargando datos..."
+    AsyncStorage.getItem('cached_user_profile')
+      .then(cached => {
+        if (cached) {
+          try {
+            setCurrentUser(JSON.parse(cached));
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    // Actualizar con datos en vivo si hay conexión
+    authApi.me()
+      .then(user => {
+        setCurrentUser(user);
+        AsyncStorage.setItem('cached_user_profile', JSON.stringify(user)).catch(() => {});
+      })
+      .catch(() => {});
+  }, [contextUser]);
 
   const currentVersion = getCurrentAppVersion();
   const envConfig = getMobileEnvironmentConfig();
+  const { isBeta, phaseLabel } = useBetaPhase();
 
   const handleLogout = async () => {
     try {
       await unregisterPushNotificationsAsync();
     } catch (_) {}
     await clearOrg();
-    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token']);
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'cached_user_profile']);
     navigation.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -69,6 +100,31 @@ export default function ProfileScreen({ navigation }) {
     >
       <ScreenTitle title="Perfil y Ajustes" />
 
+      {/* Tarjeta: Mi Cuenta / Perfil */}
+      <View style={styles.card}>
+        <View style={styles.userProfileHeader}>
+          <View style={styles.userAvatar}>
+            <Text style={styles.userAvatarText}>
+              {((currentUser?.first_name || currentUser?.email || 'U')[0]).toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>
+              {[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ') || currentUser?.email || 'Usuario'}
+            </Text>
+            <Text style={styles.userEmail}>
+              {currentUser?.email || (isOffline ? 'Modo sin conexión' : 'Cargando datos...')}
+            </Text>
+          </View>
+          <View style={[styles.userConnectedBadge, isOffline && styles.userOfflineBadge]}>
+            <View style={[styles.onlineDot, isOffline && styles.offlineDot]} />
+            <Text style={[styles.userConnectedText, isOffline && styles.userOfflineText]}>
+              {isOffline ? 'Sin conexión' : 'Conectado'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* Tarjeta: Mi Mutual Activa */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
@@ -83,6 +139,45 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.helpText}>
           Si no puedes ver tus datos, es probable que tu sesión haya expirado o la base de datos se haya reiniciado.
         </Text>
+      </View>
+
+      {/* Tarjeta: Soporte y Ayuda Beta */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <Ionicons name="chatbubbles-outline" size={20} color="#10b981" style={{ marginRight: 8 }} />
+          <Text style={styles.cardTitle}>Soporte y Ayuda Beta</Text>
+        </View>
+
+        <Text style={styles.supportDesc}>
+          ¿Tienes dudas, sugerencias o encontraste algún error en la aplicación? Como usuario beta, tu comunicación directa con el equipo es fundamental para mejorar la plataforma.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.supportButton}
+          onPress={() => openSupportEmail({
+            subject: 'Consulta o Reporte Beta',
+            userEmail: currentUser?.email,
+            orgName: activeOrg?.name,
+            contextNote: 'Perfil y Ajustes',
+          })}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="mail-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.supportButtonText}>Contactar a Soporte por Email</Text>
+        </TouchableOpacity>
+
+        <View style={styles.supportEmailRow}>
+          <Ionicons name="at-outline" size={16} color="#94a3b8" style={{ marginRight: 6 }} />
+          <Text style={styles.supportEmailText}>{SUPPORT_EMAIL}</Text>
+          <TouchableOpacity
+            style={styles.copyEmailButton}
+            onPress={() => showSupportEmailFallback()}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="copy-outline" size={16} color="#60a5fa" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tarjeta: Acerca de (About) */}
@@ -105,6 +200,29 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Fase</Text>
+          <TouchableOpacity
+            style={[
+              styles.versionPill,
+              isBeta
+                ? { backgroundColor: 'rgba(99, 102, 241, 0.18)', borderColor: 'rgba(129, 140, 248, 0.5)' }
+                : { backgroundColor: 'rgba(16, 185, 129, 0.18)', borderColor: 'rgba(16, 185, 129, 0.5)' },
+            ]}
+            activeOpacity={isBeta ? 0.7 : 1}
+            onPress={isBeta ? () => showBetaInfoAlert(currentUser?.email, activeOrg?.name) : null}
+          >
+            <Text
+              style={[
+                styles.versionPillText,
+                { color: isBeta ? '#a5b4fc' : '#34d399', fontWeight: 'bold' },
+              ]}
+            >
+              {isBeta ? 'Beta (Familias)' : 'Estable (Oficial)'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.aboutRow}>
           <Text style={styles.aboutLabel}>Entorno</Text>
           <View style={[styles.versionPill, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
             <Text style={[styles.versionPillText, { color: envConfig.color }]}>{envConfig.label}</Text>
@@ -124,6 +242,28 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.authorBadge}>
             <Ionicons name="checkmark-done-circle-outline" size={16} color="#34d399" style={{ marginRight: 5 }} />
             <Text style={styles.authorText}>Maira Salazar</Text>
+          </View>
+        </View>
+
+        <View style={styles.aboutRow}>
+          <Text style={styles.aboutLabel}>Analista de calidad (iOS)</Text>
+          <View style={styles.authorBadge}>
+            <Ionicons name="checkmark-done-circle-outline" size={16} color="#38bdf8" style={{ marginRight: 5 }} />
+            <Text style={styles.authorText}>Martín Vieira</Text>
+          </View>
+        </View>
+
+        <View style={[styles.aboutRow, { alignItems: 'flex-start' }]}>
+          <Text style={[styles.aboutLabel, { marginTop: 3 }]}>Usuarios beta</Text>
+          <View style={{ flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <View style={styles.authorBadge}>
+              <Ionicons name="sparkles-outline" size={15} color="#fbbf24" style={{ marginRight: 5 }} />
+              <Text style={styles.authorText}>Nora Salazar</Text>
+            </View>
+            <View style={styles.authorBadge}>
+              <Ionicons name="sparkles-outline" size={15} color="#fbbf24" style={{ marginRight: 5 }} />
+              <Text style={styles.authorText}>Nilso Rafael Salazar</Text>
+            </View>
           </View>
         </View>
 
@@ -165,7 +305,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.screenBg,
   },
   contentContainer: {
     padding: 20,
@@ -173,12 +313,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.cardBg,
     padding: 20,
     borderRadius: 14,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: theme.cardBorder,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -277,6 +417,103 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  supportDesc: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  supportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669', // Emerald 600
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  supportButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  supportEmailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  supportEmailText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginRight: 8,
+  },
+  copyEmailButton: {
+    padding: 4,
+  },
+  userProfileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  userName: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#f8fafc',
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: '#94a3b8',
+  },
+  userConnectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10b981',
+  },
+  userConnectedText: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  userOfflineBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  offlineDot: {
+    backgroundColor: '#f59e0b',
+  },
+  userOfflineText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });
 

@@ -2,11 +2,15 @@ import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { authApi } from '../api/client';
+import { Ionicons } from '@expo/vector-icons';
 import { extractInviteCode, getInviteFromClipboard, dismissClipboardInvite } from '../utils/invite';
 import { registerForPushNotificationsAsync } from '../services/notifications';
 import { getMobileEnvironmentConfig } from '../utils/env';
 import { getErrorMessage } from '../utils/errors';
 import { OrgContext } from '../context/OrgContext';
+import { openSupportEmail } from '../utils/support';
+import BetaBadge from '../components/BetaBadge';
+import theme from '../utils/theme';
 
 export default function LoginScreen({ route, navigation }) {
   const { selectOrg, loadActiveOrg } = useContext(OrgContext);
@@ -115,6 +119,15 @@ export default function LoginScreen({ route, navigation }) {
         }
 
         const me = await authApi.me();
+        try {
+          await AsyncStorage.setItem('cached_user_profile', JSON.stringify({
+            id: me.id,
+            email: me.email,
+            first_name: me.first_name,
+            last_name: me.last_name,
+            identifier: me.identifier,
+          }));
+        } catch (_) {}
         if (me.organizations && me.organizations.length > 0) {
           if (me.organizations.length === 1) {
              if (selectOrg) {
@@ -165,6 +178,7 @@ export default function LoginScreen({ route, navigation }) {
         />
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Mutual Familiar</Text>
+          <BetaBadge userEmail={email} />
           {!envConfig.isProd && envConfig.badgeText ? (
             <View style={[styles.envBadge, { backgroundColor: envConfig.bgColor, borderColor: envConfig.borderColor }]}>
               <View style={[styles.envDot, { backgroundColor: envConfig.color }]} />
@@ -244,6 +258,20 @@ export default function LoginScreen({ route, navigation }) {
             {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.helpButton} 
+          onPress={() => openSupportEmail({
+            subject: isRegistering ? 'Problemas al Registrarme' : 'Problemas para Iniciar Sesión',
+            contextNote: isRegistering ? 'Pantalla de Registro' : 'Pantalla de Inicio de Sesión',
+            userEmail: email.trim(),
+          })}
+          disabled={loading}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="help-circle-outline" size={16} color="#64748b" style={{ marginRight: 6 }} />
+          <Text style={styles.helpButtonText}>¿Problemas para ingresar? Contactar a soporte</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -252,7 +280,7 @@ export default function LoginScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: '#0f172a', // Slate 900
+    backgroundColor: theme.screenBg,
   },
   container: {
     flexGrow: 1,
@@ -285,7 +313,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   card: {
-    backgroundColor: '#1e293b', // Slate 800
+    backgroundColor: theme.cardBg,
     padding: 30,
     borderRadius: 16,
     shadowColor: '#000',
@@ -365,7 +393,7 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: theme.accent,
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
@@ -384,5 +412,17 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 14,
     textDecorationLine: 'underline',
-  }
+  },
+  helpButton: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  helpButtonText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });

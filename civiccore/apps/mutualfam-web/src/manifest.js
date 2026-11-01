@@ -14,7 +14,11 @@ const manifest = {
     fontFamily: "Inter, system-ui, sans-serif",
   },
 
-  apiUrl: import.meta.env.VITE_API_URL || "http://localhost:8002/api/v1",
+  apiUrl: (import.meta.env.VITE_API_URL || "http://localhost:8002/api/v1")
+    .toString()
+    .trim()
+    .replace(/[\r\n\t]/g, '')
+    .replace(/\/+$/, ''),
   organizationId: import.meta.env.VITE_ORGANIZATION_ID || "1",
 
   modules: {
@@ -30,13 +34,13 @@ const manifest = {
   },
 
   appMaturity: {
-    version: "1.0.0",
+    version: "1.0.27",
     level: 3,
     state: "stable",
     label: "Estable"
   },
 
-  supportEmail: "soporte@mutualfam.com",
+  supportEmail: "mutualfam@gmail.com",
 };
 
 export default manifest;

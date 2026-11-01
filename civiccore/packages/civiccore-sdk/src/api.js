@@ -8,9 +8,11 @@ const request = async (endpoint, options = {}) => {
   const { baseURL, storage } = getConfig();
   const token = await storage.getItem('jwt_token');
 
+  const orgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId')) || getConfig().manifest?.organizationId || '1';
+
   const headers = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    'X-Organization-ID': await storage.getItem('organizationId') || getConfig().manifest?.organizationId || '1',
+    'X-Organization-ID': String(orgId),
     ...options.headers,
   };
 
@@ -28,15 +30,33 @@ const request = async (endpoint, options = {}) => {
   let rawText = '';
   try {
     rawText = await response.text();
-    const data = JSON.parse(rawText);
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      data = null;
+    }
 
     if (!response.ok) {
       if (response.status === 401) {
-        // Redirección forzosa cerrando sesión a nivel global
-        const { useAuthStore } = require('./authStore.js');
-        useAuthStore.getState().logout();
+        // Limpieza de sesión
+        try {
+          storage.removeItem('jwt_token');
+        } catch (_) {}
       }
-      const message = data?.detail || 'Ocurrió un error en el servidor.';
+      let message = 'Ocurrió un error en el servidor.';
+      if (typeof data?.detail === 'string') {
+        message = data.detail;
+      } else if (Array.isArray(data?.detail)) {
+        // Formato FastAPI 422: [{ loc: [...], msg: "..." }]
+        message = data.detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+      } else if (data?.detail && typeof data.detail === 'object') {
+        message = data.detail.message || JSON.stringify(data.detail);
+      } else if (data?.message) {
+        message = data.message;
+      } else if (rawText) {
+        message = `Error del servidor (${response.status}): ${rawText.slice(0, 150)}`;
+      }
       throw new Error(message);
     }
     return data;
@@ -90,7 +110,10 @@ export const authApi = {
 
 export const membershipApi = {
   stats: () => request('/membership/stats'),
-  getMembers: () => request('/membership/'),
+  getMembers: () => request('/membership/members'),
+  createOrganization: (data) => request('/membership/organizations/create', { method: 'POST', body: JSON.stringify(data) }),
+  joinOrganization: (token) => request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token }) }),
+  getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
   estadoBaja: () => request('/membership/withdrawal/status'),
@@ -114,7 +137,19 @@ export const loansApi = {
   getLoans: () => request('/loans/'),
   createLoan: (data) => request('/loans/', { method: 'POST', body: JSON.stringify(data) }),
   cancelLoan: (loanId) => request(`/loans/${loanId}`, { method: 'DELETE' }),
-  contribute: (loanId, data) => request(`/loans/${loanId}/contribute`, { method: 'POST', body: JSON.stringify(data) })
+  contribute: (loanId, data) => request(`/loans/${loanId}/contribute`, { method: 'POST', body: JSON.stringify(data) }),
+  notifyPayment: (contribId, data) => request(`/loans/contributions/${contribId}/notify_payment`, { method: 'POST', body: JSON.stringify(data) }),
+  verifyPayment: (contribId) => request(`/loans/contributions/${contribId}/verify_payment`, { method: 'POST' }),
+  cancelContribution: (contribId) => request(`/loans/contributions/${contribId}`, { method: 'DELETE' }),
+  notifyRepayment: (contribId, data) => request(`/loans/contributions/${contribId}/repay`, { method: 'POST', body: JSON.stringify(data) }),
+  verifyRepayment: (repayId) => request(`/loans/repayments/${repayId}/verify`, { method: 'POST' }),
+  uploadFile: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/upload/', { method: 'POST', body: formData });
+  },
+  getPaymentMethods: () => request('/config/payment_methods'),
+  savePaymentMethods: (data) => request('/config/payment_methods', { method: 'POST', body: JSON.stringify(data) })
 };
 
 // ─────────────────────────────────────────────
@@ -123,6 +158,7 @@ export const loansApi = {
 
 export const fundsApi = {
   getFunds: () => request('/funds/'),
+  createFund: (data) => request('/funds/', { method: 'POST', body: JSON.stringify(data) }),
   contribute: (fundId, data) => request(`/funds/${fundId}/contribute`, { method: 'POST', body: JSON.stringify(data) })
 };
 

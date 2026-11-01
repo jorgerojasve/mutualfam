@@ -1,22 +1,56 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/client';
 import { connectRealtime, disconnectRealtime } from '../utils/realtime';
+import { isNetworkError } from '../utils/errors';
 
 export const OrgContext = createContext();
 
 export const OrgProvider = ({ children }) => {
   const [activeOrg, setActiveOrg] = useState(null);
   const [organizations, setOrganizations] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const fetchOrganizations = async () => {
     try {
       const data = await authApi.me();
-      setOrganizations(data.organizations || []);
-      return data.organizations || [];
+      const orgs = data.organizations || [];
+      const userProfile = {
+        id: data.id,
+        email: data.email,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        identifier: data.identifier,
+      };
+      setCurrentUser(userProfile);
+      setOrganizations(orgs);
+      setIsOffline(false);
+      await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
+      await AsyncStorage.setItem('cached_user_profile', JSON.stringify(userProfile));
+      return orgs;
     } catch (e) {
       console.warn("Error fetching organizations", e);
+      if (isNetworkError(e)) {
+        setIsOffline(true);
+        // Si hay fallo de red, rescatar organizaciones y perfil cacheados
+        try {
+          const cachedUser = await AsyncStorage.getItem('cached_user_profile');
+          if (cachedUser) {
+            setCurrentUser(JSON.parse(cachedUser));
+          }
+          const cached = await AsyncStorage.getItem('cached_organizations');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setOrganizations(parsed);
+            return parsed;
+          }
+        } catch (_) {}
+        // Retornar null para indicar error de red y NO lista vacía confirmada
+        return null;
+      }
       return [];
     }
   };
@@ -37,9 +71,21 @@ export const OrgProvider = ({ children }) => {
         setActiveOrg(targetOrg);
         await AsyncStorage.setItem('active_org_id', targetOrg.id.toString());
         await AsyncStorage.setItem('org_id', targetOrg.id.toString());
+        await AsyncStorage.setItem('cached_active_org', JSON.stringify(targetOrg));
+      } else if (orgs === null) {
+        // Fallo de conexión de red: NO borrar activeOrg para no confundir al usuario
+        try {
+          const cachedOrg = await AsyncStorage.getItem('cached_active_org');
+          if (cachedOrg) {
+            setActiveOrg(JSON.parse(cachedOrg));
+          } else if (orgId) {
+            setActiveOrg({ id: orgId, name: 'Mi Mutual' });
+          }
+        } catch (_) {}
       } else {
-        // Solo limpiar si explícitamente se obtuvo una lista vacía confirmada
+        // Solo limpiar si explícitamente el servidor confirmó una lista vacía (HTTP 200 sin organizaciones)
         setActiveOrg(null);
+        await AsyncStorage.removeItem('cached_active_org');
       }
     } catch (e) {
       console.warn("loadActiveOrg error:", e);
@@ -48,10 +94,20 @@ export const OrgProvider = ({ children }) => {
     }
   };
 
+  const retryConnection = async () => {
+    setRetrying(true);
+    try {
+      await loadActiveOrg();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const selectOrg = async (org) => {
     if (!org) return;
     await AsyncStorage.setItem('active_org_id', org.id.toString());
     await AsyncStorage.setItem('org_id', org.id.toString());
+    await AsyncStorage.setItem('cached_active_org', JSON.stringify(org));
     setActiveOrg(org);
     await fetchOrganizations();
   };
@@ -59,27 +115,36 @@ export const OrgProvider = ({ children }) => {
   const clearOrg = async () => {
     await AsyncStorage.removeItem('active_org_id');
     await AsyncStorage.removeItem('org_id');
+    await AsyncStorage.removeItem('cached_active_org');
+    await AsyncStorage.removeItem('cached_organizations');
+    await AsyncStorage.removeItem('cached_user_profile');
     setActiveOrg(null);
     setOrganizations([]);
+    setCurrentUser(null);
+    setIsOffline(false);
   };
 
   useEffect(() => {
-    // Escuchar cambios no es necesario si siempre se llama loadActiveOrg al login,
-    // pero podemos cargarlo inicialmente
     loadActiveOrg();
   }, []);
 
   // Canal en tiempo real: una conexión por mutual activa
   useEffect(() => {
-    if (activeOrg?.id) connectRealtime(activeOrg.id);
+    if (activeOrg?.id && !isOffline) connectRealtime(activeOrg.id);
     else disconnectRealtime();
-  }, [activeOrg?.id]);
+  }, [activeOrg?.id, isOffline]);
 
   return (
     <OrgContext.Provider value={{
       activeOrg,
       organizations,
+      currentUser,
+      setCurrentUser,
       loading,
+      isOffline,
+      setIsOffline,
+      retrying,
+      retryConnection,
       selectOrg,
       clearOrg,
       fetchOrganizations,

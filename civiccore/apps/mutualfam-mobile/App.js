@@ -10,6 +10,9 @@ import * as Linking from 'expo-linking';
 import { registerForPushNotificationsAsync } from './src/services/notifications';
 import { checkForAppUpdate } from './src/services/appUpdates';
 import UpdateModal from './src/components/UpdateModal';
+import BetaWelcomeModal from './src/components/BetaWelcomeModal';
+import { initializeBetaState } from './src/utils/beta';
+import { authApi } from './src/api/client';
 
 
 // Screens
@@ -23,10 +26,23 @@ import InviteMembersScreen from './src/screens/InviteMembersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MutualSwitcherBar from './src/components/MutualSwitcherBar';
 import { OrgProvider } from './src/context/OrgContext';
+import theme from './src/utils/theme';
+import { DarkTheme } from '@react-navigation/native';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 export const navigationRef = createNavigationContainerRef();
+
+const appNavTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: theme.screenBg,
+    card: theme.cardBg,
+    primary: theme.accent,
+    border: theme.cardBorder,
+  }
+};
 
 function MainTabs() {
   return (
@@ -36,10 +52,10 @@ function MainTabs() {
         headerShown: true,
         header: () => <MutualSwitcherBar />,
         tabBarStyle: {
-          backgroundColor: '#1e293b',
-          borderTopColor: 'rgba(255,255,255,0.1)',
+          backgroundColor: theme.tabBarBg,
+          borderTopColor: theme.cardBorder,
         },
-        tabBarActiveTintColor: '#3b82f6',
+        tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: '#94a3b8',
       }}
     >
@@ -106,9 +122,40 @@ export default function App() {
       try {
         const token = await AsyncStorage.getItem('jwt_token');
         if (token) {
-          const orgId = await AsyncStorage.getItem('active_org_id');
-          setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
-          await registerForPushNotificationsAsync();
+          try {
+            // Validar sesión contra el backend antes de navegar optimísticamente
+            const me = await authApi.me();
+            try {
+              await AsyncStorage.setItem('cached_user_profile', JSON.stringify({
+                id: me.id,
+                email: me.email,
+                first_name: me.first_name,
+                last_name: me.last_name,
+                identifier: me.identifier,
+              }));
+            } catch (_) {}
+            const orgId = await AsyncStorage.getItem('active_org_id');
+            setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
+            await registerForPushNotificationsAsync();
+          } catch (authError) {
+            // Si el servidor confirma que el usuario o sesión no es válida (401 o 404)
+            if (authError?.response?.status === 401 || authError?.response?.status === 404) {
+              await AsyncStorage.multiRemove([
+                'jwt_token',
+                'refresh_token',
+                'active_org_id',
+                'org_id',
+                'cached_user_profile',
+                'cached_active_org',
+                'cached_organizations',
+              ]);
+              setInitialRoute('Login');
+            } else {
+              // Si fue fallo de red/conexión temporal, permitimos navegación tentativa según lo guardado
+              const orgId = await AsyncStorage.getItem('active_org_id');
+              setInitialRoute(orgId ? 'MainTabs' : 'SelectMutual');
+            }
+          }
         }
       } catch (e) {
         console.warn(e);
@@ -118,6 +165,7 @@ export default function App() {
     };
     
     checkToken();
+    initializeBetaState().catch(() => {});
 
     // Verificación en segundo plano de nuevas versiones (obligatorias u opcionales)
     checkForAppUpdate().then((info) => {
@@ -130,8 +178,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={{ flex: 1, backgroundColor: theme.screenBg, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -139,8 +187,8 @@ export default function App() {
   return (
     <OrgProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <NavigationContainer ref={navigationRef} linking={linking}>
-          <StatusBar style="light" />
+        <NavigationContainer ref={navigationRef} linking={linking} theme={appNavTheme}>
+          <StatusBar style="light" backgroundColor={theme.headerBg} />
           <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
@@ -153,6 +201,7 @@ export default function App() {
           updateInfo={updateInfo}
           onDismiss={() => setUpdateInfo(null)}
         />
+        <BetaWelcomeModal />
       </GestureHandlerRootView>
     </OrgProvider>
   );

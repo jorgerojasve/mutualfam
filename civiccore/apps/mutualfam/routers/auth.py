@@ -29,7 +29,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     }
 
 @router.post("/refresh")
-def refresh_token(token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/auth/login"))):
+def refresh_token(
+    token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")),
+    db: Session = Depends(get_db)
+):
     payload = decode_access_token(token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -37,6 +40,10 @@ def refresh_token(token: str = Depends(OAuth2PasswordBearer(tokenUrl="api/v1/aut
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token payload")
+
+    user = db.query(User).filter(User.id == int(user_id)).first() if str(user_id).isdigit() else None
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado")
         
-    new_access_token = create_access_token(data={"sub": user_id})
+    new_access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": new_access_token, "token_type": "bearer"}
