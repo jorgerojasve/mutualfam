@@ -716,7 +716,6 @@ export default function FundsScreen() {
               )
             )
           }
-          }
         />
 
         {/* Ticker de Tasas de Cambio en vivo */}

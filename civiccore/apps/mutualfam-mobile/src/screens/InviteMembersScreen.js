@@ -302,7 +302,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700'
   },
-  },
   centerContainer: {
     flex: 1,
     backgroundColor: theme.screenBg,
