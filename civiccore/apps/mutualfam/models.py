@@ -171,10 +171,12 @@ class Colecta(Base):
     titulo = Column(String(200), nullable=False)
     proposito = Column(Text, nullable=False)
 
-    # Metas financieras (Base USD)
+    # Metas financieras (Base USD y Contravalor VES)
     monto_meta_usd = Column(Float, nullable=False)
+    monto_meta_ves = Column(Float, nullable=True)
     monto_prometido_usd = Column(Float, default=0.0)
     monto_recaudado_usd = Column(Float, default=0.0)
+    moneda_origen = Column(String(10), default="USD")  # 'USD' | 'VES'
 
     # Tasa de cambio acordada
     tipo_tasa = Column(Enum(TipoTasaColecta), default=TipoTasaColecta.BCV, nullable=False)

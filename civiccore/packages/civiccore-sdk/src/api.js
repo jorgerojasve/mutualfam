@@ -171,7 +171,14 @@ export const colectasApi = {
   getColecta: (id) => request(`/colectas/${id}`),
   getRates: (tasaFija = null) => request(tasaFija ? `/colectas/tasas?tasa_fija=${encodeURIComponent(tasaFija)}` : '/colectas/tasas'),
   createColecta: (data) => request('/colectas/', { method: 'POST', body: JSON.stringify(data) }),
-  pledgeCommitment: (colectaId, montoUsd) => request(`/colectas/${colectaId}/compromisos`, { method: 'POST', body: JSON.stringify({ monto_usd: montoUsd }) }),
+  pledgeCommitment: (colectaId, payloadOrAmount, currency = 'USD') => {
+    const body = typeof payloadOrAmount === 'object' && payloadOrAmount !== null
+      ? payloadOrAmount
+      : currency === 'VES'
+        ? { monto_ves: Number(payloadOrAmount), currency: 'VES' }
+        : { monto_usd: Number(payloadOrAmount), currency: 'USD' };
+    return request(`/colectas/${colectaId}/compromisos`, { method: 'POST', body: JSON.stringify(body) });
+  },
   cancelCommitment: (colectaId, compromisoId) => request(`/colectas/${colectaId}/compromisos/${compromisoId}`, { method: 'DELETE' }),
   triggerPaymentNotifications: (colectaId) => request(`/colectas/${colectaId}/notificar-cobro`, { method: 'POST' }),
   confirmPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, { method: 'POST', body: JSON.stringify(data) }),

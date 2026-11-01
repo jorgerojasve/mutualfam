@@ -609,6 +609,39 @@ async function executeTestSuite() {
     assert.equal(data.monto_recaudado_usd, 25.0);
   });
 
+  let testColectaBimonedaId = null;
+
+  await runTest('Colectas', 'POST /colectas/ crea colecta en modalidad VES con contravalor dinámico USD', async () => {
+    const { status, data } = await apiPost('/colectas/', {
+      titulo: 'Reparación de Bomba de Agua del Edificio',
+      proposito: 'Sustitución de condensador y rodamientos',
+      monto_meta_ves: 2750.0,
+      currency: 'VES',
+      tipo_tasa: 'bcv',
+      fecha_pago: '2026-11-28',
+      beneficiario_nombre: 'Comité de Agua'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.id);
+    assert.equal(data.moneda_origen, 'VES');
+    assert.ok(data.monto_meta_usd > 0, 'Debe calcular contravalor en USD');
+    assert.ok(data.monto_meta_bs > 0, 'Debe registrar monto en Bs');
+    testColectaBimonedaId = data.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos registra compromiso de aporte en VES', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaBimonedaId}/compromisos`, {
+      monto_ves: 1375.0,
+      currency: 'VES'
+    }, ctx.funderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.compromisos && data.compromisos.length > 0);
+    const c = data.compromisos.find(x => x.monto_bs === 1375.0);
+    assert.ok(c, 'Debe encontrar el compromiso registrado en VES');
+    assert.equal(c.monto_bs, 1375.0);
+    assert.ok(c.monto_usd > 0, 'Debe registrar contravalor en USD');
+  });
+
   // ============================================================================
   // SUITE 10: Gobernanza y Asambleas (Admisión y Expulsión con Veto)
   // ============================================================================

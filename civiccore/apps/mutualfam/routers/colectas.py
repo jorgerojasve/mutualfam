@@ -32,7 +32,9 @@ router = APIRouter()
 class CreateColectaRequest(BaseModel):
     titulo: str
     proposito: str
-    monto_meta_usd: float
+    monto_meta_usd: Optional[float] = None
+    monto_meta_ves: Optional[float] = None
+    currency: Optional[str] = "USD"  # "USD" | "VES"
     tipo_tasa: str = "bcv"  # bcv, usdt, euro, paralelo, fija
     tasa_fija_valor: Optional[float] = None
     fecha_pago: date
@@ -42,7 +44,9 @@ class CreateColectaRequest(BaseModel):
 
 
 class PledgeCommitmentRequest(BaseModel):
-    monto_usd: float
+    monto_usd: Optional[float] = None
+    monto_ves: Optional[float] = None
+    currency: Optional[str] = "USD"  # "USD" | "VES"
 
 
 class ConfirmPaymentRequest(BaseModel):
@@ -87,14 +91,16 @@ class ColectaResponse(BaseModel):
     titulo: str
     proposito: str
     monto_meta_usd: float
+    monto_meta_bs: float
     monto_prometido_usd: float
+    monto_prometido_bs: float
     monto_recaudado_usd: float
+    monto_recaudado_bs: float = 0.0
+    moneda_origen: str = "USD"
     tipo_tasa: str
     tasa_fija_valor: Optional[float] = None
     tasa_actual: float
     tasa_label: str
-    monto_meta_bs: float
-    monto_prometido_bs: float
     beneficiario_id: Optional[int] = None
     beneficiario_nombre: Optional[str] = None
     beneficiario_datos_pago: Dict[str, Any] = {}
@@ -157,6 +163,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
 
     monto_meta_bs = round(colecta.monto_meta_usd * current_rate, 2)
     monto_prometido_bs = round(colecta.monto_prometido_usd * current_rate, 2)
+    monto_recaudado_bs = round(colecta.monto_recaudado_usd * current_rate, 2)
 
     # Beneficiario y datos de pago
     beneficiario_name = colecta.beneficiario_nombre or proponente_name
@@ -197,6 +204,8 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         monto_meta_usd=colecta.monto_meta_usd,
         monto_prometido_usd=round(colecta.monto_prometido_usd, 2),
         monto_recaudado_usd=round(colecta.monto_recaudado_usd, 2),
+        monto_recaudado_bs=monto_recaudado_bs,
+        moneda_origen=getattr(colecta, "moneda_origen", "USD") or "USD",
         tipo_tasa=tasa_tipo_str,
         tasa_fija_valor=colecta.tasa_fija_valor,
         tasa_actual=current_rate,
@@ -279,6 +288,22 @@ def create_colecta(
     if tipo_tasa_enum == TipoTasaColecta.FIJA and (not req.tasa_fija_valor or req.tasa_fija_valor <= 0):
         raise HTTPException(status_code=400, detail="Debe especificar un valor numérico para la tasa fija.")
 
+    rate_val = tasa_cambio.get_rate(tipo_tasa_enum.value, req.tasa_fija_valor)
+    if rate_val <= 0:
+        rate_val = 1.0
+
+    currency = (req.currency or "USD").upper()
+    if currency == "VES":
+        if not req.monto_meta_ves or req.monto_meta_ves <= 0:
+            raise HTTPException(status_code=400, detail="El monto meta en Bs debe ser mayor a 0.")
+        meta_ves = float(req.monto_meta_ves)
+        meta_usd = round(meta_ves / rate_val, 2)
+    else:
+        if not req.monto_meta_usd or req.monto_meta_usd <= 0:
+            raise HTTPException(status_code=400, detail="El monto meta debe ser mayor a 0 USD.")
+        meta_usd = float(req.monto_meta_usd)
+        meta_ves = round(meta_usd * rate_val, 2)
+
     # Datos de pago del beneficiario
     datos_pago_json = "{}"
     if req.beneficiario_datos_pago:
@@ -294,7 +319,9 @@ def create_colecta(
         proponente_id=org_member["user"].id,
         titulo=req.titulo.strip(),
         proposito=req.proposito.strip(),
-        monto_meta_usd=float(req.monto_meta_usd),
+        monto_meta_usd=meta_usd,
+        monto_meta_ves=meta_ves,
+        moneda_origen=currency,
         monto_prometido_usd=0.0,
         monto_recaudado_usd=0.0,
         tipo_tasa=tipo_tasa_enum,
@@ -312,12 +339,11 @@ def create_colecta(
     db.refresh(nueva_colecta)
 
     # 1. Notificación Telegram
-    rate_val = tasa_cambio.get_rate(nueva_colecta.tipo_tasa.value, nueva_colecta.tasa_fija_valor)
     msg = (
         f"🐮 <b>¡Nueva Colecta Familiar Propuesta!</b>\n\n"
         f"🎯 <b>{nueva_colecta.titulo}</b>\n"
         f"👤 Proponente: {org_member['user'].first_name}\n"
-        f"💵 Meta: <b>${nueva_colecta.monto_meta_usd:,.2f} USD</b>\n"
+        f"💵 Meta: <b>${nueva_colecta.monto_meta_usd:,.2f} USD</b> (Bs {meta_ves:,.2f})\n"
         f"📊 Tasa acordada: <b>{nueva_colecta.tipo_tasa.value.upper()}</b> (Ref: Bs {rate_val:,.2f})\n"
         f"📅 Fecha de pago: {nueva_colecta.fecha_pago}\n"
         f"📝 <i>{nueva_colecta.proposito}</i>"
@@ -335,7 +361,7 @@ def create_colecta(
             db,
             other_ids,
             "🐮 Nueva Colecta Familiar",
-            f"{org_member['user'].first_name} propuso la colecta '{nueva_colecta.titulo}' por ${nueva_colecta.monto_meta_usd:,.2f} USD."
+            f"{org_member['user'].first_name} propuso la colecta '{nueva_colecta.titulo}' por ${nueva_colecta.monto_meta_usd:,.2f} USD (Bs {meta_ves:,.2f})."
         )
 
     # 3. Notificación WebSocket
@@ -373,14 +399,11 @@ def pledge_commitment(
     db: Session = Depends(get_db)
 ):
     """
-    Registra una promesa voluntaria de aporte en USD a la colecta.
+    Registra una promesa voluntaria de aporte (bimoneda USD/VES) a la colecta.
     Si el monto total prometido alcanza el 100% de la meta, la colecta pasa automáticamente a ACTIVA.
     """
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
-
-    if req.monto_usd <= 0:
-        raise HTTPException(status_code=400, detail="El monto prometido debe ser mayor a 0 USD.")
 
     colecta = db.query(Colecta).filter(
         Colecta.id == colecta_id,
@@ -393,18 +416,38 @@ def pledge_commitment(
     if colecta.estado not in [EstadoColecta.PROPUESTA, EstadoColecta.ACTIVA]:
         raise HTTPException(status_code=400, detail="Esta colecta ya no está recibiendo promesas de aportes.")
 
+    tasa_tipo_str = colecta.tipo_tasa.value if hasattr(colecta.tipo_tasa, "value") else str(colecta.tipo_tasa)
+    rate_val = tasa_cambio.get_rate(tasa_tipo_str, colecta.tasa_fija_valor)
+    if rate_val <= 0:
+        rate_val = 1.0
+
+    currency = (req.currency or "USD").upper()
+    if currency == "VES":
+        if not req.monto_ves or req.monto_ves <= 0:
+            raise HTTPException(status_code=400, detail="El monto prometido en Bs debe ser mayor a 0.")
+        pledge_ves = float(req.monto_ves)
+        pledge_usd = round(pledge_ves / rate_val, 2)
+    else:
+        if not req.monto_usd or req.monto_usd <= 0:
+            raise HTTPException(status_code=400, detail="El monto prometido debe ser mayor a 0 USD.")
+        pledge_usd = float(req.monto_usd)
+        pledge_ves = round(pledge_usd * rate_val, 2)
+
     # Crear compromiso
     nuevo_compromiso = CompromisoColecta(
         colecta_id=colecta.id,
         socio_id=org_member["user"].id,
-        monto_usd=float(req.monto_usd),
+        monto_usd=pledge_usd,
+        monto_bs=pledge_ves,
+        tasa_usada=rate_val,
+        tipo_tasa_usada=tasa_tipo_str,
         estado=EstadoCompromiso.PROMETIDO,
         fecha_compromiso=utcnow()
     )
     db.add(nuevo_compromiso)
 
     # Actualizar acumulado de promesas
-    colecta.monto_prometido_usd += float(req.monto_usd)
+    colecta.monto_prometido_usd += pledge_usd
 
     # Verificar si alcanza el quorum de activación (100% o más)
     alcanzo_quorum = colecta.monto_prometido_usd >= colecta.monto_meta_usd
@@ -422,7 +465,7 @@ def pledge_commitment(
         db,
         [org_member["user"].id],
         "Aporte Prometido",
-        f"Registraste un aporte de ${req.monto_usd:,.2f} USD para '{colecta.titulo}'."
+        f"Registraste un aporte de ${pledge_usd:,.2f} USD (Bs {pledge_ves:,.2f}) para '{colecta.titulo}'."
     )
 
     # 2. Si pasó a ACTIVA, notificar a todos los miembros

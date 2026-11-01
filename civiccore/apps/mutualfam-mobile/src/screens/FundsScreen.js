@@ -23,6 +23,7 @@ import { getErrorMessage, isNetworkError } from '../utils/errors';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS } from '../utils/banks';
+import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
 
 export default function FundsScreen() {
   const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
@@ -55,6 +56,7 @@ export default function FundsScreen() {
   const [titulo, setTitulo] = useState('');
   const [proposito, setProposito] = useState('');
   const [montoMeta, setMontoMeta] = useState('');
+  const [colectaCurrency, setColectaCurrency] = useState('USD'); // 'USD' | 'VES'
   const [tipoTasa, setTipoTasa] = useState('bcv');
   const [tasaFijaValor, setTasaFijaValor] = useState('');
   const [fechaPago, setFechaPago] = useState('');
@@ -63,6 +65,7 @@ export default function FundsScreen() {
 
   // Formulario Prometer Aporte
   const [pledgeAmount, setPledgeAmount] = useState('');
+  const [pledgeCurrency, setPledgeCurrency] = useState('USD'); // 'USD' | 'VES'
 
   // Formulario Confirmar Pago
   const [paymentMethod, setPaymentMethod] = useState('pago_movil');
@@ -251,15 +254,66 @@ export default function FundsScreen() {
     ]);
   };
 
+  const getEffectiveRate = (rateType, fixedVal) => {
+    if (rateType === 'fija') return parseFloat(fixedVal) || 1;
+    return rates[rateType]?.rate || rates?.bcv?.rate || 1;
+  };
+
+  const handleToggleColectaCurrency = (newCurr) => {
+    if (newCurr === colectaCurrency) return;
+    const parsed = parseVEAmount(montoMeta);
+    const effRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effRate > 0) {
+      if (newCurr === 'VES') {
+        setMontoMeta(formatVE(parsed * effRate));
+      } else {
+        setMontoMeta(formatVE(parsed / effRate));
+      }
+    }
+    setColectaCurrency(newCurr);
+  };
+
+  const handleTogglePledgeCurrency = (newCurr) => {
+    if (newCurr === pledgeCurrency || !targetColecta) return;
+    const parsed = parseVEAmount(pledgeAmount);
+    const effRate = targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1;
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effRate > 0) {
+      if (newCurr === 'VES') {
+        setPledgeAmount(formatVE(parsed * effRate));
+      } else {
+        setPledgeAmount(formatVE(parsed / effRate));
+      }
+    }
+    setPledgeCurrency(newCurr);
+  };
+
+  const parsedMeta = parseVEAmount(montoMeta);
+  const effCreateRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+  const metaCountervalueBs = (colectaCurrency === 'USD' && parsedMeta !== null && effCreateRate > 0)
+    ? parsedMeta * effCreateRate
+    : null;
+  const metaCountervalueUsd = (colectaCurrency === 'VES' && parsedMeta !== null && effCreateRate > 0)
+    ? parsedMeta / effCreateRate
+    : null;
+
+  const parsedPledge = parseVEAmount(pledgeAmount);
+  const effPledgeRate = targetColecta ? (targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1) : 1;
+  const pledgeCountervalueBs = (pledgeCurrency === 'USD' && parsedPledge !== null && effPledgeRate > 0)
+    ? parsedPledge * effPledgeRate
+    : null;
+  const pledgeCountervalueUsd = (pledgeCurrency === 'VES' && parsedPledge !== null && effPledgeRate > 0)
+    ? parsedPledge / effPledgeRate
+    : null;
+
   // Crear Colecta
   const handleCreateColecta = async () => {
     if (!titulo.trim() || !proposito.trim() || !montoMeta) {
       Alert.alert('Campos requeridos', 'Por favor ingresa título, propósito y monto meta.');
       return;
     }
-    const metaNum = parseFloat(montoMeta);
-    if (isNaN(metaNum) || metaNum <= 0) {
-      Alert.alert('Monto inválido', 'El monto meta debe ser un número mayor a 0 USD.');
+    const parsed = parseVEAmount(montoMeta);
+    if (parsed === null || isNaN(parsed) || parsed <= 0) {
+      Alert.alert('Monto inválido', 'El monto meta debe ser mayor a 0.');
       return;
     }
     if (tipoTasa === 'fija' && (!tasaFijaValor || parseFloat(tasaFijaValor) <= 0)) {
@@ -269,10 +323,16 @@ export default function FundsScreen() {
 
     setSubmitting(true);
     try {
+      const effRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+      const metaUsd = colectaCurrency === 'VES' ? Number((parsed / effRate).toFixed(2)) : parsed;
+      const metaVes = colectaCurrency === 'VES' ? parsed : Number((parsed * effRate).toFixed(2));
+
       await colectasApi.createColecta({
         titulo: titulo.trim(),
         proposito: proposito.trim(),
-        monto_meta_usd: metaNum,
+        monto_meta_usd: metaUsd,
+        monto_meta_ves: metaVes,
+        currency: colectaCurrency,
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
@@ -283,6 +343,7 @@ export default function FundsScreen() {
       setTitulo('');
       setProposito('');
       setMontoMeta('');
+      setColectaCurrency('USD');
       setTipoTasa('bcv');
       setTasaFijaValor('');
       Alert.alert('¡Colecta Creada!', 'La propuesta de colecta está activa y lista para recibir compromisos.');
@@ -296,15 +357,25 @@ export default function FundsScreen() {
 
   // Prometer Aporte
   const handlePledge = async () => {
-    if (!pledgeAmount || parseFloat(pledgeAmount) <= 0) {
-      Alert.alert('Monto inválido', 'Ingresa un monto en USD mayor a 0.');
+    const parsed = parseVEAmount(pledgeAmount);
+    if (parsed === null || isNaN(parsed) || parsed <= 0) {
+      Alert.alert('Monto inválido', 'Ingresa un monto mayor a 0.');
       return;
     }
     setSubmitting(true);
     try {
-      await colectasApi.pledgeCommitment(targetColecta.id, parseFloat(pledgeAmount));
+      const effRate = targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1;
+      const pledgeUsd = pledgeCurrency === 'VES' ? Number((parsed / effRate).toFixed(2)) : parsed;
+      const pledgeVes = pledgeCurrency === 'VES' ? parsed : Number((parsed * effRate).toFixed(2));
+
+      await colectasApi.pledgeCommitment(targetColecta.id, {
+        monto_usd: pledgeUsd,
+        monto_ves: pledgeVes,
+        currency: pledgeCurrency
+      });
       setShowPledgeModal(false);
       setPledgeAmount('');
+      setPledgeCurrency('USD');
       setTargetColecta(null);
       Alert.alert('¡Compromiso Registrado!', 'Tu aporte voluntario ha sido registrado exitosamente.');
       fetchColectas();
@@ -500,7 +571,7 @@ export default function FundsScreen() {
         {/* Badge de Tasa de Cambio Prominente */}
         <View style={styles.rateBadgeStrip}>
           <Text style={styles.rateBadgeText}>
-            📊 Tasa: <Text style={{ fontWeight: 'bold' }}>{item.tasa_label}</Text> • Ref: Bs {item.tasa_actual.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            📊 Tasa: <Text style={{ fontWeight: 'bold' }}>{item.tasa_label}</Text> • Ref: Bs {formatVE(item.tasa_actual)}
           </Text>
         </View>
 
@@ -522,12 +593,22 @@ export default function FundsScreen() {
         {/* Barra de Progreso Financiero */}
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>
-              Prometido: <Text style={styles.progressAmount}>${item.monto_prometido_usd.toFixed(2)} USD</Text>
-            </Text>
-            <Text style={styles.progressMeta}>
-              Meta: ${item.monto_meta_usd.toFixed(2)} USD (~Bs {item.monto_meta_bs.toLocaleString('es-VE')})
-            </Text>
+            <View>
+              <Text style={styles.progressLabel}>
+                Prometido: <Text style={styles.progressAmount}>${formatVE(item.monto_prometido_usd)} USD</Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: '#38bdf8', fontWeight: '600', marginTop: 1 }}>
+                • Bs {formatVE(item.monto_prometido_bs || (item.monto_prometido_usd * item.tasa_actual))}
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.progressMeta}>
+                Meta: ${formatVE(item.monto_meta_usd)} USD
+              </Text>
+              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+                ~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * item.tasa_actual))}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.progressBarBackground}>
@@ -547,7 +628,7 @@ export default function FundsScreen() {
             <Text style={[styles.progressStatusHint, { color: item.is_active ? '#10b981' : '#f59e0b' }]}>
               {item.is_active
                 ? '🎉 ¡Quorum alcanzado!'
-                : `Faltan $${Math.max(0, item.monto_meta_usd - item.monto_prometido_usd).toFixed(2)} USD`}
+                : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - item.monto_prometido_usd))} USD`}
             </Text>
           </View>
         </View>
@@ -558,8 +639,10 @@ export default function FundsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.myPledgeTitle}>Mi compromiso voluntario:</Text>
               <Text style={styles.myPledgeAmount}>
-                ${myPledge.monto_usd.toFixed(2)} USD
-                {myPledge.monto_bs ? ` (~Bs ${myPledge.monto_bs.toLocaleString('es-VE')})` : ''}
+                ${formatVE(myPledge.monto_usd)} USD
+                <Text style={{ color: '#38bdf8', fontWeight: 'normal' }}>
+                  {` (~Bs ${formatVE(myPledge.monto_bs || (myPledge.monto_usd * item.tasa_actual))})`}
+                </Text>
               </Text>
             </View>
             <View style={[styles.pledgeStatePill, { backgroundColor: myPledge.estado === 'pagado' ? '#065f46' : '#1e3a8a' }]}>
@@ -855,15 +938,68 @@ export default function FundsScreen() {
                 multiline
               />
 
-              <Text style={styles.inputLabel}>Monto Meta (USD) *</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={montoMeta}
-                onChangeText={setMontoMeta}
-                placeholder="Ej: 50"
-                placeholderTextColor="#64748b"
-              />
+              {/* Selector Bimoneda */}
+              <View style={styles.currencySelectorContainer}>
+                <Text style={styles.inputLabel}>Moneda y Monto Meta *</Text>
+                <View style={styles.toggleContainer}>
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, colectaCurrency === 'USD' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleColectaCurrency('USD')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, colectaCurrency === 'USD' && styles.toggleBtnTextActive]}>
+                      $ USD (Dólares)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.toggleBtn, colectaCurrency === 'VES' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                    onPress={() => handleToggleColectaCurrency('VES')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.toggleBtnText, colectaCurrency === 'VES' && styles.toggleBtnTextActive]}>
+                      Bs. VES (Bolívares)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Campo de Entrada de Monto Meta */}
+                <View style={styles.currencyInputRow}>
+                  <Text style={styles.currencyPrefixText}>{colectaCurrency === 'USD' ? '$' : 'Bs.'}</Text>
+                  <TextInput 
+                    style={[styles.input, styles.currencyInnerInput, colectaCurrency === 'VES' && { paddingLeft: 48 }]} 
+                    keyboardType="decimal-pad" 
+                    value={montoMeta} 
+                    onChangeText={setMontoMeta}
+                    onBlur={() => {
+                      const p = parseVEAmount(montoMeta);
+                      if (p !== null && p > 0) setMontoMeta(formatVE(p));
+                    }}
+                    placeholder={colectaCurrency === 'USD' ? "Ej: 50,00" : "Ej: 2.750,00"}
+                    placeholderTextColor="#64748b"
+                  />
+                </View>
+
+                {/* Tarjeta de Contravalor Dinámico */}
+                {(metaCountervalueBs !== null || metaCountervalueUsd !== null) && (
+                  <View style={styles.countervalueCard}>
+                    <View style={styles.countervalueHeader}>
+                      <Text style={styles.countervalueLabel}>
+                        {colectaCurrency === 'USD' ? 'Equivalente estimado en Bolívares:' : 'Equivalente en Dólares:'}
+                      </Text>
+                      <Text style={styles.countervalueRateTag}>
+                        Tasa: {effCreateRate ? `Bs. ${formatVE(effCreateRate)}` : 'Calculando...'}
+                      </Text>
+                    </View>
+                    <Text style={styles.countervalueMainAmount}>
+                      {colectaCurrency === 'USD'
+                        ? `≈ Bs. ${formatVE(metaCountervalueBs)}`
+                        : `≈ $ ${formatVE(metaCountervalueUsd)} USD`
+                      }
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {/* Selector de Tipo de Tasa de Cambio */}
               <Text style={styles.inputLabel}>Tasa de Cambio para liquidar en Bs *</Text>
@@ -964,10 +1100,10 @@ export default function FundsScreen() {
 
                 <View style={styles.detailInfoBox}>
                   <Text style={styles.detailInfoItem}>
-                    💵 <Text style={{ fontWeight: 'bold' }}>Meta:</Text> ${selectedColecta.monto_meta_usd.toFixed(2)} USD (~Bs {selectedColecta.monto_meta_bs.toLocaleString('es-VE')})
+                    💵 <Text style={{ fontWeight: 'bold' }}>Meta:</Text> ${formatVE(selectedColecta.monto_meta_usd)} USD (~Bs {formatVE(selectedColecta.monto_meta_bs || (selectedColecta.monto_meta_usd * selectedColecta.tasa_actual))})
                   </Text>
                   <Text style={styles.detailInfoItem}>
-                    📊 <Text style={{ fontWeight: 'bold' }}>Tasa:</Text> {selectedColecta.tasa_label} (Bs {selectedColecta.tasa_actual?.toFixed(2)})
+                    📊 <Text style={{ fontWeight: 'bold' }}>Tasa:</Text> {selectedColecta.tasa_label} (Bs {formatVE(selectedColecta.tasa_actual)})
                   </Text>
                   <Text style={styles.detailInfoItem}>
                     👤 <Text style={{ fontWeight: 'bold' }}>Beneficiario:</Text> {selectedColecta.beneficiario_nombre}
@@ -991,8 +1127,8 @@ export default function FundsScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.contributorName}>{comp.socio_name}</Text>
                           <Text style={styles.contributorAmount}>
-                            ${comp.monto_usd.toFixed(2)} USD
-                            {comp.monto_bs ? ` (~Bs ${comp.monto_bs.toLocaleString('es-VE')})` : ''}
+                            ${formatVE(comp.monto_usd)} USD
+                            {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * selectedColecta.tasa_actual))})`}
                           </Text>
                           {comp.referencia_pago ? (
                             <Text style={styles.contributorRef}>Ref: {comp.referencia_pago}</Text>
@@ -1051,25 +1187,66 @@ export default function FundsScreen() {
             {targetColecta && (
               <>
                 <Text style={styles.modalSubtitle}>Colecta: "{targetColecta.titulo}"</Text>
-                <Text style={styles.inputLabel}>Monto de tu aporte voluntario (USD)</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={pledgeAmount}
-                  onChangeText={setPledgeAmount}
-                  placeholder="Ej: 15"
-                  placeholderTextColor="#64748b"
-                />
+                {/* Selector Bimoneda para Aporte */}
+                <View style={styles.currencySelectorContainer}>
+                  <Text style={styles.inputLabel}>Moneda y Monto a Aportar *</Text>
+                  <View style={styles.toggleContainer}>
+                    <TouchableOpacity 
+                      style={[styles.toggleBtn, pledgeCurrency === 'USD' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                      onPress={() => handleTogglePledgeCurrency('USD')}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.toggleBtnText, pledgeCurrency === 'USD' && styles.toggleBtnTextActive]}>
+                        $ USD
+                      </Text>
+                    </TouchableOpacity>
 
-                {pledgeAmount && parseFloat(pledgeAmount) > 0 ? (
-                  <Text style={styles.rateExplanation}>
-                    Equivale aproximadamente a:{' '}
-                    <Text style={{ fontWeight: 'bold', color: '#10b981' }}>
-                      Bs {(parseFloat(pledgeAmount) * targetColecta.tasa_actual).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                    </Text>{' '}
-                    (Tasa {targetColecta.tasa_label})
-                  </Text>
-                ) : null}
+                    <TouchableOpacity 
+                      style={[styles.toggleBtn, pledgeCurrency === 'VES' && [styles.toggleBtnActive, { backgroundColor: theme.accent }]]}
+                      onPress={() => handleTogglePledgeCurrency('VES')}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.toggleBtnText, pledgeCurrency === 'VES' && styles.toggleBtnTextActive]}>
+                        Bs. VES
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.currencyInputRow}>
+                    <Text style={styles.currencyPrefixText}>{pledgeCurrency === 'USD' ? '$' : 'Bs.'}</Text>
+                    <TextInput 
+                      style={[styles.input, styles.currencyInnerInput, pledgeCurrency === 'VES' && { paddingLeft: 48 }]} 
+                      keyboardType="decimal-pad" 
+                      value={pledgeAmount} 
+                      onChangeText={setPledgeAmount}
+                      onBlur={() => {
+                        const p = parseVEAmount(pledgeAmount);
+                        if (p !== null && p > 0) setPledgeAmount(formatVE(p));
+                      }}
+                      placeholder={pledgeCurrency === 'USD' ? "Ej: 10,00" : "Ej: 550,00"}
+                      placeholderTextColor="#64748b"
+                    />
+                  </View>
+
+                  {(pledgeCountervalueBs !== null || pledgeCountervalueUsd !== null) && (
+                    <View style={styles.countervalueCard}>
+                      <View style={styles.countervalueHeader}>
+                        <Text style={styles.countervalueLabel}>
+                          {pledgeCurrency === 'USD' ? 'Equivalente estimado en Bolívares:' : 'Equivalente en Dólares:'}
+                        </Text>
+                        <Text style={styles.countervalueRateTag}>
+                          Tasa: Bs. {formatVE(effPledgeRate)}
+                        </Text>
+                      </View>
+                      <Text style={[styles.countervalueMainAmount, { color: '#10b981' }]}>
+                        {pledgeCurrency === 'USD'
+                          ? `≈ Bs. ${formatVE(pledgeCountervalueBs)}`
+                          : `≈ $ ${formatVE(pledgeCountervalueUsd)} USD`
+                        }
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
                 <Text style={styles.noteBox}>
                   ℹ️ Tu compromiso es voluntario. Al llegar la fecha de cobro recibirás la notificación con el monto exacto en Bolívares.
@@ -1120,13 +1297,13 @@ export default function FundsScreen() {
                   {targetColecta.mi_compromiso && (
                     <View style={styles.paymentSummaryBox}>
                       <Text style={styles.paymentSummaryText}>
-                        Monto acordado: <Text style={{ fontWeight: 'bold' }}>${targetColecta.mi_compromiso.monto_usd} USD</Text>
+                        Monto acordado: <Text style={{ fontWeight: 'bold' }}>${formatVE(targetColecta.mi_compromiso.monto_usd)} USD</Text>
                       </Text>
                       <Text style={styles.paymentSummaryBs}>
-                        Total a transferir: Bs {(targetColecta.mi_compromiso.monto_bs || targetColecta.mi_compromiso.monto_usd * targetColecta.tasa_actual).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        Total a transferir: Bs {formatVE(targetColecta.mi_compromiso.monto_bs || (targetColecta.mi_compromiso.monto_usd * targetColecta.tasa_actual))}
                       </Text>
                       <Text style={styles.paymentSummaryRate}>
-                        Tasa aplicada: {targetColecta.tasa_label}
+                        Tasa aplicada ({targetColecta.tasa_label}): Bs. {formatVE(targetColecta.tasa_actual)}
                       </Text>
                     </View>
                   )}
@@ -1874,5 +2051,93 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  currencySelectorContainer: {
+    marginBottom: 10,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.accent,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  toggleBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  toggleBtnTextActive: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  currencyInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  currencyPrefixText: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 1,
+    color: '#94a3b8',
+    fontWeight: '700',
+    fontSize: 15,
+    top: 11,
+  },
+  currencyInnerInput: {
+    flex: 1,
+    paddingLeft: 36,
+    marginBottom: 4,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  countervalueCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  countervalueHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  countervalueLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  countervalueRateTag: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  countervalueMainAmount: {
+    color: '#38bdf8',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginVertical: 2,
   },
 });

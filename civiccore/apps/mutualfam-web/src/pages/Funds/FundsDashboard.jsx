@@ -4,6 +4,7 @@ import { fundsApi, colectasApi, loansApi, useAuthStore } from '@civiccore/sdk';
 import { Plus, X, AlertCircle, CheckCircle, Clock, ChevronRight, DollarSign, Wallet, ShieldCheck, FileText, Check, AlertTriangle } from 'lucide-react';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
+import { parseVEAmount, formatVE, formatCurrencyVE } from '../../utils/currency.js';
 
 export default function FundsDashboard() {
   const { activeOrg, user, isOffline } = useAuthStore();
@@ -32,6 +33,7 @@ export default function FundsDashboard() {
   const [titulo, setTitulo] = useState('');
   const [proposito, setProposito] = useState('');
   const [montoMeta, setMontoMeta] = useState('');
+  const [colectaCurrency, setColectaCurrency] = useState('USD'); // 'USD' | 'VES'
   const [tipoTasa, setTipoTasa] = useState('bcv');
   const [tasaFijaValor, setTasaFijaValor] = useState('');
   const [fechaPago, setFechaPago] = useState('');
@@ -40,6 +42,7 @@ export default function FundsDashboard() {
 
   // Form: Comprometer Aporte
   const [pledgeAmount, setPledgeAmount] = useState('');
+  const [pledgeCurrency, setPledgeCurrency] = useState('USD'); // 'USD' | 'VES'
   const [submittingPledge, setSubmittingPledge] = useState(false);
 
   // Form: Notificar Pago
@@ -154,6 +157,57 @@ export default function FundsDashboard() {
     }
   };
 
+  const getEffectiveRate = (rateType, fixedVal) => {
+    if (rateType === 'fija') return parseFloat(fixedVal) || 1;
+    return rates[rateType]?.rate || rates?.bcv?.rate || 1;
+  };
+
+  const handleToggleColectaCurrency = (newCurr) => {
+    if (newCurr === colectaCurrency) return;
+    const parsed = parseVEAmount(montoMeta);
+    const effRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effRate > 0) {
+      if (newCurr === 'VES') {
+        setMontoMeta(formatVE(parsed * effRate));
+      } else {
+        setMontoMeta(formatVE(parsed / effRate));
+      }
+    }
+    setColectaCurrency(newCurr);
+  };
+
+  const handleTogglePledgeCurrency = (newCurr) => {
+    if (newCurr === pledgeCurrency || !targetColecta) return;
+    const parsed = parseVEAmount(pledgeAmount);
+    const effRate = targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1;
+    if (parsed !== null && !isNaN(parsed) && parsed > 0 && effRate > 0) {
+      if (newCurr === 'VES') {
+        setPledgeAmount(formatVE(parsed * effRate));
+      } else {
+        setPledgeAmount(formatVE(parsed / effRate));
+      }
+    }
+    setPledgeCurrency(newCurr);
+  };
+
+  const parsedMeta = parseVEAmount(montoMeta);
+  const effCreateRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+  const metaCountervalueBs = (colectaCurrency === 'USD' && parsedMeta !== null && effCreateRate > 0)
+    ? parsedMeta * effCreateRate
+    : null;
+  const metaCountervalueUsd = (colectaCurrency === 'VES' && parsedMeta !== null && effCreateRate > 0)
+    ? parsedMeta / effCreateRate
+    : null;
+
+  const parsedPledge = parseVEAmount(pledgeAmount);
+  const effPledgeRate = targetColecta ? (targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1) : 1;
+  const pledgeCountervalueBs = (pledgeCurrency === 'USD' && parsedPledge !== null && effPledgeRate > 0)
+    ? parsedPledge * effPledgeRate
+    : null;
+  const pledgeCountervalueUsd = (pledgeCurrency === 'VES' && parsedPledge !== null && effPledgeRate > 0)
+    ? parsedPledge / effPledgeRate
+    : null;
+
   // Crear Colecta
   const handleCreateColecta = async (e) => {
     e.preventDefault();
@@ -161,21 +215,28 @@ export default function FundsDashboard() {
       alert('Por favor completa el título, propósito y monto meta');
       return;
     }
-    const metaNum = parseFloat(montoMeta);
-    if (isNaN(metaNum) || metaNum <= 0) {
+    const parsed = parseVEAmount(montoMeta);
+    if (parsed === null || isNaN(parsed) || parsed <= 0) {
       alert('El monto meta debe ser mayor a 0');
       return;
     }
 
     setSubmittingColecta(true);
     try {
+      const effRate = getEffectiveRate(tipoTasa, tasaFijaValor);
+      const metaUsd = colectaCurrency === 'VES' ? Number((parsed / effRate).toFixed(2)) : parsed;
+      const metaVes = colectaCurrency === 'VES' ? parsed : Number((parsed * effRate).toFixed(2));
+
       const payload = {
         titulo: titulo.trim(),
         proposito: proposito.trim(),
-        monto_meta_usd: metaNum,
+        monto_meta_usd: metaUsd,
+        monto_meta_ves: metaVes,
+        currency: colectaCurrency,
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) || null : null,
-        fecha_limite_pago: fechaPago || null,
+        fecha_pago: fechaPago || new Date().toISOString().split('T')[0],
+        fecha_limite_aportes: fechaPago || null,
         beneficiario_nombre: beneficiarioNombre.trim() || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Familia'
       };
       await colectasApi.createColecta(payload);
@@ -183,6 +244,7 @@ export default function FundsDashboard() {
       setTitulo('');
       setProposito('');
       setMontoMeta('');
+      setColectaCurrency('USD');
       setFechaPago('');
       setBeneficiarioNombre('');
       await fetchColectas();
@@ -197,17 +259,26 @@ export default function FundsDashboard() {
   const handlePledge = async (e) => {
     e.preventDefault();
     if (!targetColecta || !pledgeAmount) return;
-    const amountNum = parseFloat(pledgeAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const parsed = parseVEAmount(pledgeAmount);
+    if (parsed === null || isNaN(parsed) || parsed <= 0) {
       alert('El monto debe ser mayor a 0');
       return;
     }
 
     setSubmittingPledge(true);
     try {
-      await colectasApi.pledgeCommitment(targetColecta.id, amountNum);
+      const effRate = targetColecta.tasa_actual || rates[targetColecta.tipo_tasa]?.rate || rates?.bcv?.rate || 1;
+      const pledgeUsd = pledgeCurrency === 'VES' ? Number((parsed / effRate).toFixed(2)) : parsed;
+      const pledgeVes = pledgeCurrency === 'VES' ? parsed : Number((parsed * effRate).toFixed(2));
+
+      await colectasApi.pledgeCommitment(targetColecta.id, {
+        monto_usd: pledgeUsd,
+        monto_ves: pledgeVes,
+        currency: pledgeCurrency
+      });
       setShowPledgeModal(false);
       setPledgeAmount('');
+      setPledgeCurrency('USD');
       setTargetColecta(null);
       await fetchColectas();
     } catch (err) {
@@ -589,9 +660,14 @@ export default function FundsDashboard() {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
                         <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Recaudación Familiar</span>
-                        <span style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: '800' }}>
-                          ${item.monto_recaudado_usd || 0} <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>/ ${item.monto_meta_usd} USD</span>
-                        </span>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: '800' }}>
+                            ${formatVE(item.monto_recaudado_usd || 0)} <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>/ ${formatVE(item.monto_meta_usd)} USD</span>
+                          </span>
+                          <span style={{ display: 'block', fontSize: '0.78rem', color: '#38bdf8', fontWeight: '600' }}>
+                            Bs. {formatVE(item.monto_recaudado_bs || ((item.monto_recaudado_usd || 0) * (item.tasa_actual || 1)))} / Bs. {formatVE(item.monto_meta_bs || (item.monto_meta_usd * (item.tasa_actual || 1)))}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Barra visual */}
@@ -611,9 +687,11 @@ export default function FundsDashboard() {
                         }} />
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
                         <span>Progreso: {progressPct}%</span>
-                        <span>Equivalente: Bs {((item.monto_meta_usd || 0) * (item.tasa_actual || rates?.bcv?.rate || 1)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span style={{ backgroundColor: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '6px', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                          Tasa {item.tipo_tasa?.toUpperCase()}: Bs. {formatVE(item.tasa_actual || rates?.bcv?.rate || 1)}
+                        </span>
                       </div>
                     </div>
 
@@ -664,9 +742,9 @@ export default function FundsDashboard() {
                       }}>
                         <div>
                           <span style={{ color: '#93c5fd', fontWeight: '600' }}>Tu Aporte: </span>
-                          <span style={{ color: '#ffffff', fontWeight: '700' }}>${myPledge.monto_usd} USD</span>
-                          <span style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'block' }}>
-                            (Bs {Number(myPledge.monto_bs || (myPledge.monto_usd * (item.tasa_actual || 1))).toFixed(2)})
+                          <span style={{ color: '#ffffff', fontWeight: '700' }}>${formatVE(myPledge.monto_usd)} USD</span>
+                          <span style={{ color: '#38bdf8', fontSize: '0.8rem', display: 'block', fontWeight: '600' }}>
+                            • Bs. {formatVE(myPledge.monto_bs || (myPledge.monto_usd * (item.tasa_actual || 1)))}
                           </span>
                         </div>
                         <span style={{
@@ -898,39 +976,134 @@ export default function FundsDashboard() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                    Monto Meta (USD) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="1"
-                    className="form-input"
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                    placeholder="100.00"
-                    value={montoMeta}
-                    onChange={(e) => setMontoMeta(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                    Tipo de Tasa de Cambio
-                  </label>
-                  <select
-                    className="form-input"
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                    value={tipoTasa}
-                    onChange={(e) => setTipoTasa(e.target.value)}
+              {/* Selector Bimoneda */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Moneda y Monto Meta *
+                </label>
+                <div style={{
+                  display: 'inline-flex',
+                  backgroundColor: '#0f172a',
+                  borderRadius: '8px',
+                  padding: '3px',
+                  border: '1px solid #334155',
+                  gap: '4px',
+                  marginBottom: '10px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleColectaCurrency('USD')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: colectaCurrency === 'USD' ? 700 : 500,
+                      backgroundColor: colectaCurrency === 'USD' ? '#2563eb' : 'transparent',
+                      color: colectaCurrency === 'USD' ? '#ffffff' : '#94a3b8',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
-                    <option value="bcv">Oficial BCV</option>
-                    <option value="paralelo">Paralelo</option>
-                    <option value="usdt">USDT Cripto</option>
-                    <option value="fija">Tasa Fija Personalizada</option>
-                  </select>
+                    $ USD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleColectaCurrency('VES')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: colectaCurrency === 'VES' ? 700 : 500,
+                      backgroundColor: colectaCurrency === 'VES' ? '#2563eb' : 'transparent',
+                      color: colectaCurrency === 'VES' ? '#ffffff' : '#94a3b8',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Bs. VES
+                  </button>
                 </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{
+                      position: 'absolute',
+                      left: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#94a3b8',
+                      fontWeight: '700',
+                      fontSize: '0.9rem',
+                      pointerEvents: 'none'
+                    }}>
+                      {colectaCurrency === 'USD' ? '$' : 'Bs.'}
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="form-input"
+                      style={{
+                        width: '100%',
+                        padding: '10px 10px 10px 2.5rem',
+                        borderRadius: '8px',
+                        backgroundColor: '#0f172a',
+                        border: '1px solid #334155',
+                        color: '#fff',
+                        fontWeight: '600'
+                      }}
+                      placeholder={colectaCurrency === 'USD' ? "Ej: 100,00" : "Ej: 5.500,00"}
+                      value={montoMeta}
+                      onChange={(e) => setMontoMeta(e.target.value)}
+                      onBlur={() => {
+                        const p = parseVEAmount(montoMeta);
+                        if (p !== null && p > 0) setMontoMeta(formatVE(p));
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <select
+                      className="form-input"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                      value={tipoTasa}
+                      onChange={(e) => setTipoTasa(e.target.value)}
+                    >
+                      <option value="bcv">Oficial BCV</option>
+                      <option value="paralelo">Paralelo</option>
+                      <option value="usdt">USDT Cripto</option>
+                      <option value="fija">Tasa Fija</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Live Countervalue Box */}
+                {(metaCountervalueBs !== null || metaCountervalueUsd !== null) && (
+                  <div style={{
+                    marginTop: '8px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                      Contravalor estimado:
+                    </span>
+                    <span style={{ color: '#38bdf8', fontWeight: '700', fontSize: '0.9rem' }}>
+                      {colectaCurrency === 'USD'
+                        ? formatCurrencyVE(metaCountervalueBs, 'VES')
+                        : formatCurrencyVE(metaCountervalueUsd, 'USD')
+                      }
+                      <span style={{ color: '#64748b', fontSize: '0.75rem', marginLeft: '6px' }}>
+                        (Tasa: Bs. {formatVE(effCreateRate)})
+                      </span>
+                    </span>
+                  </div>
+                )}
               </div>
 
               {tipoTasa === 'fija' && (
@@ -1037,25 +1210,117 @@ export default function FundsDashboard() {
 
             <form onSubmit={handlePledge} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Monto a Aportar (USD) *
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Moneda y Monto a Aportar *
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.5"
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff', fontSize: '1.25rem', fontWeight: 'bold' }}
-                  placeholder="Ej: 10.00"
-                  value={pledgeAmount}
-                  onChange={(e) => setPledgeAmount(e.target.value)}
-                  required
-                  autoFocus
-                />
-                {pledgeAmount && !isNaN(parseFloat(pledgeAmount)) && (
-                  <p style={{ color: '#10b981', fontSize: '0.85rem', marginTop: '6px', fontWeight: '600' }}>
-                    ≈ Bs {(parseFloat(pledgeAmount) * (targetColecta.tasa_actual || rates?.bcv?.rate || 1)).toFixed(2)}
-                  </p>
+                <div style={{
+                  display: 'inline-flex',
+                  backgroundColor: '#0f172a',
+                  borderRadius: '8px',
+                  padding: '3px',
+                  border: '1px solid #334155',
+                  gap: '4px',
+                  marginBottom: '10px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePledgeCurrency('USD')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: pledgeCurrency === 'USD' ? 700 : 500,
+                      backgroundColor: pledgeCurrency === 'USD' ? '#2563eb' : 'transparent',
+                      color: pledgeCurrency === 'USD' ? '#ffffff' : '#94a3b8',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    $ USD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePledgeCurrency('VES')}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: pledgeCurrency === 'VES' ? 700 : 500,
+                      backgroundColor: pledgeCurrency === 'VES' ? '#2563eb' : 'transparent',
+                      color: pledgeCurrency === 'VES' ? '#ffffff' : '#94a3b8',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Bs. VES
+                  </button>
+                </div>
+
+                <div style={{ position: 'relative' }}>
+                  <span style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#94a3b8',
+                    fontWeight: '700',
+                    fontSize: '1rem',
+                    pointerEvents: 'none'
+                  }}>
+                    {pledgeCurrency === 'USD' ? '$' : 'Bs.'}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="form-input"
+                    style={{
+                      width: '100%',
+                      padding: '10px 10px 10px 2.6rem',
+                      borderRadius: '8px',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #334155',
+                      color: '#fff',
+                      fontSize: '1.25rem',
+                      fontWeight: 'bold'
+                    }}
+                    placeholder={pledgeCurrency === 'USD' ? "Ej: 10,00" : "Ej: 550,00"}
+                    value={pledgeAmount}
+                    onChange={(e) => setPledgeAmount(e.target.value)}
+                    onBlur={() => {
+                      const p = parseVEAmount(pledgeAmount);
+                      if (p !== null && p > 0) setPledgeAmount(formatVE(p));
+                    }}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {(pledgeCountervalueBs !== null || pledgeCountervalueUsd !== null) && (
+                  <div style={{
+                    marginTop: '8px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                      Contravalor:
+                    </span>
+                    <span style={{ color: '#10b981', fontWeight: '700', fontSize: '0.9rem' }}>
+                      {pledgeCurrency === 'USD'
+                        ? formatCurrencyVE(pledgeCountervalueBs, 'VES')
+                        : formatCurrencyVE(pledgeCountervalueUsd, 'USD')
+                      }
+                      <span style={{ color: '#64748b', fontSize: '0.75rem', marginLeft: '6px' }}>
+                        (Tasa: Bs. {formatVE(effPledgeRate)})
+                      </span>
+                    </span>
+                  </div>
                 )}
               </div>
 
@@ -1120,11 +1385,17 @@ export default function FundsDashboard() {
               borderRadius: '8px',
               padding: '12px',
               marginBottom: '1rem',
+              border: '1px solid #334155'
             }}>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>Monto Comprometido:</p>
-              <p style={{ margin: '4px 0 0 0', fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>
-                Bs {((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)).toFixed(2)}
-                <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginLeft: '6px' }}>(${targetColecta.mi_compromiso?.monto_usd} USD)</span>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>Monto a Transferir / Pagar:</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '1.35rem', fontWeight: 'bold', color: '#10b981' }}>
+                Bs. {formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
+                <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginLeft: '8px' }}>
+                  (${formatVE(targetColecta.mi_compromiso?.monto_usd)} USD)
+                </span>
+              </p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                Tasa aplicada ({targetColecta.tipo_tasa?.toUpperCase() || 'BCV'}): Bs. {formatVE(targetColecta.tasa_actual || 1)}
               </p>
             </div>
 

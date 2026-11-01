@@ -275,3 +275,29 @@ Para mantener 100% la privacidad familiar y la ligereza del sistema:
   - Descarga directa en web: `https://mutualfam-qa.vercel.app/download` vía `/config/latest-apk`
   - Firebase App Distribution: `Mutual Familiar (QA)` grupo `testers`
 
+---
+
+## 12. Registro de Homologación y Despliegue QA v1.0.37-qa (01/11/2026)
+
+- **Versión:** `v1.0.37-qa` (versionCode: `10037`)
+- **Objetivo:** Incorporación de la modalidad bimoneda (USD / VES) en Colectas Solidarias ("Vacas"), homologando la arquitectura y experiencia de usuario existente en el módulo de Préstamos.
+- **Alcance de Cambios:**
+  - **Backend (`FastAPI`):**
+    - Modelo `Colecta`: Campos `monto_meta_ves` y `moneda_origen`.
+    - `POST /colectas/`: Acepta `currency: "USD" | "VES"`, calculando el contravalor automático a la tasa acordada (`bcv`, `usdt`, `euro`, `paralelo` o `fija`).
+    - `POST /colectas/{id}/compromisos`: Acepta `currency: "USD" | "VES"` y `monto_ves` / `monto_usd`.
+    - `_serialize_colecta`: Incluye `monto_recaudado_bs` y `moneda_origen`.
+  - **SDK CivicCore (`@civiccore/sdk`):**
+    - `pledgeCommitment`: Soporte para montos bimoneda numéricos y payloads `{ monto_usd, monto_ves, currency }`.
+  - **Web (`mutualfam-web`):**
+    - Selector interactivo `[ $ USD | Bs. VES ]` en modal de propuesta de colecta y en modal de aportes.
+    - Tarjeta de contravalor dinámico en tiempo real según la tasa seleccionada.
+    - Visualización bimoneda dual en tarjetas de colectas (`$ USD` • `Bs. VES`) con estándar de puntuación venezolano.
+  - **Mobile (`mutualfam-mobile`):**
+    - Implementación de selector `[ $ USD | Bs. VES ]` con feedback táctil y estilos nativos homologados con `LoansScreen.js`.
+    - Conversión bidireccional y tarjetas de contravalor dinámico.
+    - Validación 100% limpia de sintaxis y bundle Babel React Native.
+  - **Certificación Automatizada:**
+    - Suite de pruebas E2E ampliada con pruebas de creación de colectas y promesas en moneda VES.
+
+
