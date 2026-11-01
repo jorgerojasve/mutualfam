@@ -189,7 +189,15 @@ export default function InviteLanding() {
   const progressTimerRef = useRef(null);
   const downloadCooldownRef = useRef(false);
   const toastTimer = useRef(null);
+  const pageRef = useRef(null);
   const envConfig = getEnvironmentConfig();
+
+  useEffect(() => {
+    if (pageRef.current) {
+      pageRef.current.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
@@ -356,7 +364,7 @@ export default function InviteLanding() {
 
   if (status === 'invalid') {
     return (
-      <main className="il-page">
+      <main className="il-page" ref={pageRef}>
         <div className="il-bg" aria-hidden="true" />
         <section className="il-card il-card--center">
           <div className="il-badge il-badge--danger">
@@ -386,7 +394,7 @@ export default function InviteLanding() {
   }
 
   return (
-    <main className="il-page">
+    <main className="il-page" ref={pageRef}>
       <div className="il-bg" aria-hidden="true" />
 
       <section className="il-card">
