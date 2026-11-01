@@ -1,6 +1,6 @@
 {
   "name": "mutualfam-mobile",
-  "version": "1.0.31",
+  "version": "1.0.36",
   "main": "index.js",
   "scripts": {
     "start": "expo start",

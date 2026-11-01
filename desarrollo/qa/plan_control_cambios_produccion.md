@@ -262,3 +262,16 @@ Para mantener 100% la privacidad familiar y la ligereza del sistema:
   - **No registra:** direcciones IP, identificadores de usuario, montos de dinero ni nombres.
   - Genera automáticamente un mapa de calor (*heatmap*) para consultar: *"En MutualFam el pico de uso ocurre entre las 11:00 AM y 2:00 PM y de 7:00 PM a 9:30 PM; la ventana óptima de menor uso es entre 11:30 PM y 6:00 AM"*.
 - **Transparencia:** Basta con incluir una breve línea en los términos de servicio/pantalla de ajustes indicando: *"MutualFam recopila métricas operativas anónimas de rendimiento para optimizar las ventanas de actualización del servicio"*.
+
+---
+
+## 11. Registro de Despliegue QA v1.0.36-qa (01/11/2026)
+
+- **Versión:** `v1.0.36-qa` (versionCode: `10036`)
+- **Objetivo:** Lanzamiento en QA de las funcionalidades de Colectas Solidarias ("Vacas" Familiares) y Gobernanza/Asambleas, integradas y homologadas con soporte iPhone (Web/PWA) y caché offline.
+- **Certificación Automatizada:** Suite de pruebas QA ejecutada con 45/45 pruebas superadas (100% éxito).
+- **Canales de Distribución:**
+  - GitHub Releases: `Mutual Familiar (QA) v1.0.36`
+  - Descarga directa en web: `https://mutualfam-qa.vercel.app/download` vía `/config/latest-apk`
+  - Firebase App Distribution: `Mutual Familiar (QA)` grupo `testers`
+

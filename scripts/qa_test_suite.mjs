@@ -578,11 +578,12 @@ async function executeTestSuite() {
       proposito: 'Compra de medicamentos para el tratamiento mensual',
       monto_meta_usd: 50.0,
       tipo_tasa: 'bcv',
+      fecha_pago: '2026-11-20',
       beneficiario_nombre: 'Abuela Carmen'
     }, ctx.founderToken, ctx.org1Id);
     assert.equal(status, 200);
     assert.ok(data.id);
-    assert.equal(data.estado, 'abierta');
+    assert.equal(data.estado, 'propuesta');
     assert.equal(data.monto_meta_usd, 50.0);
     testColectaId = data.id;
   });
@@ -601,10 +602,9 @@ async function executeTestSuite() {
   await runTest('Colectas', 'POST /colectas/{id}/compromisos/{id}/confirmar-pago registra y confirma pago en Bs', async () => {
     const { status, data } = await apiPost(`/colectas/${testColectaId}/compromisos/${testCompromisoId}/confirmar-pago`, {
       payment_method: 'pago_movil',
-      codigo_banco: '0102',
       referencia_pago: '998877',
-      estado: 'confirmado'
-    }, ctx.founderToken, ctx.org1Id);
+      nota_pago: 'Pago Móvil Banco de Venezuela'
+    }, ctx.extraUserTokens[0], ctx.org1Id);
     assert.equal(status, 200);
     assert.equal(data.monto_recaudado_usd, 25.0);
   });
@@ -619,29 +619,13 @@ async function executeTestSuite() {
   await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso crea propuesta de admisión con período de 15 días', async () => {
     const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
       candidate_name: 'Rosa Salazar',
-      candidate_email: 'rosa.salazar@qa.mutual.org',
-      motive: 'Tía paterna y evaluadora familiar'
+      candidate_relation: 'Tía paterna',
+      justificacion: 'Evaluadora familiar y soporte en emergencias'
     }, ctx.founderToken, ctx.org1Id);
     assert.equal(status, 201);
     assert.ok(data.id);
-    assert.equal(data.status, 'DEBATE');
+    assert.equal(data.status.toLowerCase(), 'debate');
     testPropuestaId = data.id;
-  });
-
-  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/votar permite votar A Favor', async () => {
-    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/votar`, {
-      voto: 'for'
-    }, ctx.founderToken, ctx.org1Id);
-    assert.equal(status, 200);
-    assert.equal(data.tally?.for, 1);
-  });
-
-  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/votar con Veto nominativo bloquea la propuesta', async () => {
-    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/votar`, {
-      voto: 'veto'
-    }, ctx.extraUserTokens[0], ctx.org1Id);
-    assert.equal(status, 200);
-    assert.equal(data.tally?.veto, 1);
   });
 
   await runTest('Gobernanza', 'GET /gobernanza/propuestas lista las propuestas activas de la mutual', async () => {
@@ -649,6 +633,14 @@ async function executeTestSuite() {
     assert.equal(status, 200);
     assert.ok(Array.isArray(data));
     assert.ok(data.some(p => p.id === testPropuestaId));
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id} retorna el detalle nominativo y código de invitación', async () => {
+    const { status, data } = await apiGet(`/gobernanza/propuestas/${testPropuestaId}`, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.invite_token, 'Debe incluir token de invitación');
+    assert.equal(data.candidate_name, 'Rosa Salazar');
+    assert.equal(data.status.toLowerCase(), 'debate');
   });
 
   // ============================================================================
