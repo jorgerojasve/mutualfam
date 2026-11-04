@@ -88,22 +88,22 @@ def propose_member_admission(
             if ap.extra_fields and ap.extra_fields.get("candidate_name", "").strip().lower() == candidate_name.lower():
                 raise ValueError(f"Ya existe una propuesta de admisión activa para '{candidate_name}'.")
 
-    # Generate 15-day expiration invite record
-    from datetime import timedelta
-    expires_at = datetime.now(timezone.utc) + timedelta(days=15)
-    invite_code = _generate_invite_code(db)
-    formatted_code = f"{invite_code[:4]}-{invite_code[4:]}" if len(invite_code) == 8 else invite_code
+    # Contar miembros activos en la mutual
+    active_members_count = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == organization_id,
+        OrganizationMembership.status == MemberStatus.ACTIVE
+    ).count()
 
-    invite = OrganizationInvite(
-        organization_id=organization_id,
-        created_by_user_id=author_id,
-        token=invite_code,
-        max_uses=1,
-        expires_at=expires_at,
-        status=InviteStatus.ACTIVE
-    )
-    db.add(invite)
-    db.flush()
+    is_single_member = (active_members_count <= 1)
+
+    extra_fields = {
+        "candidate_name": candidate_name,
+        "candidate_relation": candidate_relation or "",
+        "candidate_phone": candidate_phone or "",
+        "justificacion": justificacion,
+    }
+    if is_single_member:
+        extra_fields["auto_approved_single_member"] = True
 
     proposal_in = ProposalCreate(
         title=f"Admisión de {candidate_name}",
@@ -113,23 +113,86 @@ def propose_member_admission(
         target_member_id=candidate_user_id,
         organization_id=organization_id,
         voting_mechanism=VotingMechanism.SIMPLE,
-        extra_fields={
-            "candidate_name": candidate_name,
-            "candidate_relation": candidate_relation or "",
-            "candidate_phone": candidate_phone or "",
-            "justificacion": justificacion,
-            "invite_token": invite_code,
-            "invite_code_formatted": formatted_code,
-            "expires_at": expires_at.isoformat()
-        }
+        extra_fields=extra_fields
     )
     proposal = GovernanceService.create_proposal(db, author_id=author_id, proposal_in=proposal_in)
 
-    invite.proposal_id = proposal.id
+    if is_single_member:
+        # APROBACIÓN INMEDIATA: No requiere asamblea ni votación cuando solo hay 1 miembro
+        now = datetime.now(timezone.utc)
+        proposal.status = ProposalStatus.APPROVED
+        proposal.voting_starts_at = now
+        proposal.voting_ends_at = now
+
+        # Registrar voto afirmativo automático del fundador
+        from ..governance.models import Vote
+        auto_vote = Vote(
+            proposal_id=proposal.id,
+            member_id=author_id,
+            vote_value=1.0
+        )
+        db.add(auto_vote)
+        db.commit()
+
+        # Generar invitación inmediatamente para que el fundador pueda compartirla
+        generate_invite_for_approved_proposal(db, proposal, author_id)
+
+        # Si el candidato ya es un usuario registrado en la plataforma, activar membresía
+        if candidate_user_id:
+            activate_proposed_member(db, proposal.id, candidate_user_id, organization_id)
+    else:
+        # CON MÚLTIPLES MIEMBROS: La propuesta queda en DEBATE y NO se genera enlace todavía
+        db.commit()
+
+    db.refresh(proposal)
+    return proposal
+
+def generate_invite_for_approved_proposal(
+    db: Session,
+    proposal: Proposal,
+    author_id: Optional[int] = None
+) -> Optional[OrganizationInvite]:
+    """
+    Genera el registro OrganizationInvite (válido por 15 días) y asigna
+    invite_token e invite_code_formatted a la propuesta ÚNICAMENTE tras ser APROBADA
+    (o inmediatamente cuando la mutual consta de un único miembro).
+    """
+    if proposal.proposal_type != ProposalType.MEMBER_ADMISSION:
+        return None
+
+    # Si ya tiene una invitación activa para esta propuesta, retornarla
+    existing_invite = db.query(OrganizationInvite).filter(
+        OrganizationInvite.proposal_id == proposal.id
+    ).first()
+    if existing_invite:
+        return existing_invite
+
+    from datetime import timedelta
+    expires_at = datetime.now(timezone.utc) + timedelta(days=15)
+    invite_code = _generate_invite_code(db)
+    formatted_code = f"{invite_code[:4]}-{invite_code[4:]}" if len(invite_code) == 8 else invite_code
+
+    creator_id = author_id or proposal.author_id
+    invite = OrganizationInvite(
+        organization_id=proposal.organization_id,
+        created_by_user_id=creator_id,
+        proposal_id=proposal.id,
+        token=invite_code,
+        max_uses=1,
+        expires_at=expires_at,
+        status=InviteStatus.ACTIVE
+    )
+    db.add(invite)
+
+    extra = dict(proposal.extra_fields or {})
+    extra["invite_token"] = invite_code
+    extra["invite_code_formatted"] = formatted_code
+    extra["expires_at"] = expires_at.isoformat()
+    proposal.extra_fields = extra
+
     db.commit()
     db.refresh(proposal)
-
-    return proposal
+    return invite
 
 def activate_proposed_member(
     db: Session,

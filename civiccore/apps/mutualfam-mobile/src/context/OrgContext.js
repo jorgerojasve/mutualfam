@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi } from '../api/client';
+import { authApi, setNetworkStateListener } from '../api/client';
 import { connectRealtime, disconnectRealtime } from '../utils/realtime';
 import { isNetworkError } from '../utils/errors';
 
@@ -125,7 +125,11 @@ export const OrgProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    setNetworkStateListener((isOnline) => {
+      setIsOffline(!isOnline);
+    });
     loadActiveOrg();
+    return () => setNetworkStateListener(null);
   }, []);
 
   // Canal en tiempo real: una conexión por mutual activa

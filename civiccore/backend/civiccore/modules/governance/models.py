@@ -83,6 +83,10 @@ class Comment(Base):
     content = Column(Text, nullable=False)
     is_anonymous = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
+    
+    stance = Column(String(20), nullable=True) # "favor", "contra", "duda", "neutro"
+    attachment_url = Column(String(500), nullable=True)
+    attachment_type = Column(String(50), nullable=True) # "image", "audio", "drawing", "link"
 
     proposal = relationship("Proposal", back_populates="comments")
     author = relationship("Member", foreign_keys=[author_id])

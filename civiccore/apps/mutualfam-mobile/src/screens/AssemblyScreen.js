@@ -13,18 +13,24 @@ import {
   RefreshControl,
   Share
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
-import { governanceApi, authApi } from '../api/client';
+import { governanceApi, authApi, loansApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, isNetworkError } from '../utils/errors';
+import theme from '../utils/theme';
+import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
 export default function AssemblyScreen({ embedded = false }) {
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
   const [currentUser, setCurrentUser] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   // Propuestas y pestañas
   const [activeTab, setActiveTab] = useState('activas'); // 'activas' | 'historial'
@@ -58,6 +64,14 @@ export default function AssemblyScreen({ embedded = false }) {
   const [defenseInput, setDefenseInput] = useState('');
   const [submittingDefense, setSubmittingDefense] = useState(false);
 
+  // Foro de debate / comentarios de asamblea
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [commentStance, setCommentStance] = useState('opinión');
+  const [commentAttachment, setCommentAttachment] = useState(null);
+  const [submittingComment, setSubmittingComment] = useState(false);
+
   // Votación
   const [submittingVote, setSubmittingVote] = useState(false);
   const [closingProposal, setClosingProposal] = useState(false);
@@ -78,16 +92,39 @@ export default function AssemblyScreen({ embedded = false }) {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
+      setConnectionError(false);
 
       const data = await governanceApi.getPropuestas();
       setPropuestas(data);
+      if (setIsOffline) setIsOffline(false);
+      AsyncStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
     } catch (e) {
-      console.warn('Error fetching propuestas', e);
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+        try {
+          const cached = await AsyncStorage.getItem(`cached_asambleas_${activeOrg.id}`);
+          if (cached) setPropuestas(JSON.parse(cached));
+        } catch (_) {}
+      } else {
+        console.warn('Error fetching propuestas', e);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
+
+  const handleRetryAsambleas = async () => {
+    setRetrying(true);
+    try {
+      await fetchPropuestas();
+      if (retryConnection) await retryConnection();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchUser();
@@ -117,7 +154,8 @@ export default function AssemblyScreen({ embedded = false }) {
         event?.type === 'PROPUESTA_CREADA' ||
         event?.type === 'VOTO_EMITIDO' ||
         event?.type === 'DEFENSA_PUBLICADA' ||
-        event?.type === 'PROPUESTA_RESUELTA'
+        event?.type === 'PROPUESTA_RESUELTA' ||
+        event?.type === 'PROPUESTA_COMENTADA'
       ) {
         fetchPropuestas(true);
         if (selectedProposal && event.payload?.proposal_id === selectedProposal.id) {
@@ -139,11 +177,13 @@ export default function AssemblyScreen({ embedded = false }) {
       }
       const code = codeFormatted || token;
       const targetName = name ? ` ${name}` : '';
-      const shareMessage = `¡Hola${targetName}! 👋\n\nTe propuse para unirte a nuestra Mutual Familiar en la app MutualFam 🤝.\n\n1️⃣ Abre este enlace e instala la app:\n${inviteUrl}\n\n2️⃣ O ingresa con este código de invitación:\n*${code}*\n\n⏱️ Este enlace es válido por 15 días mientras la asamblea familiar debate y aprueba tu ingreso.`;
+      const shareMessage = `¡Hola${targetName}! 👋\n\n¡Has sido aprobado para unirte a nuestra Mutual Familiar en la app MutualFam 🤝!\n\n1️⃣ Abre este enlace e instala la app:\n${inviteUrl}\n\n2️⃣ O ingresa con este código de invitación:\n*${code}*\n\n⏱️ Este código de invitación es válido por 15 días. ¡Bienvenido a la mutual!`;
 
-      await Share.share({
-        message: shareMessage,
-      });
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { message: shareMessage, url: inviteUrl }
+          : { message: shareMessage }
+      );
     } catch (e) {
       console.warn('Error sharing invite', e);
     }
@@ -168,15 +208,86 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
+  // Cargar comentarios del debate
+  const fetchComments = async (propId) => {
+    try {
+      setLoadingComments(true);
+      const list = await governanceApi.getComentarios(propId);
+      setComments(list);
+    } catch (e) {
+      console.warn('Error fetching comments', e);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // Publicar comentario o intervención en el foro
+  const handleSendComment = async () => {
+    if (!proposalDetail) return;
+    const text = commentText.trim();
+    if (!text && !commentAttachment) {
+      Alert.alert('Mensaje requerido', 'Por favor escribe tu opinión o adjunta una imagen.');
+      return;
+    }
+
+    setSubmittingComment(true);
+    try {
+      let finalAttachmentUrl = null;
+      let finalAttachmentType = null;
+      if (commentAttachment?.uri) {
+        const uploadRes = await loansApi.uploadFile(commentAttachment.uri);
+        finalAttachmentUrl = uploadRes.file_url;
+        finalAttachmentType = commentAttachment.type || 'image';
+      }
+
+      await governanceApi.agregarComentario(proposalDetail.id, {
+        content: text || 'Imagen adjunta',
+        stance: commentStance,
+        attachment_url: finalAttachmentUrl,
+        attachment_type: finalAttachmentType
+      });
+
+      setCommentText('');
+      setCommentAttachment(null);
+      await fetchComments(proposalDetail.id);
+    } catch (e) {
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo publicar tu comentario'));
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  // Adjuntar imagen desde la galería
+  const handlePickCommentImage = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        setCommentAttachment({ uri: res.assets[0].uri, type: 'image' });
+      }
+    } catch (e) {
+      console.warn('Error picking image for comment', e);
+    }
+  };
+
   // Abrir modal de detalle
   const openProposalDetail = async (proposal) => {
     setSelectedProposal(proposal);
     setShowDetailModal(true);
     setLoadingDetail(true);
+    setCommentText('');
+    setCommentAttachment(null);
     try {
-      const full = await governanceApi.getPropuesta(proposal.id);
+      const [full, commentList] = await Promise.all([
+        governanceApi.getPropuesta(proposal.id),
+        governanceApi.getComentarios(proposal.id).catch(() => [])
+      ]);
       setProposalDetail(full);
       setDefenseInput(full.defense_text || '');
+      setComments(commentList);
     } catch (e) {
       Alert.alert('Error', getErrorMessage(e, 'No se pudo cargar el detalle de la propuesta'));
       setShowDetailModal(false);
@@ -209,7 +320,8 @@ export default function AssemblyScreen({ embedded = false }) {
         invite_token: res.invite_token,
         invite_code_formatted: res.invite_code_formatted || res.invite_token,
         candidate_name: candidateName.trim(),
-        expires_at: res.invite_expires_at
+        expires_at: res.invite_expires_at,
+        status: res.status
       });
 
       fetchPropuestas(true);
@@ -415,7 +527,7 @@ export default function AssemblyScreen({ embedded = false }) {
                 🤝 Parentesco: <Text style={{ color: '#f8fafc', fontWeight: '600' }}>{item.candidate_relation}</Text>
               </Text>
             ) : null}
-            {item.invite_token && (isDebate || isVoting) && (
+            {item.status === 'approved' && item.invite_token && (
               <View style={styles.inviteSnippetRow}>
                 <View style={styles.inviteSnippetCodePill}>
                   <Text style={styles.inviteSnippetCodeText}>
@@ -441,9 +553,13 @@ export default function AssemblyScreen({ embedded = false }) {
               <Text style={styles.redeemedText}>
                 👤 Cuenta vinculada: <Text style={{ color: '#38bdf8', fontWeight: 'bold' }}>{item.redeemed_by_name}</Text>
               </Text>
-            ) : item.invite_token && (isDebate || isVoting) ? (
+            ) : item.status === 'approved' && item.invite_token ? (
               <Text style={styles.pendingClaimText}>
-                ⏳ Enlace de 15 días pendiente de canje
+                ⏳ Invitación de 15 días aprobada y lista para canje
+              </Text>
+            ) : (isDebate || isVoting) ? (
+              <Text style={styles.pendingAssemblyText}>
+                ⚖️ En proceso de asamblea (El enlace se generará una vez aprobado)
               </Text>
             ) : null}
           </View>
@@ -550,10 +666,19 @@ export default function AssemblyScreen({ embedded = false }) {
         </TouchableOpacity>
       </View>
 
+      {/* Aviso Offline */}
+      {(isOffline || connectionError) && propuestasFiltradas.length > 0 ? (
+        <OfflineNotice
+          message="Sin conexión de red · Mostrando asambleas guardadas"
+          onRetry={handleRetryAsambleas}
+          loading={retrying}
+        />
+      ) : null}
+
       {/* Lista de propuestas */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <ActivityIndicator size="large" color={theme.accent || '#10b981'} />
         </View>
       ) : (
         <FlatList
@@ -565,21 +690,30 @@ export default function AssemblyScreen({ embedded = false }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => fetchPropuestas(true)}
-              tintColor="#3b82f6"
+              tintColor={theme.accent || '#10b981'}
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🏛️</Text>
-              <Text style={styles.emptyTitle}>
-                {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
-              </Text>
-              <Text style={styles.emptySubtext}>
-                {activeTab === 'activas'
-                  ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
-                  : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
-              </Text>
-            </View>
+            (isOffline || connectionError) ? (
+              <OfflineEmptyState
+                title="Sin conexión de red"
+                message="No se pudieron cargar las propuestas de asamblea. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+                onRetry={handleRetryAsambleas}
+                loading={retrying}
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyIcon}>🏛️</Text>
+                <Text style={styles.emptyTitle}>
+                  {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {activeTab === 'activas'
+                    ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
+                    : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
+                </Text>
+              </View>
+            )
           }
         />
       )}
@@ -631,41 +765,52 @@ export default function AssemblyScreen({ embedded = false }) {
                   <Text style={styles.proposerNote}>👤 Propuesto por: {proposalDetail.author_name}</Text>
                 </View>
 
-                {/* Enlace de Invitación de 15 Días (Admisión) */}
-                {proposalDetail.proposal_type === 'member_admission' && proposalDetail.invite_token && (
-                  <View style={styles.sectionCard}>
-                    <Text style={styles.sectionHeader}>Enlace de Invitación (15 Días):</Text>
-                    <View style={styles.detailInviteBox}>
-                      <Text style={styles.detailInviteCode}>
-                        {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
-                      </Text>
-                      <Text style={styles.detailInviteSub}>
-                        {proposalDetail.redeemed_by_name
-                          ? `✅ Canjeado por ${proposalDetail.redeemed_by_name}`
-                          : '⏳ Enlace vigente. Aún no ha sido canjeado por el candidato'}
-                      </Text>
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                        <TouchableOpacity
-                          style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
-                          onPress={() =>
-                            handleShareInvite(
-                              proposalDetail.invite_token,
-                              proposalDetail.candidate_name,
-                              proposalDetail.invite_code_formatted
-                            )
-                          }
-                        >
-                          <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
-                          onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
-                        >
-                          <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
-                        </TouchableOpacity>
+                {/* Enlace de Invitación Oficial (Admisión) */}
+                {proposalDetail.proposal_type === 'member_admission' && (
+                  proposalDetail.status === 'approved' && proposalDetail.invite_token ? (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Enlace de Invitación Oficial:</Text>
+                      <View style={styles.detailInviteBox}>
+                        <Text style={styles.detailInviteCode}>
+                          {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                        </Text>
+                        <Text style={styles.detailInviteSub}>
+                          {proposalDetail.redeemed_by_name
+                            ? `✅ Canjeado por ${proposalDetail.redeemed_by_name}`
+                            : '⏳ Invitación aprobada de 15 días. Lista para compartir con el familiar.'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                          <TouchableOpacity
+                            style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
+                            onPress={() =>
+                              handleShareInvite(
+                                proposalDetail.invite_token,
+                                proposalDetail.candidate_name,
+                                proposalDetail.invite_code_formatted
+                              )
+                            }
+                          >
+                            <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
+                            onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
+                          >
+                            <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
-                  </View>
+                  ) : (proposalDetail.status === 'debate' || proposalDetail.status === 'voting') ? (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Estado de la Invitación:</Text>
+                      <View style={styles.infoBanner}>
+                        <Text style={styles.infoBannerText}>
+                          ⚖️ La propuesta se encuentra en período de {proposalDetail.status === 'debate' ? 'debate' : 'votación'}. El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null
                 )}
 
                 {/* Sección de Defensa (Expulsión) */}
@@ -777,14 +922,149 @@ export default function AssemblyScreen({ embedded = false }) {
                   </View>
                 )}
 
-                {proposalDetail.status === 'debate' && (
-                  <View style={styles.debateNoticeBox}>
-                    <Text style={styles.debateNoticeTitle}>💬 En período de debate</Text>
-                    <Text style={styles.debateNoticeSub}>
-                      Los miembros están deliberando. Los botones de votación se habilitarán automáticamente cuando concluya la fase de debate.
-                    </Text>
+                {/* FORO DE DEBATE Y DELIBERACIÓN */}
+                <View style={styles.sectionCard}>
+                  <View style={styles.forumHeaderRow}>
+                    <Text style={styles.sectionHeader}>💬 Foro de Debate ({comments.length})</Text>
+                    {loadingComments && <ActivityIndicator size="small" color="#38bdf8" />}
                   </View>
-                )}
+
+                  {proposalDetail.status === 'debate' && (
+                    <View style={styles.debateNoticeBox}>
+                      <Text style={styles.debateNoticeTitle}>💬 Período de Deliberación Activo</Text>
+                      <Text style={styles.debateNoticeSub}>
+                        Expresa tus argumentos, dudas o preguntas antes de la votación formal.
+                      </Text>
+                    </View>
+                  )}
+
+                  {comments.length === 0 ? (
+                    <View style={styles.emptyCommentsBox}>
+                      <Text style={styles.emptyCommentsText}>
+                        Aún no hay comentarios en este debate. ¡Sé el primero en compartir tu opinión con la familia!
+                      </Text>
+                    </View>
+                  ) : (
+                    comments.map((c) => {
+                      let stanceColor = '#38bdf8';
+                      let stanceBg = '#075985';
+                      let stanceText = '💬 Opinión';
+                      if (c.stance === 'favor') {
+                        stanceColor = '#34d399';
+                        stanceBg = '#065f46';
+                        stanceText = '👍 A favor';
+                      } else if (c.stance === 'contra') {
+                        stanceColor = '#f87171';
+                        stanceBg = '#881337';
+                        stanceText = '👎 En contra';
+                      } else if (c.stance === 'duda') {
+                        stanceColor = '#facc15';
+                        stanceBg = '#854d0e';
+                        stanceText = '🤔 Con dudas';
+                      }
+
+                      return (
+                        <View key={c.id} style={[styles.commentCard, c.is_mine && styles.myCommentCard]}>
+                          <View style={styles.commentHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <Text style={styles.commentAuthor}>👤 {c.author_name}</Text>
+                              {c.is_mine && <Text style={styles.myCommentBadge}> (Tú)</Text>}
+                            </View>
+                            {c.stance ? (
+                              <View style={[styles.stanceBadge, { backgroundColor: stanceBg }]}>
+                                <Text style={[styles.stanceBadgeText, { color: stanceColor }]}>{stanceText}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={styles.commentContent}>{c.content}</Text>
+                          {c.attachment_url && c.attachment_type === 'image' && (
+                            <Image
+                              source={{ uri: c.attachment_url }}
+                              style={styles.commentImageAttachment}
+                              resizeMode="cover"
+                            />
+                          )}
+                          <Text style={styles.commentDate}>
+                            {c.created_at ? new Date(c.created_at).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                          </Text>
+                        </View>
+                      );
+                    })
+                  )}
+
+                  {/* Formulario para publicar en el foro */}
+                  {(proposalDetail.status === 'debate' || proposalDetail.status === 'voting') && (
+                    <View style={styles.addCommentBox}>
+                      <Text style={styles.addCommentLabel}>Tu postura o intervención:</Text>
+                      <View style={styles.stancePillsRow}>
+                        {[
+                          { key: 'favor', label: '👍 A favor' },
+                          { key: 'contra', label: '👎 En contra' },
+                          { key: 'duda', label: '🤔 Con dudas' },
+                          { key: 'opinión', label: '💬 Opinión' },
+                        ].map((s) => (
+                          <TouchableOpacity
+                            key={s.key}
+                            style={[
+                              styles.stancePill,
+                              commentStance === s.key && styles.stancePillSelected
+                            ]}
+                            onPress={() => setCommentStance(s.key)}
+                          >
+                            <Text
+                              style={[
+                                styles.stancePillText,
+                                commentStance === s.key && styles.stancePillTextSelected
+                              ]}
+                            >
+                              {s.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TextInput
+                        style={styles.commentTextInput}
+                        placeholder="Escribe tu argumento o pregunta para la asamblea..."
+                        placeholderTextColor="#64748b"
+                        multiline
+                        value={commentText}
+                        onChangeText={setCommentText}
+                      />
+
+                      {commentAttachment && (
+                        <View style={styles.attachmentPreviewRow}>
+                          <Image source={{ uri: commentAttachment.uri }} style={styles.attachmentThumb} />
+                          <Text style={styles.attachmentLabel}>Imagen adjunta</Text>
+                          <TouchableOpacity onPress={() => setCommentAttachment(null)}>
+                            <Text style={styles.removeAttachmentText}>✕ Quitar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      <View style={styles.commentActionsRow}>
+                        <TouchableOpacity
+                          style={styles.attachButton}
+                          onPress={handlePickCommentImage}
+                        >
+                          <Text style={styles.attachButtonText}>📷 Adjuntar Foto</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.sendCommentButton, (!commentText.trim() && !commentAttachment) && styles.sendCommentButtonDisabled]}
+                          onPress={handleSendComment}
+                          disabled={submittingComment || (!commentText.trim() && !commentAttachment)}
+                        >
+                          {submittingComment ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.sendCommentButtonText}>Publicar en Foro</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
 
                 {/* Desglose Nominativo de Votos */}
                 <View style={styles.sectionCard}>
@@ -840,43 +1120,66 @@ export default function AssemblyScreen({ embedded = false }) {
           <View style={styles.modalContent}>
             {createdInvite ? (
               <View style={styles.successModalContainer}>
-                <View style={styles.successBadgeCircle}>
-                  <Text style={{ fontSize: 34 }}>🎉</Text>
-                </View>
-                <Text style={styles.successModalTitle}>¡Propuesta de Ingreso Creada!</Text>
-                <Text style={styles.successModalSubtext}>
-                  Inició la fase de 4 días de debate en la asamblea familiar para{' '}
-                  <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>{createdInvite.candidate_name}</Text>.
-                </Text>
+                {createdInvite.status === 'approved' ? (
+                  <>
+                    <View style={styles.successBadgeCircle}>
+                      <Text style={{ fontSize: 34 }}>🎉</Text>
+                    </View>
+                    <Text style={styles.successModalTitle}>¡Ingreso Aprobado Inmediatamente!</Text>
+                    <Text style={styles.successModalSubtext}>
+                      Al ser el único miembro activo de la mutual, el ingreso de{' '}
+                      <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>{createdInvite.candidate_name}</Text>{' '}
+                      no requiere votación en asamblea. Ya puedes compartir la invitación.
+                    </Text>
 
-                <View style={styles.inviteShareBox}>
-                  <Text style={styles.inviteShareBoxLabel}>CÓDIGO DE INVITACIÓN (15 DÍAS)</Text>
-                  <Text style={styles.inviteShareBoxCode}>{createdInvite.invite_code_formatted}</Text>
-                  <View style={styles.inviteBadgeRow}>
-                    <Text style={styles.inviteValidityBadge}>⏱️ Válido por 15 días</Text>
-                    <Text style={styles.inviteGovBadge}>⚖️ Sujeto a asamblea</Text>
-                  </View>
-                </View>
+                    <View style={styles.inviteShareBox}>
+                      <Text style={styles.inviteShareBoxLabel}>CÓDIGO DE INVITACIÓN OFICIAL (15 DÍAS)</Text>
+                      <Text style={styles.inviteShareBoxCode}>{createdInvite.invite_code_formatted}</Text>
+                      <View style={styles.inviteBadgeRow}>
+                        <Text style={styles.inviteValidityBadge}>⏱️ Válido por 15 días</Text>
+                        <Text style={styles.inviteGovBadge}>✅ Aprobado</Text>
+                      </View>
+                    </View>
 
-                <TouchableOpacity
-                  style={styles.whatsappShareButton}
-                  onPress={() =>
-                    handleShareInvite(
-                      createdInvite.invite_token,
-                      createdInvite.candidate_name,
-                      createdInvite.invite_code_formatted
-                    )
-                  }
-                >
-                  <Text style={styles.whatsappShareButtonText}>💬 Enviar por WhatsApp / Mensajería</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.whatsappShareButton}
+                      onPress={() =>
+                        handleShareInvite(
+                          createdInvite.invite_token,
+                          createdInvite.candidate_name,
+                          createdInvite.invite_code_formatted
+                        )
+                      }
+                    >
+                      <Text style={styles.whatsappShareButtonText}>💬 Enviar por WhatsApp / Mensajería</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.copyCodeButton}
-                  onPress={() => handleCopyCode(createdInvite.invite_code_formatted || createdInvite.invite_token)}
-                >
-                  <Text style={styles.copyCodeButtonText}>📋 Copiar Código</Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.copyCodeButton}
+                      onPress={() => handleCopyCode(createdInvite.invite_code_formatted || createdInvite.invite_token)}
+                    >
+                      <Text style={styles.copyCodeButtonText}>📋 Copiar Código</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <View style={[styles.successBadgeCircle, { backgroundColor: 'rgba(2, 132, 199, 0.2)' }]}>
+                      <Text style={{ fontSize: 34 }}>💬</Text>
+                    </View>
+                    <Text style={styles.successModalTitle}>¡Propuesta en Período de Debate!</Text>
+                    <Text style={styles.successModalSubtext}>
+                      Se ha iniciado el período de 4 días de debate en la asamblea familiar para{' '}
+                      <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>{createdInvite.candidate_name}</Text>.
+                    </Text>
+
+                    <View style={styles.pendingAssemblyBoxModal}>
+                      <Text style={styles.pendingAssemblyBoxTitle}>⚖️ Sujeto a Votación de la Asamblea</Text>
+                      <Text style={styles.pendingAssemblyBoxText}>
+                        El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso. Los miembros ya pueden deliberar en el foro de debate.
+                      </Text>
+                    </View>
+                  </>
+                )}
 
                 <TouchableOpacity
                   style={styles.finishButton}
@@ -1654,6 +1957,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 2
   },
+  pendingAssemblyText: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 3
+  },
   detailInviteBox: {
     backgroundColor: '#0f172a',
     borderRadius: 12,
@@ -1824,5 +2133,207 @@ const styles = StyleSheet.create({
     color: '#7dd3fc',
     fontSize: 12,
     lineHeight: 16
+  },
+  pendingAssemblyBoxModal: {
+    width: '100%',
+    backgroundColor: '#0f172a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#0284c7',
+    padding: 16,
+    marginBottom: 16
+  },
+  pendingAssemblyBoxTitle: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6
+  },
+  pendingAssemblyBoxText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18
+  },
+  forumHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8
+  },
+  emptyCommentsBox: {
+    backgroundColor: '#0f172a',
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  emptyCommentsText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18
+  },
+  commentCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b'
+  },
+  myCommentCard: {
+    borderColor: '#0284c7'
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6
+  },
+  commentAuthor: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  myCommentBadge: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  stanceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6
+  },
+  stanceBadgeText: {
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  commentContent: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 6
+  },
+  commentImageAttachment: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    marginBottom: 6
+  },
+  commentDate: {
+    color: '#64748b',
+    fontSize: 11,
+    textAlign: 'right'
+  },
+  addCommentBox: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    paddingTop: 12
+  },
+  addCommentLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 8
+  },
+  stancePillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10
+  },
+  stancePill: {
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8
+  },
+  stancePillSelected: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8'
+  },
+  stancePillText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  stancePillTextSelected: {
+    color: '#ffffff',
+    fontWeight: '700'
+  },
+  commentTextInput: {
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    padding: 10,
+    color: '#ffffff',
+    fontSize: 13,
+    minHeight: 65,
+    textAlignVertical: 'top',
+    marginBottom: 8
+  },
+  attachmentPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    backgroundColor: '#0f172a',
+    padding: 6,
+    borderRadius: 8
+  },
+  attachmentThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 4
+  },
+  attachmentLabel: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    flex: 1
+  },
+  removeAttachmentText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  commentActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  attachButton: {
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8
+  },
+  attachButtonText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  sendCommentButton: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center'
+  },
+  sendCommentButtonDisabled: {
+    opacity: 0.5
+  },
+  sendCommentButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700'
   }
 });

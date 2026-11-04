@@ -558,6 +558,156 @@ async function executeTestSuite() {
   });
 
   // ============================================================================
+  // SUITE 9: Colectas Solidarias ("Vacas" Familiares)
+  // ============================================================================
+  console.log(`\n${c.bold}${c.magenta}▶ MÓDULO 9: Colectas Solidarias ("Vacas" Familiares)${c.reset}`);
+
+  let testColectaId = null;
+  let testCompromisoId = null;
+
+  await runTest('Colectas', 'GET /colectas/tasas retorna tasas de cambio venezolanas (BCV, USDT, Euro)', async () => {
+    const { status, data } = await apiGet('/colectas/tasas', ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.bcv, 'Debe incluir tasa BCV');
+    assert.ok(data.bcv.rate > 0, 'La tasa BCV debe ser positiva');
+  });
+
+  await runTest('Colectas', 'POST /colectas/ crea una colecta solidaria con meta en USD y tasa BCV', async () => {
+    const { status, data } = await apiPost('/colectas/', {
+      titulo: 'Medicinas para la abuela',
+      proposito: 'Compra de medicamentos para el tratamiento mensual',
+      monto_meta_usd: 50.0,
+      tipo_tasa: 'bcv',
+      fecha_pago: '2026-11-20',
+      beneficiario_nombre: 'Abuela Carmen'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.id);
+    assert.equal(data.estado, 'propuesta');
+    assert.equal(data.monto_meta_usd, 50.0);
+    testColectaId = data.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos registra compromiso de aporte de familiar', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaId}/compromisos`, {
+      monto_usd: 25.0
+    }, ctx.extraUserTokens[0], ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.compromisos && data.compromisos.length > 0);
+    const c = data.compromisos.find(x => x.monto_usd === 25.0);
+    assert.ok(c);
+    testCompromisoId = c.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos/{id}/confirmar-pago registra y confirma pago en Bs', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaId}/compromisos/${testCompromisoId}/confirmar-pago`, {
+      payment_method: 'pago_movil',
+      referencia_pago: '998877',
+      nota_pago: 'Pago Móvil Banco de Venezuela'
+    }, ctx.extraUserTokens[0], ctx.org1Id);
+    assert.equal(status, 200);
+    assert.equal(data.monto_recaudado_usd, 25.0);
+  });
+
+  let testColectaBimonedaId = null;
+
+  await runTest('Colectas', 'POST /colectas/ crea colecta en modalidad VES con contravalor dinámico USD', async () => {
+    const { status, data } = await apiPost('/colectas/', {
+      titulo: 'Reparación de Bomba de Agua del Edificio',
+      proposito: 'Sustitución de condensador y rodamientos',
+      monto_meta_ves: 2750.0,
+      currency: 'VES',
+      tipo_tasa: 'bcv',
+      fecha_pago: '2026-11-28',
+      beneficiario_nombre: 'Comité de Agua'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.id);
+    assert.equal(data.moneda_origen, 'VES');
+    assert.ok(data.monto_meta_usd > 0, 'Debe calcular contravalor en USD');
+    assert.ok(data.monto_meta_bs > 0, 'Debe registrar monto en Bs');
+    testColectaBimonedaId = data.id;
+  });
+
+  await runTest('Colectas', 'POST /colectas/{id}/compromisos registra compromiso de aporte en VES', async () => {
+    const { status, data } = await apiPost(`/colectas/${testColectaBimonedaId}/compromisos`, {
+      monto_ves: 1375.0,
+      currency: 'VES'
+    }, ctx.funderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(data.compromisos && data.compromisos.length > 0);
+    const c = data.compromisos.find(x => x.monto_bs === 1375.0);
+    assert.ok(c, 'Debe encontrar el compromiso registrado en VES');
+    assert.equal(c.monto_bs, 1375.0);
+    assert.ok(c.monto_usd > 0, 'Debe registrar contravalor en USD');
+  });
+
+  // ============================================================================
+  // SUITE 10: Gobernanza y Asambleas (Admisión y Expulsión con Veto)
+  // ============================================================================
+  console.log(`\n${c.bold}${c.magenta}▶ MÓDULO 10: Gobernanza y Asambleas (Admisión y Expulsión con Veto)${c.reset}`);
+
+  let testPropuestaId = null;
+
+  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso en mutual con múltiples miembros crea propuesta en DEBATE sin enlace prematuro', async () => {
+    const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
+      candidate_name: 'Rosa Salazar',
+      candidate_relation: 'Tía paterna',
+      justificacion: 'Evaluadora familiar y soporte en emergencias'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.status.toLowerCase(), 'debate');
+    assert.equal(data.invite_token, null, 'No debe generarse enlace antes de aprobación');
+    testPropuestaId = data.id;
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas lista las propuestas activas de la mutual', async () => {
+    const { status, data } = await apiGet('/gobernanza/propuestas', ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(data));
+    assert.ok(data.some(p => p.id === testPropuestaId));
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id} retorna detalle en debate sin token de invitación', async () => {
+    const { status, data } = await apiGet(`/gobernanza/propuestas/${testPropuestaId}`, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.equal(data.invite_token, null, 'Token de invitación no debe estar disponible en fase de debate');
+    assert.equal(data.candidate_name, 'Rosa Salazar');
+    assert.equal(data.status.toLowerCase(), 'debate');
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/comentarios publica opinión en foro de debate', async () => {
+    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/comentarios`, {
+      content: 'Totalmente de acuerdo con el ingreso de la tía Rosa',
+      stance: 'favor'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.stance, 'favor');
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id}/comentarios lista intervenciones del foro', async () => {
+    const { status, data } = await apiGet(`/gobernanza/propuestas/${testPropuestaId}/comentarios`, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(data));
+    assert.ok(data.length >= 1);
+    assert.equal(data[0].stance, 'favor');
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso en mutual con un solo miembro se aprueba inmediatamente con enlace', async () => {
+    const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
+      candidate_name: 'Carlos Salazar',
+      candidate_relation: 'Hermano',
+      justificacion: 'Cofundador de proyecto'
+    }, ctx.founderToken, ctx.org2Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.status.toLowerCase(), 'approved');
+    assert.ok(data.invite_token, 'Debe incluir token de invitación al estar aprobada inmediatamente');
+  });
+
+  // ============================================================================
   // RESUMEN Y REPORTE FINAL
   // ============================================================================
   console.log(`\n${c.bold}${c.cyan}====================================================================${c.reset}`);
