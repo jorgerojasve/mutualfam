@@ -470,6 +470,7 @@ class GovernanceService:
                 if proposal.target_member_id:
                     expulsion_service.initiate_expulsion(db, proposal.id, proposal.target_member_id)
             elif proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+                admission_service.generate_invite_for_approved_proposal(db, proposal, proposal.author_id)
                 if proposal.target_member_id:
                     admission_service.activate_proposed_member(db, proposal.id, proposal.target_member_id, proposal.organization_id)
             elif proposal.proposal_type == ProposalType.DIVISION:

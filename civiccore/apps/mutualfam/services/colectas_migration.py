@@ -14,6 +14,9 @@ def ensure_colectas_columns_exist(engine):
         ("compromisos_colecta", "monto_bs", "FLOAT"),
         ("compromisos_colecta", "tasa_usada", "FLOAT"),
         ("compromisos_colecta", "tipo_tasa_usada", "VARCHAR(50)"),
+        ("comments", "stance", "VARCHAR(20)"),
+        ("comments", "attachment_url", "VARCHAR(500)"),
+        ("comments", "attachment_type", "VARCHAR(50)"),
     ]
 
     with engine.connect() as conn:

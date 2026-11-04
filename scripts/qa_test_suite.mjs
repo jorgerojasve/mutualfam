@@ -565,7 +565,7 @@ async function executeTestSuite() {
   let testColectaId = null;
   let testCompromisoId = null;
 
-  await runTest('Colectas', 'GET /colectas/tasas retorna tasas de cambio venezolanas (BCV, USDT, Paralelo)', async () => {
+  await runTest('Colectas', 'GET /colectas/tasas retorna tasas de cambio venezolanas (BCV, USDT, Euro)', async () => {
     const { status, data } = await apiGet('/colectas/tasas', ctx.founderToken, ctx.org1Id);
     assert.equal(status, 200);
     assert.ok(data.bcv, 'Debe incluir tasa BCV');
@@ -649,7 +649,7 @@ async function executeTestSuite() {
 
   let testPropuestaId = null;
 
-  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso crea propuesta de admisión con período de 15 días', async () => {
+  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso en mutual con múltiples miembros crea propuesta en DEBATE sin enlace prematuro', async () => {
     const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
       candidate_name: 'Rosa Salazar',
       candidate_relation: 'Tía paterna',
@@ -658,6 +658,7 @@ async function executeTestSuite() {
     assert.equal(status, 201);
     assert.ok(data.id);
     assert.equal(data.status.toLowerCase(), 'debate');
+    assert.equal(data.invite_token, null, 'No debe generarse enlace antes de aprobación');
     testPropuestaId = data.id;
   });
 
@@ -668,12 +669,42 @@ async function executeTestSuite() {
     assert.ok(data.some(p => p.id === testPropuestaId));
   });
 
-  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id} retorna el detalle nominativo y código de invitación', async () => {
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id} retorna detalle en debate sin token de invitación', async () => {
     const { status, data } = await apiGet(`/gobernanza/propuestas/${testPropuestaId}`, ctx.founderToken, ctx.org1Id);
     assert.equal(status, 200);
-    assert.ok(data.invite_token, 'Debe incluir token de invitación');
+    assert.equal(data.invite_token, null, 'Token de invitación no debe estar disponible en fase de debate');
     assert.equal(data.candidate_name, 'Rosa Salazar');
     assert.equal(data.status.toLowerCase(), 'debate');
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/propuestas/{id}/comentarios publica opinión en foro de debate', async () => {
+    const { status, data } = await apiPost(`/gobernanza/propuestas/${testPropuestaId}/comentarios`, {
+      content: 'Totalmente de acuerdo con el ingreso de la tía Rosa',
+      stance: 'favor'
+    }, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.stance, 'favor');
+  });
+
+  await runTest('Gobernanza', 'GET /gobernanza/propuestas/{id}/comentarios lista intervenciones del foro', async () => {
+    const { status, data } = await apiGet(`/gobernanza/propuestas/${testPropuestaId}/comentarios`, ctx.founderToken, ctx.org1Id);
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(data));
+    assert.ok(data.length >= 1);
+    assert.equal(data[0].stance, 'favor');
+  });
+
+  await runTest('Gobernanza', 'POST /gobernanza/proponer-ingreso en mutual con un solo miembro se aprueba inmediatamente con enlace', async () => {
+    const { status, data } = await apiPost('/gobernanza/proponer-ingreso', {
+      candidate_name: 'Carlos Salazar',
+      candidate_relation: 'Hermano',
+      justificacion: 'Cofundador de proyecto'
+    }, ctx.founderToken, ctx.org2Id);
+    assert.equal(status, 201);
+    assert.ok(data.id);
+    assert.equal(data.status.toLowerCase(), 'approved');
+    assert.ok(data.invite_token, 'Debe incluir token de invitación al estar aprobada inmediatamente');
   });
 
   // ============================================================================

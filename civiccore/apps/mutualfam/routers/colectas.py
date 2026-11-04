@@ -35,7 +35,7 @@ class CreateColectaRequest(BaseModel):
     monto_meta_usd: Optional[float] = None
     monto_meta_ves: Optional[float] = None
     currency: Optional[str] = "USD"  # "USD" | "VES"
-    tipo_tasa: str = "bcv"  # bcv, usdt, euro, paralelo, fija
+    tipo_tasa: str = "bcv"  # bcv, usdt, euro, fija
     tasa_fija_valor: Optional[float] = None
     fecha_pago: date
     fecha_limite_aportes: Optional[date] = None
@@ -159,7 +159,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
     # Tasa actual y montos en Bs
     tasa_tipo_str = colecta.tipo_tasa.value if hasattr(colecta.tipo_tasa, "value") else str(colecta.tipo_tasa)
     current_rate = tasa_cambio.get_rate(tasa_tipo_str, colecta.tasa_fija_valor)
-    tasa_label = tasa_cambio.LABELS.get(tasa_tipo_str, tasa_tipo_str.upper())
+    tasa_label = tasa_cambio.LABELS.get(tasa_tipo_str, "USDT / Binance P2P" if tasa_tipo_str == "paralelo" else tasa_tipo_str.upper())
 
     monto_meta_bs = round(colecta.monto_meta_usd * current_rate, 2)
     monto_prometido_bs = round(colecta.monto_prometido_usd * current_rate, 2)
@@ -278,7 +278,11 @@ def create_colecta(
     # Validar tipo de tasa
     tipo_tasa_enum = TipoTasaColecta.BCV
     try:
-        tipo_tasa_enum = TipoTasaColecta(req.tipo_tasa.lower())
+        req_tipo = req.tipo_tasa.lower()
+        if req_tipo == "paralelo":
+            tipo_tasa_enum = TipoTasaColecta.USDT
+        else:
+            tipo_tasa_enum = TipoTasaColecta(req_tipo)
     except ValueError:
         tipo_tasa_enum = TipoTasaColecta.BCV
 

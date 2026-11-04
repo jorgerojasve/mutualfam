@@ -1,0 +1,30 @@
+Error al prometer aporte en colecta: por ejemplo en la imagen al ingresar 1 dólar
+- Estado: CORREGIDO
+- Causa: En `civiccore/apps/mutualfam-mobile/src/api/client.js`, el método `pledgeCommitment` envolvía el objeto `{ monto_usd, monto_ves, currency }` dentro de `{ monto_usd: ... }`, provocando error de validación 422 de Pydantic en FastAPI ("Input should be a valid number").
+- Solución: Se homologó `pledgeCommitment` en `client.js` con `@civiccore/sdk` para enviar el objeto payload directamente.
+
+La fecha no despliega calendario
+- Estado: CORREGIDO
+- Causa: En `FundsScreen.js`, el campo "Fecha de Pago / Liquidación" estaba implementado como un `<TextInput>` plano de texto con cursor editable (`placeholder="2026-10-30"`), sin disparador de calendario nativo.
+- Solución: Se integró `@react-native-community/datetimepicker` con un selector táctil (`<TouchableOpacity>`) que despliega el calendario nativo de Android/iOS al tocarlo, con fecha mínima desde hoy y sugerencia por defecto a 7 días.
+
+Retirar la tasa "Paralelo" en las colectas
+- Estado: APLICADO
+- Causa: La tasa "Paralelo" apuntaba a la cotización Binance P2P (USDT) y generaba una impresión de informalidad o ilegalidad innecesaria.
+- Solución:
+  1. En `FundsScreen.js` (Mobile): Se retiró la opción `Paralelo` de los botones selectores de tasas de colectas, quedando únicamente `[BCV] [USDT] [Euro] [Fija]`. En la barra superior de cotizaciones se muestra BCV, USDT y Euro.
+  2. En `FundsDashboard.jsx` (Web): Se eliminó la opción `Paralelo` del menú desplegable de tasas y del ticker en vivo.
+  3. En `tasa_cambio.py` y `colectas.py` (Backend): Se retiró `paralelo` del catálogo público de tasas (`LABELS`) y del endpoint `GET /colectas/tasas`. Por seguridad y compatibilidad con registros antiguos en BD, cualquier referencia histórica mapea transparentemente a la tasa `USDT / Binance P2P`.
+
+Error de red sin desconexión visual ("Network Error")
+- Estado: CORREGIDO
+- Causa:
+  1. Cuando el backend en Fly.io entra en reposo (`min_machines_running = 0`) o hay latencia móvil (4G), la petición puede superar el tiempo de espera y Axios lanza `Error: Network Error` sin payload de respuesta.
+  2. La función `getErrorMessage` en `errors.js` no traducía ni contextualizaba los errores de conectividad, arrojando el texto en inglés `Network Error`.
+  3. En `FundsScreen.js`, las acciones mutativas (`handlePledge`, `handleCreateColecta`, etc.) no actualizaban las banderas `isOffline` ni `connectionError` al atrapar errores de red, manteniendo la barra superior como si el estado fuera conectado.
+  4. Faltaba validación preventiva en `targetColecta?.id`, lo que generaba peticiones erróneas a `/colectas/undefined/compromisos` si la colecta en caché no correspondía a un registro existente en la base de datos tras un reset.
+- Solución:
+  1. En `errors.js`: Se robusteció `getErrorMessage` para traducir amigablemente cualquier falla de conectividad o timeout a español, detectar códigos de respuesta HTTP (401, 403, 404, 422, 502/503/504) y extraer campos alternativos (`message`, `error`).
+  2. En `client.js`: Se incorporó un timeout de 20 segundos a `apiClient` para tolerar el inicio en frío de Fly.io, se añadió un despachador global de estado de red (`setNetworkStateListener`), y se blindó `colectasApi` contra llamadas con identificadores nulos o indefinidos.
+  3. En `OrgContext.js`: Se enlazó el listener de conectividad de `client.js` para sincronizar de inmediato `isOffline` con las llamadas a la API.
+  4. En `FundsScreen.js`: Se añadieron comprobaciones defensivas de `targetColecta?.id` y manejo de `isOffline` / `connectionError` en todas las operaciones de compromisos, pagos y gastos.

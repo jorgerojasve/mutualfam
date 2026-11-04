@@ -2,6 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { isNetworkError } from '../utils/errors';
 
 let baseURL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -37,8 +38,15 @@ console.log("baseURL final en client.js:", baseURL);
 
 export { baseURL };
 
+let onNetworkStateListener = null;
+
+export const setNetworkStateListener = (listener) => {
+  onNetworkStateListener = listener;
+};
+
 const apiClient = axios.create({
   baseURL,
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -75,8 +83,16 @@ const forceLogout = async () => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (onNetworkStateListener) {
+      onNetworkStateListener(true);
+    }
+    return response;
+  },
   async (error) => {
+    if (isNetworkError(error) && onNetworkStateListener) {
+      onNetworkStateListener(false);
+    }
     const originalRequest = error.config;
     
     // Manejo de usuario no encontrado (base de datos limpiada o cuenta borrada)
@@ -268,27 +284,50 @@ export const colectasApi = {
     const { data } = await apiClient.post('/colectas/', payload);
     return data;
   },
-  pledgeCommitment: async (colectaId, montoUsd) => {
-    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos`, { monto_usd: montoUsd });
+  pledgeCommitment: async (colectaId, payloadOrAmount, currency = 'USD') => {
+    if (!colectaId || colectaId === 'undefined') {
+      throw new Error('ID de colecta no válido');
+    }
+    const body = typeof payloadOrAmount === 'object' && payloadOrAmount !== null
+      ? payloadOrAmount
+      : currency === 'VES'
+        ? { monto_ves: Number(payloadOrAmount), currency: 'VES' }
+        : { monto_usd: Number(payloadOrAmount), currency: 'USD' };
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos`, body);
     return data;
   },
   cancelCommitment: async (colectaId, compromisoId) => {
+    if (!colectaId || !compromisoId) {
+      throw new Error('Parámetros de compromiso no válidos');
+    }
     const { data } = await apiClient.delete(`/colectas/${colectaId}/compromisos/${compromisoId}`);
     return data;
   },
   triggerPaymentNotifications: async (colectaId) => {
+    if (!colectaId) {
+      throw new Error('ID de colecta no válido');
+    }
     const { data } = await apiClient.post(`/colectas/${colectaId}/notificar-cobro`);
     return data;
   },
   confirmPayment: async (colectaId, compromisoId, paymentData) => {
+    if (!colectaId || !compromisoId) {
+      throw new Error('Parámetros de pago no válidos');
+    }
     const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, paymentData);
     return data;
   },
   validateExpense: async (colectaId, expenseData) => {
+    if (!colectaId) {
+      throw new Error('ID de colecta no válido');
+    }
     const { data } = await apiClient.post(`/colectas/${colectaId}/validar-gasto`, expenseData);
     return data;
   },
   cancelColecta: async (colectaId) => {
+    if (!colectaId) {
+      throw new Error('ID de colecta no válido');
+    }
     const { data } = await apiClient.patch(`/colectas/${colectaId}/cancelar`);
     return data;
   }
@@ -321,6 +360,14 @@ export const governanceApi = {
   },
   cerrarPropuesta: async (id) => {
     const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/cerrar`);
+    return data;
+  },
+  getComentarios: async (id) => {
+    const { data } = await apiClient.get(`/gobernanza/propuestas/${id}/comentarios`);
+    return data;
+  },
+  agregarComentario: async (id, payload) => {
+    const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/comentarios`, payload);
     return data;
   },
   getCandidatosDisponibles: async (search = '') => {

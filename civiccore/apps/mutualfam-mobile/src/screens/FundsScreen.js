@@ -15,6 +15,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { fundsApi, colectasApi, loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
@@ -60,8 +61,24 @@ export default function FundsScreen() {
   const [tipoTasa, setTipoTasa] = useState('bcv');
   const [tasaFijaValor, setTasaFijaValor] = useState('');
   const [fechaPago, setFechaPago] = useState('');
+  const [dateObj, setDateObj] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [beneficiarioNombre, setBeneficiarioNombre] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const onDateChange = (event, selectedDate) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setDateObj(selectedDate);
+      setFechaPago(selectedDate.toISOString().split('T')[0]);
+    }
+  };
 
   // Formulario Prometer Aporte
   const [pledgeAmount, setPledgeAmount] = useState('');
@@ -173,6 +190,7 @@ export default function FundsScreen() {
     // Default fecha de pago: dentro de 7 días
     const d = new Date();
     d.setDate(d.getDate() + 7);
+    setDateObj(d);
     setFechaPago(d.toISOString().split('T')[0]);
   }, []);
 
@@ -346,9 +364,19 @@ export default function FundsScreen() {
       setColectaCurrency('USD');
       setTipoTasa('bcv');
       setTasaFijaValor('');
+      const defaultD = new Date();
+      defaultD.setDate(defaultD.getDate() + 7);
+      setDateObj(defaultD);
+      setFechaPago(defaultD.toISOString().split('T')[0]);
       Alert.alert('¡Colecta Creada!', 'La propuesta de colecta está activa y lista para recibir compromisos.');
+      setConnectionError(false);
+      if (setIsOffline) setIsOffline(false);
       fetchColectas();
     } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
       Alert.alert('Error', getErrorMessage(e, 'No se pudo crear la colecta'));
     } finally {
       setSubmitting(false);
@@ -357,6 +385,10 @@ export default function FundsScreen() {
 
   // Prometer Aporte
   const handlePledge = async () => {
+    if (!targetColecta || !targetColecta.id) {
+      Alert.alert('Error', 'No se ha seleccionado una colecta válida.');
+      return;
+    }
     const parsed = parseVEAmount(pledgeAmount);
     if (parsed === null || isNaN(parsed) || parsed <= 0) {
       Alert.alert('Monto inválido', 'Ingresa un monto mayor a 0.');
@@ -377,9 +409,15 @@ export default function FundsScreen() {
       setPledgeAmount('');
       setPledgeCurrency('USD');
       setTargetColecta(null);
+      setConnectionError(false);
+      if (setIsOffline) setIsOffline(false);
       Alert.alert('¡Compromiso Registrado!', 'Tu aporte voluntario ha sido registrado exitosamente.');
       fetchColectas();
     } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
       Alert.alert('Error', getErrorMessage(e, 'No se pudo registrar el compromiso'));
     } finally {
       setSubmitting(false);
@@ -399,9 +437,15 @@ export default function FundsScreen() {
           onPress: async () => {
             try {
               await colectasApi.cancelCommitment(colecta.id, compromiso.id);
+              setConnectionError(false);
+              if (setIsOffline) setIsOffline(false);
               Alert.alert('Cancelado', 'Tu compromiso ha sido cancelado.');
               fetchColectas();
             } catch (e) {
+              if (isNetworkError(e)) {
+                setConnectionError(true);
+                if (setIsOffline) setIsOffline(true);
+              }
               Alert.alert('Error', getErrorMessage(e, 'No se pudo cancelar el compromiso'));
             }
           },
@@ -422,9 +466,15 @@ export default function FundsScreen() {
           onPress: async () => {
             try {
               await colectasApi.triggerPaymentNotifications(colecta.id);
+              setConnectionError(false);
+              if (setIsOffline) setIsOffline(false);
               Alert.alert('Notificaciones Enviadas', 'Se notificó a los aportantes su monto en Bolívares.');
               fetchColectas();
             } catch (e) {
+              if (isNetworkError(e)) {
+                setConnectionError(true);
+                if (setIsOffline) setIsOffline(true);
+              }
               Alert.alert('Error', getErrorMessage(e, 'No se pudieron enviar las notificaciones'));
             }
           },
@@ -435,6 +485,10 @@ export default function FundsScreen() {
 
   // Confirmar Pago de Aporte
   const handleConfirmPayment = async () => {
+    if (!targetColecta || !targetColecta.id || !targetColecta.mi_compromiso?.id) {
+      Alert.alert('Error', 'No se ha seleccionado un compromiso válido.');
+      return;
+    }
     setSubmitting(true);
     try {
       let finalComprobanteUrl = null;
@@ -459,9 +513,15 @@ export default function FundsScreen() {
       setPaymentNote('');
       setReceiptUri(null);
       setTargetColecta(null);
+      setConnectionError(false);
+      if (setIsOffline) setIsOffline(false);
       Alert.alert('¡Pago Confirmado!', 'Tu aporte ha sido registrado como pagado.');
       fetchColectas();
     } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
       Alert.alert('Error', getErrorMessage(e, 'Error al confirmar el pago'));
     } finally {
       setSubmitting(false);
@@ -471,6 +531,10 @@ export default function FundsScreen() {
 
   // Validar Gasto (Beneficiario)
   const handleValidateExpense = async () => {
+    if (!targetColecta || !targetColecta.id) {
+      Alert.alert('Error', 'No se ha seleccionado una colecta válida.');
+      return;
+    }
     if (!expenseDesc.trim()) {
       Alert.alert('Descripción requerida', 'Por favor describe cómo se realizó el gasto.');
       return;
@@ -494,9 +558,15 @@ export default function FundsScreen() {
       setExpenseDesc('');
       setExpenseReceiptUri(null);
       setTargetColecta(null);
+      setConnectionError(false);
+      if (setIsOffline) setIsOffline(false);
       Alert.alert('¡Colecta Completada!', 'El gasto fue validado y se notificó a todos los miembros de la mutual.');
       fetchColectas();
     } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
       Alert.alert('Error', getErrorMessage(e, 'No se pudo validar el gasto'));
     } finally {
       setSubmitting(false);
@@ -520,8 +590,14 @@ export default function FundsScreen() {
       setShowFundModal(false);
       setNewFundName('');
       setNewFundTarget('');
+      setConnectionError(false);
+      if (setIsOffline) setIsOffline(false);
       fetchFunds();
     } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
       Alert.alert('Error', getErrorMessage(e, 'Error al crear fondo'));
     } finally {
       setSubmitting(false);
@@ -806,8 +882,8 @@ export default function FundsScreen() {
           <View style={styles.ratesTicker}>
             <Text style={styles.ratesTickerText}>
               🇻🇪 <Text style={{ fontWeight: 'bold' }}>BCV:</Text> Bs {rates.bcv?.rate?.toFixed(2)} •{' '}
-              <Text style={{ fontWeight: 'bold' }}>USDT:</Text> Bs {rates.usdt?.rate?.toFixed(2)} •{' '}
-              <Text style={{ fontWeight: 'bold' }}>Paralelo:</Text> Bs {rates.paralelo?.rate?.toFixed(2)}
+              <Text style={{ fontWeight: 'bold' }}>USDT:</Text> Bs {rates.usdt?.rate?.toFixed(2)}
+              {rates.euro?.rate ? ` • Euro: Bs ${rates.euro?.rate?.toFixed(2)}` : ''}
             </Text>
           </View>
         )}
@@ -1008,7 +1084,6 @@ export default function FundsScreen() {
                   { key: 'bcv', label: 'BCV' },
                   { key: 'usdt', label: 'USDT' },
                   { key: 'euro', label: 'Euro' },
-                  { key: 'paralelo', label: 'Paralelo' },
                   { key: 'fija', label: 'Fija' },
                 ].map((t) => (
                   <TouchableOpacity
@@ -1045,14 +1120,36 @@ export default function FundsScreen() {
                 </Text>
               )}
 
-              <Text style={styles.inputLabel}>Fecha de Pago / Liquidación (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                value={fechaPago}
-                onChangeText={setFechaPago}
-                placeholder="2026-10-30"
-                placeholderTextColor="#64748b"
-              />
+              <Text style={styles.inputLabel}>Fecha de Pago / Liquidación</Text>
+              <TouchableOpacity
+                style={[styles.input, { justifyContent: 'center' }]}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: fechaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
+                  📅 {fechaPago || 'Tocar para seleccionar fecha'}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <View style={Platform.OS === 'ios' ? styles.iosDatePickerWrapper : null}>
+                  <DateTimePicker
+                    value={dateObj}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    minimumDate={new Date()}
+                    onChange={onDateChange}
+                    themeVariant="dark"
+                  />
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      style={styles.iosDateDoneButton}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.iosDateDoneButtonText}>✓ Listo</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
               <Text style={styles.inputLabel}>Nombre del Beneficiario que recibirá los fondos</Text>
               <TextInput
@@ -2139,5 +2236,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginVertical: 2,
+  },
+  iosDatePickerWrapper: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginVertical: 6,
+    alignItems: 'center',
+  },
+  iosDateDoneButton: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-end',
+  },
+  iosDateDoneButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

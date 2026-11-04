@@ -21,6 +21,7 @@ from civiccore.modules.governance.models import (
     ProposalType,
     Vote,
     VotingMechanism,
+    Comment,
     utcnow
 )
 from civiccore.modules.governance.schemas import ProposalCreate, VoteCreate
@@ -53,6 +54,13 @@ class VotarRequest(BaseModel):
 class DefensaRequest(BaseModel):
     defense_text: str
 
+class ComentarioRequest(BaseModel):
+    content: str
+    stance: Optional[str] = None  # "favor", "contra", "duda", "neutro"
+    attachment_url: Optional[str] = None
+    attachment_type: Optional[str] = None  # "image", "audio", "drawing", "link"
+    is_anonymous: Optional[bool] = False
+
 
 # ==========================================
 # HELPERS
@@ -73,9 +81,12 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
 
     candidate_name_extra = p.extra_fields.get("candidate_name") if p.extra_fields else None
     candidate_relation = p.extra_fields.get("candidate_relation") if p.extra_fields else None
-    invite_token = p.extra_fields.get("invite_token") if p.extra_fields else None
-    invite_code_formatted = p.extra_fields.get("invite_code_formatted") if p.extra_fields else None
-    invite_expires_at = p.extra_fields.get("expires_at") if p.extra_fields else None
+
+    # Solo exponer el token y código de invitación si la propuesta fue efectivamente aprobada
+    is_approved = (p.status == ProposalStatus.APPROVED)
+    invite_token = (p.extra_fields.get("invite_token") if p.extra_fields else None) if is_approved else None
+    invite_code_formatted = (p.extra_fields.get("invite_code_formatted") if p.extra_fields else None) if is_approved else None
+    invite_expires_at = (p.extra_fields.get("expires_at") if p.extra_fields else None) if is_approved else None
     redeemed_by_name = p.extra_fields.get("redeemed_by_name") if p.extra_fields else None
 
     my_vote_record = db.query(Vote).filter(
@@ -199,22 +210,25 @@ def proponer_ingreso(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Notificaciones a otros miembros de la mutual
-    other_members = db.query(OrganizationMembership).filter(
-        OrganizationMembership.organization_id == org.id,
-        OrganizationMembership.status == MemberStatus.ACTIVE,
-        OrganizationMembership.user_id != user.id
-    ).all()
-    other_user_ids = [m.user_id for m in other_members]
+    # Notificaciones según estado (auto-aprobado vs asamblea en debate)
+    if proposal.status == ProposalStatus.APPROVED:
+        notify_org(org.id, "PROPUESTA_APROBADA", {"proposal_id": proposal.id, "type": "member_admission"})
+    else:
+        other_members = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org.id,
+            OrganizationMembership.status == MemberStatus.ACTIVE,
+            OrganizationMembership.user_id != user.id
+        ).all()
+        other_user_ids = [m.user_id for m in other_members]
 
-    notify_users(
-        db,
-        other_user_ids,
-        "📥 Debate de Ingreso",
-        f"Se propuso el ingreso de {candidate_name}. Tienes 4 días para debatir en asamblea.",
-        {"proposal_id": proposal.id, "type": "member_admission"}
-    )
-    notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "member_admission"})
+        notify_users(
+            db,
+            other_user_ids,
+            "📥 Debate de Ingreso",
+            f"Se propuso el ingreso de {candidate_name}. Tienes 4 días para debatir en asamblea.",
+            {"proposal_id": proposal.id, "type": "member_admission"}
+        )
+        notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "member_admission"})
 
     return _serialize_proposal(db, proposal, user.id)
 
@@ -482,6 +496,7 @@ def cerrar_propuesta(
 
     if results.get("passed"):
         if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+            admission_service.generate_invite_for_approved_proposal(db, proposal, proposal.author_id)
             notify_users(
                 db,
                 all_user_ids,
@@ -525,6 +540,111 @@ def cerrar_propuesta(
     })
 
     return _serialize_proposal(db, proposal, user.id)
+
+
+@router.get("/propuestas/{proposal_id}/comentarios")
+def get_comentarios_propuesta(
+    proposal_id: int,
+    current_org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene el hilo de debate y deliberación de la propuesta en la asamblea familiar.
+    """
+    org = current_org_member["organization"]
+    user = current_org_member["user"]
+
+    proposal = db.query(Proposal).filter(
+        Proposal.id == proposal_id,
+        Proposal.organization_id == org.id
+    ).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+
+    comments = db.query(Comment).filter(
+        Comment.proposal_id == proposal_id
+    ).order_by(Comment.created_at.asc()).all()
+
+    serialized = []
+    for c in comments:
+        author = db.query(User).filter(User.id == c.author_id).first()
+        author_name = f"{author.first_name} {author.last_name}".strip() if author else "Familiar"
+        serialized.append({
+            "id": c.id,
+            "proposal_id": c.proposal_id,
+            "author_id": c.author_id,
+            "author_name": "Anónimo" if c.is_anonymous else author_name,
+            "content": c.content,
+            "stance": getattr(c, "stance", None),
+            "attachment_url": getattr(c, "attachment_url", None),
+            "attachment_type": getattr(c, "attachment_type", None),
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "is_mine": c.author_id == user.id
+        })
+    return serialized
+
+
+@router.post("/propuestas/{proposal_id}/comentarios", status_code=status.HTTP_201_CREATED)
+def agregar_comentario_propuesta(
+    proposal_id: int,
+    req: ComentarioRequest,
+    current_org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    Publica una opinión, postura o archivo en el foro de debate de la asamblea familiar.
+    """
+    org = current_org_member["organization"]
+    user = current_org_member["user"]
+    membership = current_org_member["membership"]
+
+    if not membership or membership.status != MemberStatus.ACTIVE:
+        raise HTTPException(status_code=403, detail="Debes ser miembro activo para participar en el debate")
+
+    proposal = db.query(Proposal).filter(
+        Proposal.id == proposal_id,
+        Proposal.organization_id == org.id
+    ).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+
+    text = (req.content or "").strip()
+    if not text and not req.attachment_url:
+        raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+
+    comment = Comment(
+        proposal_id=proposal_id,
+        author_id=user.id,
+        content=text or "Archivo adjunto",
+        is_anonymous=bool(req.is_anonymous),
+        stance=req.stance,
+        attachment_url=req.attachment_url,
+        attachment_type=req.attachment_type,
+        created_at=utcnow()
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+
+    author_name = f"{user.first_name} {user.last_name}".strip()
+    notify_org(org.id, "PROPUESTA_COMENTADA", {
+        "proposal_id": proposal_id,
+        "author_name": author_name,
+        "comment_id": comment.id
+    })
+
+    return {
+        "id": comment.id,
+        "proposal_id": comment.proposal_id,
+        "author_id": comment.author_id,
+        "author_name": author_name,
+        "content": comment.content,
+        "stance": comment.stance,
+        "attachment_url": comment.attachment_url,
+        "attachment_type": comment.attachment_type,
+        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+        "is_mine": True
+    }
 
 
 @router.get("/candidatos-disponibles")

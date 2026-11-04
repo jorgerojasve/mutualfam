@@ -27,7 +27,6 @@ LABELS = {
     "bcv": "Oficial BCV (USD)",
     "usdt": "USDT / Binance P2P",
     "euro": "Euro Oficial BCV",
-    "paralelo": "Dólar Paralelo",
     "fija": "Tasa Fija Acordada",
 }
 
@@ -78,19 +77,7 @@ def get_rate(tipo: str, tasa_fija_valor: Optional[float] = None) -> float:
         if data and isinstance(data, dict):
             rate = float(data.get("promedio") or data.get("ventaBcv") or data.get("precio", 0))
 
-    elif tipo_norm == "paralelo":
-        # DolarAPI Paralelo
-        data = _fetch_json("https://ve.dolarapi.com/v1/dolares/paralelo")
-        if data and isinstance(data, dict):
-            rate = float(data.get("promedio") or data.get("precio", 0))
-
-    elif tipo_norm == "euro":
-        # DolarAPI Euro Oficial
-        data = _fetch_json("https://ve.dolarapi.com/v1/euros/oficial")
-        if data and isinstance(data, dict):
-            rate = float(data.get("promedio") or data.get("precio", 0))
-
-    elif tipo_norm == "usdt":
+    elif tipo_norm in ("usdt", "paralelo"):
         # Primero intentamos USDT/Binance vía PyDolar o DolarAPI paralelo
         data = _fetch_json("https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=binance")
         if data and isinstance(data, dict):
@@ -104,6 +91,12 @@ def get_rate(tipo: str, tasa_fija_valor: Optional[float] = None) -> float:
             data_paralelo = _fetch_json("https://ve.dolarapi.com/v1/dolares/paralelo")
             if data_paralelo and isinstance(data_paralelo, dict):
                 rate = float(data_paralelo.get("promedio") or data_paralelo.get("precio", 0))
+
+    elif tipo_norm == "euro":
+        # DolarAPI Euro Oficial
+        data = _fetch_json("https://ve.dolarapi.com/v1/euros/oficial")
+        if data and isinstance(data, dict):
+            rate = float(data.get("promedio") or data.get("precio", 0))
 
     if rate and rate > 0:
         _RATES_CACHE[tipo_norm] = {"rate": rate, "updated_at": now}

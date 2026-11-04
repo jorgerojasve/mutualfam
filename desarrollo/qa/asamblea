@@ -1,0 +1,40 @@
+Propuesta de ingreso incluye enlace antes de aprobación, no debería generarse este enlace hasta que se apruebe el ingreso.
+- Estado: CORREGIDO
+- Causa: En `admission_service.py`, `propose_member_admission` creaba inmediatamente un registro `OrganizationInvite` con vigencia de 15 días y colocaba el token en `extra_fields` de la propuesta, permitiendo que la app móvil mostrara el código y los botones de compartir por WhatsApp mientras la propuesta aún estaba en período de debate o votación.
+- Solución:
+  1. En `admission_service.py`: Se extrajo la generación del enlace a la función `generate_invite_for_approved_proposal()`. Ahora, si la mutual cuenta con 2 o más miembros, la propuesta se crea en estado `DEBATE` sin generar ningún registro de invitación ni asignar `invite_token`.
+  2. En `service.py` y `gobernanza.py` (`cerrar_propuesta`): Cuando la asamblea concluye la votación y la propuesta resulta aprobada (`ProposalStatus.APPROVED`), se dispara la generación del `OrganizationInvite` y se incorporan las claves `invite_token`, `invite_code_formatted` y `expires_at` a `extra_fields`.
+  3. En `gobernanza.py` (`_serialize_proposal`): Se blindó la respuesta para que `invite_token` y `invite_code_formatted` solo se serialicen si `proposal.status == ProposalStatus.APPROVED`. Si la propuesta está en debate o votación, estos campos retornan `null`.
+  4. En `AssemblyScreen.js`: Tanto la tarjeta de propuesta como el modal de detalle y el diálogo posterior a la creación muestran el estado informativo *"⚖️ En proceso de asamblea (El enlace se generará una vez aprobado)"*. La caja del código y el botón de WhatsApp únicamente se despliegan cuando la propuesta tiene estado aprobado.
+
+Cuando solo hay un miembro la propuesta de ingreso no requiere votación. Se aprueba inmediatamente.
+- Estado: CORREGIDO
+- Causa: Al fundar una mutual, el único miembro debía esperar el período reglamentario de 4 días de debate y 3 días de votación para admitir al primer familiar, lo que bloqueaba el crecimiento inicial de la mutual.
+- Solución:
+  1. En `admission_service.py` (`propose_member_admission`): Se evalúa el recuento de miembros activos de la mutual (`active_members_count <= 1`).
+  2. Si solo existe un miembro (el fundador):
+     - La propuesta se crea directamente con estado `ProposalStatus.APPROVED`.
+     - Se fijan `voting_starts_at` y `voting_ends_at` en la fecha actual (sin período de espera).
+     - Se registra automáticamente el voto afirmativo del fundador (`vote_value = 1.0`).
+     - Se genera de inmediato el enlace/código de invitación oficial (`generate_invite_for_approved_proposal`).
+     - Si el candidato ya poseía cuenta registrada, se activa su membresía de forma directa.
+  3. En `AssemblyScreen.js`: Al recibir la respuesta con `status === 'approved'`, el modal de confirmación felicita al fundador: *"¡Ingreso Aprobado Inmediatamente! Al ser el único miembro activo de la mutual, el ingreso no requiere votación en asamblea. Ya puedes compartir la invitación."* y ofrece inmediatamente el botón de WhatsApp y copiado de código.
+
+El debate no incluye foro, algo que se había planteado inicialmente en el framework civicore. Revisa civiccore/backend/civiccore/modules/governance, desarrollo/diseno/plan_macro_ejecucion.md , desarrollo/prompt1 , desarrollo/prompt_foro
+- Estado: IMPLEMENTADO Y DOCUMENTADO
+- Causa:
+  1. En `mutualfam`, el router `gobernanza.py` no exponía los endpoints de comentarios y deliberación presentes en el módulo base `civiccore/modules/governance`.
+  2. En `AssemblyScreen.js`, el período de debate mostraba únicamente un recuadro estático *"En período de debate: Los miembros están deliberando..."* sin un hilo interactivo de discusión.
+- Solución Técnica Implementada:
+  1. En `civiccore/backend/civiccore/modules/governance/models.py`: Se extendió el modelo `Comment` para soportar posturas deliberativas (`stance`: 'favor', 'contra', 'duda', 'opinión') y adjuntos multimedia (`attachment_url`, `attachment_type`).
+  2. En `gobernanza.py` (Backend): Se implementaron los endpoints:
+     - `GET /gobernanza/propuestas/{id}/comentarios`: Obtiene la lista ordenada de argumentos, autor (nombre real o anónimo), postura, fecha y adjuntos.
+     - `POST /gobernanza/propuestas/{id}/comentarios`: Valida que el autor sea miembro activo y emite el evento en tiempo real `PROPUESTA_COMENTADA`.
+  3. En `client.js` y `AssemblyScreen.js` (Frontend):
+     - Se integró el componente interactivo **"💬 Foro de Debate de la Asamblea"** en el detalle de la propuesta.
+     - Permite seleccionar postura rápida (`[👍 A favor] [👎 En contra] [🤔 Con dudas] [💬 Opinión]`), redactar argumentos en texto libre y adjuntar fotos/comprobantes desde la galería mediante `expo-image-picker`.
+     - Se sincroniza en tiempo real vía WebSocket al recibirse nuevos comentarios de otros familiares.
+- Análisis de Evolución a Medios Ricos (basado en `prompt_foro`):
+  - *Contexto de usuario popular*: Los miembros de familias populares a menudo prefieren notas de voz o fotos a redactar textos largos.
+  - *Fase 1 (Actual)*: Soporte de texto + posturas rápidas de un toque + fotos/imágenes (`expo-image-picker` y subida existente en `/loans/upload`).
+  - *Fase 2 (Próxima)*: Integración de notas de voz cortas (grabación de audio nativo mediante `expo-av`, generando `.m4a` subido al backend y reproducido con una barra compacta tipo WhatsApp) y bocetos a mano alzada (`react-native-signature-canvas` o similar para diagramas familiares rápidos).

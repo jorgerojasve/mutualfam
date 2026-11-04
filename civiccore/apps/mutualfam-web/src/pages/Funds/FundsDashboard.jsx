@@ -419,7 +419,7 @@ export default function FundsDashboard() {
             <span>🇻🇪 <strong>Tasas en Vivo:</strong></span>
             <span><strong>BCV:</strong> Bs {Number(rates.bcv.rate).toFixed(2)}</span>
             {rates?.usdt?.rate && <span style={{ opacity: 0.8 }}>• <strong>USDT:</strong> Bs {Number(rates.usdt.rate).toFixed(2)}</span>}
-            {rates?.paralelo?.rate && <span style={{ opacity: 0.8 }}>• <strong>Paralelo:</strong> Bs {Number(rates.paralelo.rate).toFixed(2)}</span>}
+            {rates?.euro?.rate && <span style={{ opacity: 0.8 }}>• <strong>Euro:</strong> Bs {Number(rates.euro.rate).toFixed(2)}</span>}
           </div>
           <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: '600' }}>Actualizado hoy</span>
         </div>
@@ -1071,8 +1071,8 @@ export default function FundsDashboard() {
                       onChange={(e) => setTipoTasa(e.target.value)}
                     >
                       <option value="bcv">Oficial BCV</option>
-                      <option value="paralelo">Paralelo</option>
-                      <option value="usdt">USDT Cripto</option>
+                      <option value="usdt">USDT Cripto (Binance)</option>
+                      <option value="euro">Euro Oficial BCV</option>
                       <option value="fija">Tasa Fija</option>
                     </select>
                   </div>
