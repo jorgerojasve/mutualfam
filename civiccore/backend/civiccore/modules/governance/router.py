@@ -211,7 +211,9 @@ def start_referendum(
         raise HTTPException(status_code=404, detail="Proposal not found")
         
     from ..config.service import ConfigService
-    duracion = int(ConfigService.get_value(db, "DURACION_VOTACION", "7"))
+    from ...core.config import is_qa_environment
+    is_qa = is_qa_environment()
+    duracion = int(ConfigService.get_value(db, "QA_DIAS_VOTACION" if is_qa else "DURACION_VOTACION", "1" if is_qa else "7"))
     max_active = int(ConfigService.get_value(db, "MAX_ACTIVE_REFERENDUMS", "2"))
     
     # Check current active referendums

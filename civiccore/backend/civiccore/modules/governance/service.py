@@ -30,18 +30,36 @@ class GovernanceService:
         voting_starts_at = None
         voting_ends_at = None
         
+        from ...core.config import is_qa_environment
+        is_qa = is_qa_environment()
+
         if proposal_in.proposal_type == ProposalType.MEMBER_ADMISSION:
             initial_status = ProposalStatus.DEBATE
-            dias_debate = int(ConfigService.get_value(db, "ADMISION_DIAS_DEBATE", "4"))
-            dias_votacion = int(ConfigService.get_value(db, "ADMISION_DIAS_VOTACION", "3"))
+            if is_qa:
+                dias_debate = int(ConfigService.get_value(db, "QA_DIAS_DEBATE", "1"))
+                dias_votacion = int(ConfigService.get_value(db, "QA_DIAS_VOTACION", "1"))
+            else:
+                dias_debate = int(ConfigService.get_value(db, "ADMISION_DIAS_DEBATE", "4"))
+                dias_votacion = int(ConfigService.get_value(db, "ADMISION_DIAS_VOTACION", "3"))
             voting_starts_at = now + timedelta(days=dias_debate)
             voting_ends_at = voting_starts_at + timedelta(days=dias_votacion)
         elif proposal_in.proposal_type == ProposalType.EXPULSION:
             initial_status = ProposalStatus.DEBATE
-            dias_debate = int(ConfigService.get_value(db, "EXPULSION_DIAS_DEBATE", "10"))
-            dias_votacion = int(ConfigService.get_value(db, "EXPULSION_DIAS_VOTACION", "4"))
+            if is_qa:
+                dias_debate = int(ConfigService.get_value(db, "QA_DIAS_DEBATE", "1"))
+                dias_votacion = int(ConfigService.get_value(db, "QA_DIAS_VOTACION", "1"))
+            else:
+                dias_debate = int(ConfigService.get_value(db, "EXPULSION_DIAS_DEBATE", "10"))
+                dias_votacion = int(ConfigService.get_value(db, "EXPULSION_DIAS_VOTACION", "4"))
             voting_starts_at = now + timedelta(days=dias_debate)
             voting_ends_at = voting_starts_at + timedelta(days=dias_votacion)
+        else:
+            if is_qa:
+                duracion = int(ConfigService.get_value(db, "QA_DIAS_VOTACION", "1"))
+            else:
+                duracion = int(ConfigService.get_value(db, "DURACION_VOTACION", "7"))
+            voting_starts_at = now
+            voting_ends_at = now + timedelta(days=duracion)
 
         proposal = Proposal(
             author_id=author_id,
@@ -67,10 +85,23 @@ class GovernanceService:
     @staticmethod
     def _enrich_proposal(db: Session, p: Proposal) -> Proposal:
         if p:
+            from ...core.config import is_qa_environment
+            now_dt = utcnow()
+
+            # En QA: si una propuesta en debate fue creada hace más de 1 día (por plazos previos largos),
+            # ajustar sus fechas para que active la votación de 1 día inmediatamente
+            if is_qa_environment() and p.status == ProposalStatus.DEBATE and p.created_at:
+                c_at = p.created_at.replace(tzinfo=timezone.utc) if p.created_at.tzinfo is None else p.created_at
+                if (now_dt - c_at).total_seconds() >= 86400:
+                    p.status = ProposalStatus.VOTING
+                    p.voting_starts_at = c_at + timedelta(days=1)
+                    p.voting_ends_at = p.voting_starts_at + timedelta(days=1)
+                    db.commit()
+
             # Automatic transition from DEBATE to VOTING if debate period passed
             if p.status == ProposalStatus.DEBATE and p.voting_starts_at:
                 v_start = p.voting_starts_at.replace(tzinfo=timezone.utc) if p.voting_starts_at.tzinfo is None else p.voting_starts_at
-                if utcnow() >= v_start:
+                if now_dt >= v_start:
                     p.status = ProposalStatus.VOTING
                     db.commit()
 

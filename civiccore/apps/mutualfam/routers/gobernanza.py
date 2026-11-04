@@ -27,6 +27,8 @@ from civiccore.modules.governance.models import (
 from civiccore.modules.governance.schemas import ProposalCreate, VoteCreate
 from civiccore.modules.governance.service import GovernanceService
 from civiccore.modules.membership import admission_service
+from civiccore.modules.config.service import ConfigService
+from civiccore.core.config import is_qa_environment
 from routers.membership import get_current_org_member, get_current_user
 from services.notifications import notify_users
 from services.realtime import notify_org
@@ -221,11 +223,15 @@ def proponer_ingreso(
         ).all()
         other_user_ids = [m.user_id for m in other_members]
 
+        is_qa = is_qa_environment()
+        dias_debate = int(ConfigService.get_value(db, "QA_DIAS_DEBATE", "1")) if is_qa else int(ConfigService.get_value(db, "ADMISION_DIAS_DEBATE", "4"))
+        texto_dias = "1 día" if dias_debate == 1 else f"{dias_debate} días"
+
         notify_users(
             db,
             other_user_ids,
             "📥 Debate de Ingreso",
-            f"Se propuso el ingreso de {candidate_name}. Tienes 4 días para debatir en asamblea.",
+            f"Se propuso el ingreso de {candidate_name}. Tienes {texto_dias} para debatir en asamblea.",
             {"proposal_id": proposal.id, "type": "member_admission"}
         )
         notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "member_admission"})
@@ -301,11 +307,15 @@ def proponer_expulsion(
     ).all()
     other_user_ids = [m.user_id for m in other_members]
 
+    is_qa = is_qa_environment()
+    dias_debate = int(ConfigService.get_value(db, "QA_DIAS_DEBATE", "1")) if is_qa else int(ConfigService.get_value(db, "EXPULSION_DIAS_DEBATE", "10"))
+    texto_dias = "1 día" if dias_debate == 1 else f"{dias_debate} días"
+
     notify_users(
         db,
         other_user_ids,
         "⚠️ Propuesta de Expulsión",
-        f"Se propuso la expulsión de {target_name}. Inicia período de 10 días para debate y defensa.",
+        f"Se propuso la expulsión de {target_name}. Inicia período de {texto_dias} para debate y defensa.",
         {"proposal_id": proposal.id, "type": "expulsion"}
     )
     notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "expulsion"})
