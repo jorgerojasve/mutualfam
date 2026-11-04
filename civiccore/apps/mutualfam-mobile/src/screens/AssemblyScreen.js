@@ -343,9 +343,10 @@ export default function AssemblyScreen({ embedded = false }) {
       return;
     }
 
+    const debateDias = theme.isQA ? '1 día' : '10 días';
     Alert.alert(
       'Confirmar Propuesta de Expulsión',
-      '¿Estás seguro de que deseas someter a votación la expulsión de este miembro? Se abrirá un período de 10 días de debate y defensa obligatoria.',
+      `¿Estás seguro de que deseas someter a votación la expulsión de este miembro? Se abrirá un período de ${debateDias} de debate y defensa obligatoria.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1168,7 +1169,7 @@ export default function AssemblyScreen({ embedded = false }) {
                     </View>
                     <Text style={styles.successModalTitle}>¡Propuesta en Período de Debate!</Text>
                     <Text style={styles.successModalSubtext}>
-                      Se ha iniciado el período de 4 días de debate en la asamblea familiar para{' '}
+                      Se ha iniciado el período de {theme.isQA ? '1 día' : '4 días'} de debate en la asamblea familiar para{' '}
                       <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>{createdInvite.candidate_name}</Text>.
                     </Text>
 
@@ -1253,7 +1254,9 @@ export default function AssemblyScreen({ embedded = false }) {
 
                 <View style={styles.infoBanner}>
                   <Text style={styles.infoBannerText}>
-                    ℹ️ Proceso: 4 días de debate + 3 días de votación. Se aprueba con supermayoría del 75% y consenso con veto. Tu familiar tendrá 15 días para canjear el enlace.
+                    {theme.isQA
+                      ? 'ℹ️ Proceso (QA): 1 día de debate + 1 día de votación. Se aprueba con supermayoría del 75% y consenso con veto. Tu familiar tendrá 15 días para canjear el enlace.'
+                      : 'ℹ️ Proceso: 4 días de debate + 3 días de votación. Se aprueba con supermayoría del 75% y consenso con veto. Tu familiar tendrá 15 días para canjear el enlace.'}
                   </Text>
                 </View>
 
@@ -1337,7 +1340,9 @@ export default function AssemblyScreen({ embedded = false }) {
 
               <View style={[styles.infoBanner, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: '#ef4444' }]}>
                 <Text style={[styles.infoBannerText, { color: '#fca5a5' }]}>
-                  ⚠️ Garantía de defensa: Inicia con 10 días de debate donde el acusado presentará sus descargos, seguidos de 4 días de votación (75% requerido).
+                  {theme.isQA
+                    ? '⚠️ Garantía de defensa (QA): Inicia con 1 día de debate donde el acusado presentará sus descargos, seguidos de 1 día de votación (75% requerido).'
+                    : '⚠️ Garantía de defensa: Inicia con 10 días de debate donde el acusado presentará sus descargos, seguidos de 4 días de votación (75% requerido).'}
                 </Text>
               </View>
 

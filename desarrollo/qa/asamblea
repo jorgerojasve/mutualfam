@@ -38,3 +38,21 @@ El debate no incluye foro, algo que se había planteado inicialmente en el frame
   - *Contexto de usuario popular*: Los miembros de familias populares a menudo prefieren notas de voz o fotos a redactar textos largos.
   - *Fase 1 (Actual)*: Soporte de texto + posturas rápidas de un toque + fotos/imágenes (`expo-image-picker` y subida existente en `/loans/upload`).
   - *Fase 2 (Próxima)*: Integración de notas de voz cortas (grabación de audio nativo mediante `expo-av`, generando `.m4a` subido al backend y reproducido con una barra compacta tipo WhatsApp) y bocetos a mano alzada (`react-native-signature-canvas` o similar para diagramas familiares rápidos).
+
+Tiempos de debate y votación en QA (1 día cada uno) vs Producción (plazos reglamentarios extendidos).
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Contexto: En QA se requiere iterar rápidamente para validar el ciclo de vida completo de las propuestas (admisión y expulsión) sin demoras de varios días.
+- Regla por Entorno:
+  - QA (`CIVICCORE_ENV=sandbox` / `FLY_APP_NAME=*qa*` / `isQA=true`):
+    - Admisión: 1 día de debate + 1 día de votación.
+    - Expulsión: 1 día de debate y defensa + 1 día de votación.
+    - Referendos generales: 1 día de votación.
+  - Producción (`isQA=false`):
+    - Admisión: 4 días de debate + 3 días de votación.
+    - Expulsión: 10 días de debate y defensa obligatoria + 4 días de votación (75% supermayoría).
+    - Referendos generales: 7 días de votación.
+- Implementación:
+  1. `civiccore/core/config.py`: Función `is_qa_environment()` para detección centralizada.
+  2. `civiccore/modules/governance/service.py`: En `create_proposal`, si `is_qa` es True, usa claves de configuración o defaults `QA_DIAS_DEBATE=1` y `QA_DIAS_VOTACION=1`. En `_enrich_proposal`, auto-acelera propuestas antiguas en QA si ya transcurrieron 24 horas.
+  3. `mutualfam/routers/gobernanza.py`: Notificaciones push adaptan la redacción dinámica: "1 día para debatir" en QA vs "4 días / 10 días" en Producción.
+  4. `AssemblyScreen.js`: Banners informativos y modales de confirmación ajustan el texto según `theme.isQA`.

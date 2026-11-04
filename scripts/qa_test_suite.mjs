@@ -659,6 +659,7 @@ async function executeTestSuite() {
     assert.ok(data.id);
     assert.equal(data.status.toLowerCase(), 'debate');
     assert.equal(data.invite_token, null, 'No debe generarse enlace antes de aprobación');
+    assert.ok(data.time_remaining_seconds > 0 && data.time_remaining_seconds <= 86400, 'En QA el debate debe ser de 1 día (máx 86400s)');
     testPropuestaId = data.id;
   });
 

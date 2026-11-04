@@ -3,6 +3,26 @@ CivicCore - Base Configuration
 """
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
+
+
+def is_qa_environment() -> bool:
+    """
+    Detecta si el backend está ejecutándose en el entorno de QA/Sandbox.
+    En QA se aceleran los períodos de debate y votación a 1 día cada uno para pruebas.
+    En producción se mantienen los períodos reglamentarios completos.
+    """
+    civic_env = os.getenv("CIVICCORE_ENV", "").lower()
+    if civic_env in ("sandbox", "qa", "test"):
+        return True
+    fly_app = os.getenv("FLY_APP_NAME", "").lower()
+    if "qa" in fly_app:
+        return True
+    backend_url = os.getenv("BACKEND_PUBLIC_URL", "").lower()
+    if "qa" in backend_url:
+        return True
+    return False
+
 
 class CivicCoreSettings(BaseSettings):
     # App Information
