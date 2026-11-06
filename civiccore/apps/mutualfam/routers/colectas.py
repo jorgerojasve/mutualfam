@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timezone
 import json
@@ -174,6 +174,20 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         except Exception:
             beneficiario_datos = {}
 
+    # Si la colecta no tiene métodos configurados directamente, buscar en UserPaymentConfig del beneficiario o proponente
+    if not beneficiario_datos or beneficiario_datos == {}:
+        try:
+            sess = object_session(colecta)
+            target_uid = colecta.beneficiario_id or colecta.proponente_id
+            if sess and target_uid:
+                u_cfg = sess.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == target_uid).first()
+                if u_cfg and u_cfg.payment_methods_json:
+                    loaded = json.loads(u_cfg.payment_methods_json)
+                    if isinstance(loaded, dict) and loaded:
+                        beneficiario_datos = loaded
+        except Exception:
+            pass
+
     # Compromisos y aportantes activos
     compromisos_list = []
     mi_compromiso = None
@@ -307,7 +321,7 @@ def create_colecta(
 
     # Datos de pago del beneficiario
     datos_pago_json = "{}"
-    if req.beneficiario_datos_pago:
+    if req.beneficiario_datos_pago and isinstance(req.beneficiario_datos_pago, dict) and req.beneficiario_datos_pago:
         datos_pago_json = json.dumps(req.beneficiario_datos_pago)
     else:
         # Usar datos de pago configurados por el creador si existen
