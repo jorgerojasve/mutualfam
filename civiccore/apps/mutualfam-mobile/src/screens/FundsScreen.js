@@ -10,11 +10,13 @@ import {
   Modal,
   TextInput,
   ScrollView,
-  Image
+  Image,
+  Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { fundsApi, colectasApi, loansApi, authApi } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
@@ -23,8 +25,76 @@ import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
-import { VENEZUELAN_BANKS } from '../utils/banks';
+import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
+
+const normalizePaymentMethodName = (method) => {
+  if (!method) return '';
+  const m = String(method).toLowerCase().trim();
+  if (m === 'pago_movil' || m === 'pago movil' || m === 'pagomovil') return 'Pago Móvil';
+  if (m === 'transferencia' || m === 'transferencia bancaria' || m === 'transferencia_bancaria') return 'Transferencia Bancaria';
+  if (m === 'binance' || m === 'binance_pay' || m === 'usdt') return 'Binance';
+  if (m === 'zelle') return 'Zelle';
+  if (m === 'efectivo' || m === 'efectivo usd' || m === 'efectivo_usd') return 'Efectivo USD';
+  if (m === 'efectivo bolívares' || m === 'efectivo_bolivares' || m === 'efectivo ves') return 'Efectivo Bolívares';
+  return method;
+};
+
+const getBeneficiaryMethodData = (datosPago, method) => {
+  if (!datosPago) return null;
+  let obj = datosPago;
+  if (typeof datosPago === 'string') {
+    try {
+      obj = JSON.parse(datosPago);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (!obj || typeof obj !== 'object') return null;
+
+  if (obj[method] !== undefined) return obj[method];
+
+  const targetNorm = normalizePaymentMethodName(method).toLowerCase();
+  for (const [k, v] of Object.entries(obj)) {
+    if (normalizePaymentMethodName(k).toLowerCase() === targetNorm) {
+      return v;
+    }
+  }
+  return null;
+};
+
+const getAvailablePaymentMethods = (datosPago) => {
+  if (!datosPago) return [];
+  let obj = datosPago;
+  if (typeof datosPago === 'string') {
+    try {
+      obj = JSON.parse(datosPago);
+    } catch (_) {
+      return [];
+    }
+  }
+  if (!obj || typeof obj !== 'object') return [];
+
+  const methods = [];
+  for (const [key, val] of Object.entries(obj)) {
+    const normKey = normalizePaymentMethodName(key);
+    if (normKey === 'Pago Móvil') {
+      if (val && typeof val === 'object' && val.banco && val.cedula && val.telefono) {
+        if (!methods.includes(normKey)) methods.push(normKey);
+      }
+    } else if (typeof val === 'string' && val.trim().length > 0) {
+      if (!methods.includes(normKey)) methods.push(normKey);
+    } else if (val && typeof val === 'object' && Object.keys(val).length > 0) {
+      if (!methods.includes(normKey)) methods.push(normKey);
+    }
+  }
+  return methods;
+};
+
+const hasConfiguredPaymentMethods = (config) => {
+  if (!config || typeof config !== 'object') return false;
+  return getAvailablePaymentMethods(config).length > 0;
+};
 
 export default function FundsScreen() {
   const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
@@ -90,6 +160,54 @@ export default function FundsScreen() {
   const [paymentNote, setPaymentNote] = useState('');
   const [receiptUri, setReceiptUri] = useState(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+  const [userPaymentConfig, setUserPaymentConfig] = useState(null);
+
+  const copyField = async (fieldKey, value) => {
+    if (!value) return;
+    try {
+      await Clipboard.setStringAsync(String(value));
+      setCopiedField(fieldKey);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {
+      console.warn('Error copying to clipboard', e);
+    }
+  };
+
+  const copyAllPagoMovil = async (pmData, montoBs) => {
+    if (!pmData) return;
+    try {
+      const getPrefix = (tipo) => {
+        if (!tipo || tipo === 'Persona') return 'V';
+        if (tipo === 'Comercio') return 'J';
+        if (tipo === 'Comuna') return 'G';
+        return tipo[0] || 'V';
+      };
+      const docPrefix = getPrefix(pmData.tipo_doc);
+      const safeDoc = `${docPrefix}-${pmData.cedula || ''}`;
+      const safeBanco = pmData.banco || '';
+      const safeTelefono = pmData.telefono || '';
+      const montoText = montoBs ? ` | Monto: ${montoBs} Bs` : '';
+      const text = `Banco: ${safeBanco} | ${safeDoc} | ${safeTelefono}${montoText}`;
+      await Clipboard.setStringAsync(text);
+      setCopiedField('all');
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {
+      console.warn('Error copying all to clipboard', e);
+    }
+  };
+
+  const fetchUserPaymentConfig = async () => {
+    try {
+      const res = await loansApi.getPaymentMethods();
+      const parsed = JSON.parse(res?.payment_methods_json || '{}');
+      setUserPaymentConfig(parsed);
+      return parsed;
+    } catch (e) {
+      console.warn('Error loading user payment config in FundsScreen', e);
+      return {};
+    }
+  };
 
   // Formulario Validar Gasto
   const [expenseDesc, setExpenseDesc] = useState('');
@@ -187,6 +305,7 @@ export default function FundsScreen() {
 
   useEffect(() => {
     fetchUser();
+    fetchUserPaymentConfig();
     // Default fecha de pago: dentro de 7 días
     const d = new Date();
     d.setDate(d.getDate() + 7);
@@ -209,6 +328,7 @@ export default function FundsScreen() {
       if (activeOrg?.id) {
         fetchColectas();
         fetchFunds();
+        fetchUserPaymentConfig();
       }
     }, [activeOrg?.id])
   );
@@ -355,6 +475,7 @@ export default function FundsScreen() {
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
         beneficiario_nombre: beneficiarioNombre.trim() || undefined,
+        beneficiario_datos_pago: (userPaymentConfig && Object.keys(userPaymentConfig).length > 0) ? userPaymentConfig : undefined,
       });
 
       setShowCreateModal(false);
@@ -769,6 +890,8 @@ export default function FundsScreen() {
               style={styles.btnSuccess}
               onPress={() => {
                 setTargetColecta(item);
+                const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
+                setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
                 setShowPaymentModal(true);
               }}
             >
@@ -1160,6 +1283,30 @@ export default function FundsScreen() {
                 placeholderTextColor="#64748b"
               />
 
+              {/* Información sobre Métodos de Pago del Creador/Beneficiario */}
+              {userPaymentConfig && hasConfiguredPaymentMethods(userPaymentConfig) ? (
+                <View style={styles.pmConfiguredInfoCard}>
+                  <Text style={styles.pmConfiguredInfoTitle}>
+                    💳 Métodos de Pago asociados automáticamente:
+                  </Text>
+                  <Text style={styles.pmConfiguredInfoList}>
+                    {getAvailablePaymentMethods(userPaymentConfig).join(' • ')}
+                  </Text>
+                  <Text style={styles.pmConfiguredInfoSub}>
+                    Los miembros que aporten verán estos datos para transferir directamente a tu cuenta o Pago Móvil.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.pmWarningInfoCard}>
+                  <Text style={styles.pmWarningInfoTitle}>
+                    ⚠️ Datos de Pago Móvil no configurados
+                  </Text>
+                  <Text style={styles.pmWarningInfoSub}>
+                    Aún no has configurado tus datos de pago en tu perfil. Puedes registrarlos en Préstamos > ⚙️ Datos para que los aportantes reciban tus datos bancarios automáticamente.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={styles.modalCancel}
@@ -1209,6 +1356,113 @@ export default function FundsScreen() {
                     📅 <Text style={{ fontWeight: 'bold' }}>Fecha de pago:</Text> {selectedColecta.fecha_pago}
                   </Text>
                 </View>
+
+                {/* Datos de Pago del Beneficiario */}
+                <Text style={styles.sectionHeader}>💳 Datos de Pago del Beneficiario</Text>
+                {(() => {
+                  const methods = getAvailablePaymentMethods(selectedColecta.beneficiario_datos_pago);
+                  if (methods.length === 0) {
+                    return (
+                      <View style={styles.noPmBox}>
+                        <Text style={styles.noPmText}>
+                          ℹ️ El beneficiario no tiene datos de pago registrados. Deberás coordinar el aporte directamente con {selectedColecta.beneficiario_nombre}.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  const pmData = getBeneficiaryMethodData(selectedColecta.beneficiario_datos_pago, 'Pago Móvil');
+                  return (
+                    <View style={styles.beneficiaryPmContainer}>
+                      {pmData && (
+                        <View style={styles.pmCard}>
+                          <View style={styles.pmCardHeader}>
+                            <Text style={styles.pmCardTitle}>📲 Pago Móvil</Text>
+                            <Text style={styles.pmCardSubtitle}>Beneficiario: {selectedColecta.beneficiario_nombre}</Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={styles.copyDataRow}
+                            onPress={() => copyField('banco', pmData.banco)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                              <Text style={styles.copyDataLabel}>Banco</Text>
+                              <Text style={styles.copyDataValue}>{getBankLabel(pmData.banco)}</Text>
+                            </View>
+                            <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
+                          </TouchableOpacity>
+
+                          {(() => {
+                            const getPrefix = (tipo) => {
+                              if (!tipo || tipo === 'Persona') return 'V';
+                              if (tipo === 'Comercio') return 'J';
+                              if (tipo === 'Comuna') return 'G';
+                              return tipo[0] || 'V';
+                            };
+                            const docPrefix = getPrefix(pmData.tipo_doc);
+                            const safeDoc = `${docPrefix}-${pmData.cedula || ''}`;
+                            return (
+                              <TouchableOpacity
+                                style={styles.copyDataRow}
+                                onPress={() => copyField('doc', safeDoc)}
+                                activeOpacity={0.7}
+                              >
+                                <View>
+                                  <Text style={styles.copyDataLabel}>Cédula / RIF</Text>
+                                  <Text style={styles.copyDataValue}>{safeDoc}</Text>
+                                </View>
+                                <Text style={styles.copyIcon}>{copiedField === 'doc' ? '✓' : '📋'}</Text>
+                              </TouchableOpacity>
+                            );
+                          })()}
+
+                          <TouchableOpacity
+                            style={styles.copyDataRow}
+                            onPress={() => copyField('tel', pmData.telefono)}
+                            activeOpacity={0.7}
+                          >
+                            <View>
+                              <Text style={styles.copyDataLabel}>Teléfono</Text>
+                              <Text style={styles.copyDataValue}>{pmData.telefono}</Text>
+                            </View>
+                            <Text style={styles.copyIcon}>{copiedField === 'tel' ? '✓' : '📋'}</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.copyAllButton}
+                            onPress={() => copyAllPagoMovil(pmData, null)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.copyAllButtonText}>
+                              {copiedField === 'all' ? '✅ ¡Copiado!' : '📋 Copiar todo para el banco'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {methods.filter(m => m !== 'Pago Móvil').map(m => {
+                        const val = getBeneficiaryMethodData(selectedColecta.beneficiario_datos_pago, m);
+                        const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val || '');
+                        return (
+                          <View key={m} style={[styles.pmCard, { marginTop: 10 }]}>
+                            <Text style={styles.pmCardTitle}>💳 {m}</Text>
+                            <TouchableOpacity
+                              style={[styles.copyDataRow, { marginTop: 6 }]}
+                              onPress={() => copyField(m, strVal)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={styles.copyDataLabel}>Datos</Text>
+                                <Text style={[styles.copyDataValue, { fontSize: 15 }]}>{strVal}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === m ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
 
                 {/* Lista de Aportantes */}
                 <Text style={styles.sectionHeader}>
@@ -1405,24 +1659,162 @@ export default function FundsScreen() {
                     </View>
                   )}
 
-                  <Text style={styles.inputLabel}>Método de Pago</Text>
-                  <View style={styles.rateTypeSelector}>
-                    {['pago_movil', 'transferencia', 'efectivo', 'zelle', 'binance'].map((m) => (
-                      <TouchableOpacity
-                        key={m}
-                        style={[styles.rateTypeBtn, paymentMethod === m && styles.rateTypeBtnActive]}
-                        onPress={() => setPaymentMethod(m)}
-                      >
-                        <Text style={[styles.rateTypeBtnText, paymentMethod === m && styles.rateTypeBtnTextActive]}>
-                          {m.replace('_', ' ').toUpperCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  {(() => {
+                    const availableMethods = getAvailablePaymentMethods(targetColecta.beneficiario_datos_pago);
 
-                  {(paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && (
+                    if (availableMethods.length === 0) {
+                      return (
+                        <View style={styles.noPmWarningBox}>
+                          <Text style={styles.noPmWarningTitle}>⚠️ Sin métodos registrados</Text>
+                          <Text style={styles.noPmWarningText}>
+                            El beneficiario ({targetColecta.beneficiario_nombre}) no tiene métodos de pago registrados en el sistema.
+                            Por favor coordina directamente con él para realizar la entrega o transferencia de tu aporte.
+                          </Text>
+                        </View>
+                      );
+                    }
+
+                    const selectedNormalized = normalizePaymentMethodName(paymentMethod);
+                    const isPagoMovil = selectedNormalized === 'Pago Móvil';
+                    const pmData = isPagoMovil ? getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Pago Móvil') : null;
+                    const rawMontoBs = targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1));
+                    const montoBsStr = formatVE(rawMontoBs);
+
+                    return (
+                      <View style={{ marginBottom: 14 }}>
+                        <Text style={styles.inputLabel}>Selecciona el Método de Pago Registrado *</Text>
+                        <View style={styles.rateTypeSelector}>
+                          {availableMethods.map((m) => {
+                            const isSelected = selectedNormalized.toLowerCase() === m.toLowerCase();
+                            return (
+                              <TouchableOpacity
+                                key={m}
+                                style={[styles.rateTypeBtn, isSelected && styles.rateTypeBtnActive]}
+                                onPress={() => setPaymentMethod(m)}
+                              >
+                                <Text style={[styles.rateTypeBtnText, isSelected && styles.rateTypeBtnTextActive]}>
+                                  {m}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        {/* Tarjeta de Datos de Pago Móvil con Copiado */}
+                        {isPagoMovil && pmData && (
+                          <View style={styles.pmCard}>
+                            <View style={styles.pmCardHeader}>
+                              <Text style={styles.pmCardTitle}>📲 Datos de Pago Móvil del Beneficiario</Text>
+                              <Text style={styles.pmCardSubtitle}>Beneficiario: {targetColecta.beneficiario_nombre}</Text>
+                            </View>
+
+                            {/* Monto a pagar en Bs */}
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('monto', montoBsStr)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Monto a transferir ({targetColecta.tasa_label}: Bs {formatVE(targetColecta.tasa_actual)})</Text>
+                                <Text style={[styles.copyDataValue, { color: '#10b981' }]}>Bs {montoBsStr}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'monto' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+
+                            {/* Banco Destino */}
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('banco', pmData.banco)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={styles.copyDataLabel}>Banco Destino</Text>
+                                <Text style={styles.copyDataValue}>{getBankLabel(pmData.banco)}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+
+                            {/* Documento / Cédula */}
+                            {(() => {
+                              const getPrefix = (tipo) => {
+                                if (!tipo || tipo === 'Persona') return 'V';
+                                if (tipo === 'Comercio') return 'J';
+                                if (tipo === 'Comuna') return 'G';
+                                return tipo[0] || 'V';
+                              };
+                              const docPrefix = getPrefix(pmData.tipo_doc);
+                              const safeDoc = `${docPrefix}-${pmData.cedula || ''}`;
+                              return (
+                                <TouchableOpacity
+                                  style={styles.copyDataRow}
+                                  onPress={() => copyField('doc', safeDoc)}
+                                  activeOpacity={0.7}
+                                >
+                                  <View>
+                                    <Text style={styles.copyDataLabel}>Cédula / Documento</Text>
+                                    <Text style={styles.copyDataValue}>{safeDoc}</Text>
+                                  </View>
+                                  <Text style={styles.copyIcon}>{copiedField === 'doc' ? '✓' : '📋'}</Text>
+                                </TouchableOpacity>
+                              );
+                            })()}
+
+                            {/* Teléfono */}
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('tel', pmData.telefono)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Teléfono</Text>
+                                <Text style={styles.copyDataValue}>{pmData.telefono}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'tel' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+
+                            {/* Botón Copiar Todo para el Banco */}
+                            <TouchableOpacity
+                              style={styles.copyAllButton}
+                              onPress={() => copyAllPagoMovil(pmData, montoBsStr)}
+                              activeOpacity={0.8}
+                            >
+                              <Text style={styles.copyAllButtonText}>
+                                {copiedField === 'all' ? '✅ ¡Copiado!' : '📋  Copiar todo para el banco'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {/* Otros métodos registrados (Transferencia, Binance, etc.) */}
+                        {!isPagoMovil && (
+                          <View style={styles.pmCard}>
+                            <Text style={styles.pmCardTitle}>💳 Datos de {selectedNormalized}</Text>
+                            {(() => {
+                              const otherVal = getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, selectedNormalized);
+                              const strVal = typeof otherVal === 'object' ? JSON.stringify(otherVal) : String(otherVal || '');
+                              return (
+                                <TouchableOpacity
+                                  style={[styles.copyDataRow, { marginTop: 6 }]}
+                                  onPress={() => copyField('other', strVal)}
+                                  activeOpacity={0.7}
+                                >
+                                  <View style={{ flex: 1, paddingRight: 8 }}>
+                                    <Text style={styles.copyDataLabel}>Información de Cobro</Text>
+                                    <Text style={[styles.copyDataValue, { fontSize: 15 }]}>{strVal || 'No especificado'}</Text>
+                                  </View>
+                                  <Text style={styles.copyIcon}>{copiedField === 'other' ? '✓' : '📋'}</Text>
+                                </TouchableOpacity>
+                              );
+                            })()}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })()}
+
+                  {(normalizePaymentMethodName(paymentMethod) === 'Pago Móvil' || normalizePaymentMethodName(paymentMethod) === 'Transferencia Bancaria') && (
                     <View style={{ marginBottom: 8 }}>
-                      <Text style={styles.inputLabel}>Banco Emisor (Venezuela)</Text>
+                      <Text style={styles.inputLabel}>Tu Banco Emisor (Venezuela)</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginVertical: 4 }}>
                         {VENEZUELAN_BANKS.slice(0, 8).map((b) => (
                           <TouchableOpacity
@@ -2258,5 +2650,150 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  // Estilos de Datos de Pago y Copiado
+  pmConfiguredInfoCard: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: '#10b981',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  pmConfiguredInfoTitle: {
+    color: '#34d399',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  pmConfiguredInfoList: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pmConfiguredInfoSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  pmWarningInfoCard: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  pmWarningInfoTitle: {
+    color: '#fbbf24',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  pmWarningInfoSub: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  noPmBox: {
+    backgroundColor: 'rgba(51, 65, 85, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  noPmText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  beneficiaryPmContainer: {
+    marginVertical: 8,
+  },
+  pmCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+    marginBottom: 10,
+  },
+  pmCardHeader: {
+    marginBottom: 10,
+  },
+  pmCardTitle: {
+    color: '#60a5fa',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  pmCardSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  copyDataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  copyDataLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  copyDataValue: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  copyIcon: {
+    fontSize: 18,
+    opacity: 0.85,
+    color: '#38bdf8',
+  },
+  copyAllButton: {
+    backgroundColor: 'rgba(59, 130, 246, 0.25)',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  copyAllButtonText: {
+    color: '#93c5fd',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  noPmWarningBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  noPmWarningTitle: {
+    color: '#f87171',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  noPmWarningText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    lineHeight: 17,
   },
 });
