@@ -866,7 +866,7 @@ export default function FundsScreen() {
             👤 Beneficiario: <Text style={styles.infoHighlight}>{item.beneficiario_nombre}</Text>
           </Text>
           <Text style={styles.infoText}>
-            📅 Pago: <Text style={styles.infoHighlight}>{item.fecha_pago}</Text>
+            📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}</Text>
           </Text>
         </View>
 
@@ -2204,16 +2204,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
+    gap: 4,
   },
   infoText: {
     fontSize: 12,
     color: '#94a3b8',
+    lineHeight: 18,
   },
   infoHighlight: {
     color: '#f1f5f9',
