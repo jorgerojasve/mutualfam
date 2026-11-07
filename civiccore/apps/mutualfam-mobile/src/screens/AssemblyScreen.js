@@ -1714,7 +1714,9 @@ const styles = StyleSheet.create({
   },
   metaText: {
     color: '#94a3b8',
-    fontSize: 13
+    fontSize: 13,
+    flex: 1,
+    marginRight: 8,
   },
   metaHighlight: {
     color: '#e2e8f0',
