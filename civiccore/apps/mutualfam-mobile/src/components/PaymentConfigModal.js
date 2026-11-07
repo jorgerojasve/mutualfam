@@ -14,14 +14,20 @@ import {
   Keyboard,
 } from 'react-native';
 import { loansApi } from '../api/client';
-import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
+import {
+  VENEZUELAN_BANKS,
+  getBankLabel,
+  cleanAccountNumber,
+  formatAccountNumber,
+  findBankByAccount,
+} from '../utils/banks';
 import theme from '../utils/theme';
 
 const AVAILABLE_PAYMENT_METHODS = [
   'Pago Móvil',
+  'Transferencia Bancaria',
   'Efectivo USD',
   'Efectivo Bolívares',
-  'Transferencia Bancaria',
   'Binance',
 ];
 
@@ -39,6 +45,7 @@ export default function PaymentConfigModal({
   const [isPickingBank, setIsPickingBank] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
   const [pmErrors, setPmErrors] = useState({});
+  const [tbErrors, setTbErrors] = useState({});
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const configScrollRef = useRef(null);
 
@@ -65,6 +72,7 @@ export default function PaymentConfigModal({
       setIsPickingBank(false);
       setBankSearch('');
       setPmErrors({});
+      setTbErrors({});
     }
   }, [visible]);
 
@@ -144,6 +152,79 @@ export default function PaymentConfigModal({
       return;
     }
 
+    if (selectedConfigMethod === 'Transferencia Bancaria') {
+      const tb = paymentConfig['Transferencia Bancaria'] || {};
+      const banco = (tb.banco || '').trim();
+      const tipo_cuenta = tb.tipo_cuenta || 'Corriente';
+      const numero_cuenta = cleanAccountNumber(tb.numero_cuenta);
+      const titular = (tb.titular || '').trim();
+      const tipo_doc = tb.tipo_doc || 'Persona';
+      const cedula = (tb.cedula || '').trim().replace(/\D/g, '');
+      const email = (tb.email || '').trim().toLowerCase();
+      const telefono = (tb.telefono || '').trim().replace(/[-\s]/g, '');
+
+      const isEmpty = !banco && !numero_cuenta && !titular && !cedula;
+      if (isEmpty) {
+        setTbErrors({});
+        const updatedConfig = { ...paymentConfig };
+        delete updatedConfig['Transferencia Bancaria'];
+        setPaymentConfig(updatedConfig);
+        setSelectedConfigMethod(null);
+        return;
+      }
+
+      const errors = {};
+      if (!banco) {
+        errors.banco = 'Debes seleccionar un banco.';
+      }
+      if (!numero_cuenta) {
+        errors.numero_cuenta = 'Ingresa el número de cuenta de 20 dígitos.';
+      } else if (numero_cuenta.length !== 20) {
+        errors.numero_cuenta = `El número de cuenta debe tener exactamente 20 dígitos (actualmente ${numero_cuenta.length}).`;
+      } else if (banco && numero_cuenta.slice(0, 4) !== banco) {
+        errors.numero_cuenta = `Los primeros 4 dígitos deben coincidir con el código del banco seleccionado (${banco}).`;
+      }
+
+      if (!titular) {
+        errors.titular = 'Ingresa el nombre del titular de la cuenta.';
+      } else if (titular.length < 3) {
+        errors.titular = 'El nombre del titular debe tener al menos 3 caracteres.';
+      }
+
+      if (!cedula) {
+        errors.cedula = 'Ingresa el número de documento / RIF.';
+      } else if (!/^\d{5,10}$/.test(cedula)) {
+        errors.cedula = 'El documento debe tener entre 5 y 10 dígitos numéricos.';
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.email = 'Ingresa un correo electrónico válido o déjalo en blanco.';
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setTbErrors(errors);
+        return;
+      }
+
+      setTbErrors({});
+      setPaymentConfig({
+        ...paymentConfig,
+        'Transferencia Bancaria': {
+          ...(tb || {}),
+          banco,
+          tipo_cuenta,
+          numero_cuenta,
+          titular,
+          tipo_doc,
+          cedula,
+          email: email || undefined,
+          telefono: telefono || undefined,
+        },
+      });
+      setSelectedConfigMethod(null);
+      return;
+    }
+
     setSelectedConfigMethod(null);
   };
 
@@ -161,6 +242,26 @@ export default function PaymentConfigModal({
             Alert.alert(
               'Incompleto',
               'Por favor completa todos los campos de Pago Móvil (banco, documento y teléfono) o déjalos todos en blanco para eliminar el método.'
+            );
+            return;
+          }
+        }
+      } else if (method === 'Transferencia Bancaria') {
+        const tb = configToSave['Transferencia Bancaria'];
+        if (typeof tb === 'object') {
+          const isEmpty = !tb.banco && !tb.numero_cuenta && !tb.titular && !tb.cedula;
+          if (isEmpty) {
+            delete configToSave['Transferencia Bancaria'];
+          } else if (
+            !tb.banco ||
+            !tb.numero_cuenta ||
+            cleanAccountNumber(tb.numero_cuenta).length !== 20 ||
+            !tb.titular ||
+            !tb.cedula
+          ) {
+            Alert.alert(
+              'Incompleto',
+              'Por favor completa todos los campos requeridos de Transferencia Bancaria (banco, cuenta de 20 dígitos, titular y documento) o déjalos todos en blanco para eliminar el método.'
             );
             return;
           }
@@ -192,6 +293,7 @@ export default function PaymentConfigModal({
     } else if (selectedConfigMethod) {
       setSelectedConfigMethod(null);
       setPmErrors({});
+      setTbErrors({});
     } else {
       if (onClose) onClose();
     }
@@ -237,12 +339,13 @@ export default function PaymentConfigModal({
               <>
                 <Text style={styles.modalTitle}>Mis Datos de Pago</Text>
                 <Text style={{ color: '#94a3b8', marginBottom: 15 }}>
-                  Selecciona un método para configurarlo.
+                  Configura tus métodos para recibir pagos de préstamos y aportes de colectas.
                 </Text>
 
                 {AVAILABLE_PAYMENT_METHODS.map((method) => {
                   const isConfigured = !!paymentConfig[method];
-                  const isDisabled = method !== 'Pago Móvil';
+                  const isDisabled =
+                    method !== 'Pago Móvil' && method !== 'Transferencia Bancaria';
                   return (
                     <TouchableOpacity
                       key={method}
@@ -264,11 +367,22 @@ export default function PaymentConfigModal({
                       }}
                       activeOpacity={isDisabled ? 1 : 0.7}
                     >
-                      <Text style={[{ color: '#fff' }, isDisabled && { color: '#94a3b8' }]}>
-                        {method}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={{ fontSize: 16 }}>
+                          {method === 'Pago Móvil'
+                            ? '📲'
+                            : method === 'Transferencia Bancaria'
+                            ? '🏛️'
+                            : '💳'}
+                        </Text>
+                        <Text style={[{ color: '#fff' }, isDisabled && { color: '#94a3b8' }]}>
+                          {method}
+                        </Text>
+                      </View>
                       {isConfigured && (
-                        <Text style={{ color: '#10b981', fontSize: 12 }}>✓ Configurado</Text>
+                        <Text style={{ color: '#10b981', fontSize: 12, fontWeight: '700' }}>
+                          ✓ Configurado
+                        </Text>
                       )}
                     </TouchableOpacity>
                   );
@@ -327,7 +441,12 @@ export default function PaymentConfigModal({
                         return b.code.includes(q) || b.name.toLowerCase().includes(q);
                       })
                       .map((b) => {
-                        const isSelected = paymentConfig['Pago Móvil']?.banco === b.code;
+                        const currentBankCode =
+                          selectedConfigMethod === 'Pago Móvil'
+                            ? paymentConfig['Pago Móvil']?.banco
+                            : paymentConfig['Transferencia Bancaria']?.banco;
+                        const isSelected = currentBankCode === b.code;
+
                         return (
                           <TouchableOpacity
                             key={b.code}
@@ -341,14 +460,35 @@ export default function PaymentConfigModal({
                               borderBottomColor: '#1e293b',
                             }}
                             onPress={() => {
-                              setPaymentConfig({
-                                ...paymentConfig,
-                                'Pago Móvil': {
-                                  ...(paymentConfig['Pago Móvil'] || {}),
-                                  banco: b.code,
-                                },
-                              });
-                              setPmErrors((prev) => ({ ...prev, banco: null }));
+                              if (selectedConfigMethod === 'Pago Móvil') {
+                                setPaymentConfig({
+                                  ...paymentConfig,
+                                  'Pago Móvil': {
+                                    ...(paymentConfig['Pago Móvil'] || {}),
+                                    banco: b.code,
+                                  },
+                                });
+                                setPmErrors((prev) => ({ ...prev, banco: null }));
+                              } else if (selectedConfigMethod === 'Transferencia Bancaria') {
+                                const currentAcc = cleanAccountNumber(
+                                  paymentConfig['Transferencia Bancaria']?.numero_cuenta || ''
+                                );
+                                let newAcc = currentAcc;
+                                if (!currentAcc) {
+                                  newAcc = b.code;
+                                } else if (currentAcc.length >= 4 && currentAcc.slice(0, 4) !== b.code) {
+                                  newAcc = b.code + currentAcc.slice(4);
+                                }
+                                setPaymentConfig({
+                                  ...paymentConfig,
+                                  'Transferencia Bancaria': {
+                                    ...(paymentConfig['Transferencia Bancaria'] || {}),
+                                    banco: b.code,
+                                    numero_cuenta: newAcc,
+                                  },
+                                });
+                                setTbErrors((prev) => ({ ...prev, banco: null, numero_cuenta: null }));
+                              }
                               setIsPickingBank(false);
                             }}
                           >
@@ -399,6 +539,7 @@ export default function PaymentConfigModal({
                   <TouchableOpacity
                     onPress={() => {
                       setPmErrors({});
+                      setTbErrors({});
                       setSelectedConfigMethod(null);
                     }}
                     style={{ marginRight: 15 }}
@@ -457,16 +598,7 @@ export default function PaymentConfigModal({
                       </Text>
                     </TouchableOpacity>
                     {pmErrors.banco && (
-                      <Text
-                        style={{
-                          color: '#ef4444',
-                          fontSize: 12,
-                          marginTop: -8,
-                          marginBottom: 12,
-                        }}
-                      >
-                        {pmErrors.banco}
-                      </Text>
+                      <Text style={styles.errorText}>{pmErrors.banco}</Text>
                     )}
 
                     <Text style={styles.label}>Tipo de documento</Text>
@@ -527,7 +659,7 @@ export default function PaymentConfigModal({
                           ...paymentConfig,
                           'Pago Móvil': {
                             ...(paymentConfig['Pago Móvil'] || {}),
-                            cedula: text,
+                            cedula: text.replace(/\D/g, ''),
                           },
                         });
                         if (pmErrors.cedula) setPmErrors((prev) => ({ ...prev, cedula: null }));
@@ -541,16 +673,7 @@ export default function PaymentConfigModal({
                       placeholderTextColor="#475569"
                     />
                     {pmErrors.cedula && (
-                      <Text
-                        style={{
-                          color: '#ef4444',
-                          fontSize: 12,
-                          marginTop: -8,
-                          marginBottom: 12,
-                        }}
-                      >
-                        {pmErrors.cedula}
-                      </Text>
+                      <Text style={styles.errorText}>{pmErrors.cedula}</Text>
                     )}
 
                     <Text style={styles.label}>Teléfono</Text>
@@ -585,16 +708,288 @@ export default function PaymentConfigModal({
                       placeholderTextColor="#475569"
                     />
                     {pmErrors.telefono && (
+                      <Text style={styles.errorText}>{pmErrors.telefono}</Text>
+                    )}
+                  </View>
+                ) : selectedConfigMethod === 'Transferencia Bancaria' ? (
+                  <View>
+                    <Text style={styles.label}>Banco Destino</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.input,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                        },
+                        tbErrors.banco && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      onPress={() => {
+                        setBankSearch('');
+                        setIsPickingBank(true);
+                      }}
+                    >
                       <Text
                         style={{
-                          color: '#ef4444',
-                          fontSize: 12,
-                          marginTop: -8,
-                          marginBottom: 12,
+                          color: paymentConfig['Transferencia Bancaria']?.banco ? '#fff' : '#64748b',
+                          fontSize: 15,
+                          flex: 1,
+                        }}
+                        numberOfLines={1}
+                      >
+                        {paymentConfig['Transferencia Bancaria']?.banco
+                          ? getBankLabel(paymentConfig['Transferencia Bancaria']?.banco, banks)
+                          : 'Selecciona el banco de tu cuenta...'}
+                      </Text>
+                      <Text
+                        style={{
+                          color: '#60a5fa',
+                          fontSize: 13,
+                          fontWeight: '600',
+                          marginLeft: 8,
                         }}
                       >
-                        {pmErrors.telefono}
+                        Elegir ▼
                       </Text>
+                    </TouchableOpacity>
+                    {tbErrors.banco && (
+                      <Text style={styles.errorText}>{tbErrors.banco}</Text>
+                    )}
+
+                    <Text style={styles.label}>Tipo de Cuenta</Text>
+                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                      {['Corriente', 'Ahorro'].map((tipo) => (
+                        <TouchableOpacity
+                          key={tipo}
+                          style={[
+                            styles.methodPill,
+                            (paymentConfig['Transferencia Bancaria']?.tipo_cuenta || 'Corriente') === tipo
+                              ? styles.methodPillActive
+                              : null,
+                            { flex: 1 },
+                          ]}
+                          onPress={() =>
+                            setPaymentConfig({
+                              ...paymentConfig,
+                              'Transferencia Bancaria': {
+                                ...(paymentConfig['Transferencia Bancaria'] || {}),
+                                tipo_cuenta: tipo,
+                              },
+                            })
+                          }
+                        >
+                          <Text
+                            style={
+                              (paymentConfig['Transferencia Bancaria']?.tipo_cuenta || 'Corriente') === tipo
+                                ? styles.methodPillTextActive
+                                : styles.methodPillText
+                            }
+                          >
+                            {tipo}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.label}>Número de Cuenta (20 dígitos)</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4 }}>
+                        {cleanAccountNumber(paymentConfig['Transferencia Bancaria']?.numero_cuenta || '').length}/20 dígitos
+                      </Text>
+                    </View>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        { letterSpacing: 1, fontSize: 15 },
+                        tbErrors.numero_cuenta && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      keyboardType="numeric"
+                      maxLength={24}
+                      value={formatAccountNumber(paymentConfig['Transferencia Bancaria']?.numero_cuenta || '')}
+                      onChangeText={(text) => {
+                        const cleaned = cleanAccountNumber(text);
+                        const autoBank = findBankByAccount(cleaned, banks);
+                        const currentBanco = paymentConfig['Transferencia Bancaria']?.banco;
+                        const newBanco = !currentBanco && autoBank ? autoBank.code : currentBanco;
+
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            numero_cuenta: cleaned,
+                            ...(newBanco ? { banco: newBanco } : {}),
+                          },
+                        });
+                        if (tbErrors.numero_cuenta) setTbErrors((prev) => ({ ...prev, numero_cuenta: null }));
+                        if (autoBank && tbErrors.banco) setTbErrors((prev) => ({ ...prev, banco: null }));
+                      }}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          configScrollRef.current?.scrollTo({ y: 150, animated: true });
+                        }, 150);
+                      }}
+                      placeholder="0102 0000 00 0000000000"
+                      placeholderTextColor="#475569"
+                    />
+                    {tbErrors.numero_cuenta && (
+                      <Text style={styles.errorText}>{tbErrors.numero_cuenta}</Text>
+                    )}
+
+                    <Text style={styles.label}>Nombre del Titular</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        tbErrors.titular && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      value={paymentConfig['Transferencia Bancaria']?.titular || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            titular: text,
+                          },
+                        });
+                        if (tbErrors.titular) setTbErrors((prev) => ({ ...prev, titular: null }));
+                      }}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          configScrollRef.current?.scrollTo({ y: 220, animated: true });
+                        }, 150);
+                      }}
+                      placeholder="Nombre y Apellido o Razón Social"
+                      placeholderTextColor="#475569"
+                    />
+                    {tbErrors.titular && (
+                      <Text style={styles.errorText}>{tbErrors.titular}</Text>
+                    )}
+
+                    <Text style={styles.label}>Tipo de Documento</Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginBottom: 15,
+                      }}
+                    >
+                      {[
+                        { key: 'Persona', label: 'V' },
+                        { key: 'Comercio', label: 'J' },
+                        { key: 'Extranjero', label: 'E' },
+                        { key: 'Comuna', label: 'G' },
+                      ].map((item) => (
+                        <TouchableOpacity
+                          key={item.key}
+                          style={[
+                            styles.methodPill,
+                            (paymentConfig['Transferencia Bancaria']?.tipo_doc || 'Persona') === item.key
+                              ? styles.methodPillActive
+                              : null,
+                            { flex: 1, marginHorizontal: 2 },
+                          ]}
+                          onPress={() =>
+                            setPaymentConfig({
+                              ...paymentConfig,
+                              'Transferencia Bancaria': {
+                                ...(paymentConfig['Transferencia Bancaria'] || {}),
+                                tipo_doc: item.key,
+                              },
+                            })
+                          }
+                        >
+                          <Text
+                            style={
+                              (paymentConfig['Transferencia Bancaria']?.tipo_doc || 'Persona') === item.key
+                                ? styles.methodPillTextActive
+                                : styles.methodPillText
+                            }
+                          >
+                            {item.label} - {item.key}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.label}>Número de Documento (Cédula / RIF)</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        tbErrors.cedula && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      keyboardType="numeric"
+                      value={paymentConfig['Transferencia Bancaria']?.cedula || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            cedula: text.replace(/\D/g, ''),
+                          },
+                        });
+                        if (tbErrors.cedula) setTbErrors((prev) => ({ ...prev, cedula: null }));
+                      }}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          configScrollRef.current?.scrollTo({ y: 300, animated: true });
+                        }, 150);
+                      }}
+                      placeholder="12345678"
+                      placeholderTextColor="#475569"
+                    />
+                    {tbErrors.cedula && (
+                      <Text style={styles.errorText}>{tbErrors.cedula}</Text>
+                    )}
+
+                    <Text style={styles.label}>Correo Electrónico (Opcional para comprobante)</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        tbErrors.email && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={paymentConfig['Transferencia Bancaria']?.email || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            email: text.trim(),
+                          },
+                        });
+                        if (tbErrors.email) setTbErrors((prev) => ({ ...prev, email: null }));
+                      }}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          configScrollRef.current?.scrollToEnd({ animated: true });
+                        }, 150);
+                      }}
+                      placeholder="correo@ejemplo.com"
+                      placeholderTextColor="#475569"
+                    />
+                    {tbErrors.email && (
+                      <Text style={styles.errorText}>{tbErrors.email}</Text>
                     )}
                   </View>
                 ) : (
@@ -691,12 +1086,18 @@ const styles = StyleSheet.create({
   },
   methodPillText: {
     color: '#94a3b8',
-    fontSize: 14,
+    fontSize: 13,
   },
   methodPillTextActive: {
     color: '#10b981',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 12,
+    marginTop: -10,
+    marginBottom: 12,
   },
   modalActions: {
     flexDirection: 'row',

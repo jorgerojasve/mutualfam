@@ -24,6 +24,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { fundsApi, colectasApi, loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import PaymentConfigModal from '../components/PaymentConfigModal';
+import BankTransferCard from '../components/BankTransferCard';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
@@ -84,6 +85,18 @@ const getAvailablePaymentMethods = (datosPago) => {
     const normKey = normalizePaymentMethodName(key);
     if (normKey === 'Pago Móvil') {
       if (val && typeof val === 'object' && val.banco && val.cedula && val.telefono) {
+        if (!methods.includes(normKey)) methods.push(normKey);
+      }
+    } else if (normKey === 'Transferencia Bancaria') {
+      if (
+        val &&
+        typeof val === 'object' &&
+        val.banco &&
+        val.numero_cuenta &&
+        String(val.numero_cuenta).replace(/\D/g, '').length === 20 &&
+        val.cedula &&
+        val.titular
+      ) {
         if (!methods.includes(normKey)) methods.push(normKey);
       }
     } else if (typeof val === 'string' && val.trim().length > 0) {
@@ -1761,7 +1774,9 @@ export default function FundsScreen() {
 
                     const selectedNormalized = normalizePaymentMethodName(paymentMethod);
                     const isPagoMovil = selectedNormalized === 'Pago Móvil';
+                    const isTransferencia = selectedNormalized === 'Transferencia Bancaria';
                     const pmData = isPagoMovil ? getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Pago Móvil') : null;
+                    const tbData = isTransferencia ? getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Transferencia Bancaria') : null;
                     const rawMontoBs = targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1));
                     const montoBsStr = formatVE(rawMontoBs);
 
@@ -1870,8 +1885,19 @@ export default function FundsScreen() {
                           </View>
                         )}
 
-                        {/* Otros métodos registrados (Transferencia, Binance, etc.) */}
-                        {!isPagoMovil && (
+                        {/* Tarjeta de Datos de Transferencia Bancaria con Copiado */}
+                        {isTransferencia && (
+                          <BankTransferCard
+                            data={tbData}
+                            montoBs={montoBsStr}
+                            recipientName={targetColecta.beneficiario_nombre}
+                            tasaLabel={`${targetColecta.tasa_label}: Bs ${formatVE(targetColecta.tasa_actual)}`}
+                            banks={VENEZUELAN_BANKS}
+                          />
+                        )}
+
+                        {/* Otros métodos registrados (Binance, Efectivo, etc.) */}
+                        {!isPagoMovil && !isTransferencia && (
                           <View style={styles.pmCard}>
                             <Text style={styles.pmCardTitle}>💳 Datos de {selectedNormalized}</Text>
                             {(() => {
