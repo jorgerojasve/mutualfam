@@ -258,7 +258,12 @@ export const loansApi = {
     const res = await apiClient.post('/upload/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
-    return res.data;
+    const url = res.data?.url || res.data?.file_url;
+    return {
+      ...res.data,
+      url,
+      file_url: url
+    };
   }
 };
 

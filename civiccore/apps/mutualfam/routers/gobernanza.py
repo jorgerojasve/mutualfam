@@ -32,6 +32,7 @@ from civiccore.core.config import is_qa_environment
 from routers.membership import get_current_org_member, get_current_user
 from services.notifications import notify_users
 from services.realtime import notify_org
+from services.telegram_bot import send_telegram_notification, send_telegram_photo
 
 router = APIRouter()
 
@@ -658,6 +659,26 @@ def agregar_comentario_propuesta(
         "author_name": author_name,
         "comment_id": comment.id
     })
+
+    # Respaldo y notificación a Telegram (con imagen si fue adjuntada)
+    if comment.attachment_url:
+        import os
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(comment.attachment_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{comment.attachment_url}"
+        msg_foro = (
+            f"🏛️ <b>Nuevo Aporte en Foro de Asamblea</b>\n\n"
+            f"🎯 Propuesta: <b>{proposal.title}</b>\n"
+            f"👤 Autor: {author_name}\n"
+            f"💬 Postura: {comment.stance or 'Debate'}\n\n"
+            f"<i>{comment.content}</i>"
+        )
+        if os.path.exists(photo_path):
+            send_telegram_photo(msg_foro, photo_path)
+        else:
+            send_telegram_notification(msg_foro)
 
     return {
         "id": comment.id,

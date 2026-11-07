@@ -19,8 +19,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
+import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { fundsApi, colectasApi, loansApi, authApi } from '../api/client';
+import { fundsApi, colectasApi, loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
@@ -127,6 +128,38 @@ export default function FundsScreen() {
   const [colectas, setColectas] = useState([]);
   const [rates, setRates] = useState({});
   const [loadingColectas, setLoadingColectas] = useState(true);
+
+  // Visor de Comprobantes de Pago / Gastos
+  const [receiptViewerVisible, setReceiptViewerVisible] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const serverUrl = (baseURL || '').replace('/api/v1', '');
+
+  const getFullUrl = (receiptUrl) => {
+    if (!receiptUrl) return '';
+    if (receiptUrl.startsWith('http://') || receiptUrl.startsWith('https://')) {
+      return receiptUrl;
+    }
+    const cleanPath = receiptUrl.startsWith('/') ? receiptUrl : `/${receiptUrl}`;
+    return `${serverUrl}${cleanPath}`;
+  };
+
+  const openReceiptViewer = (receiptUrl, title = 'Comprobante', extraInfo = {}) => {
+    if (!receiptUrl) return;
+    const fullUrl = getFullUrl(receiptUrl);
+    setSelectedReceipt({
+      url: fullUrl,
+      title: title,
+      method: extraInfo.method,
+      reference: extraInfo.reference,
+      amount: extraInfo.amount,
+    });
+    setImageLoading(true);
+    setImageError(false);
+    setReceiptViewerVisible(true);
+  };
 
   // Estados de Fondos Comunes (Periódicos)
   const [funds, setFunds] = useState([]);
@@ -635,7 +668,7 @@ export default function FundsScreen() {
       if (!isBeneficiarySelf && receiptUri) {
         setUploadingReceipt(true);
         const resUpload = await loansApi.uploadFile(receiptUri);
-        finalComprobanteUrl = resUpload.file_url;
+        finalComprobanteUrl = resUpload.url || resUpload.file_url;
         setUploadingReceipt(false);
       }
 
@@ -690,7 +723,7 @@ export default function FundsScreen() {
       if (expenseReceiptUri) {
         setUploadingReceipt(true);
         const resUpload = await loansApi.uploadFile(expenseReceiptUri);
-        finalComprobanteUrl = resUpload.file_url;
+        finalComprobanteUrl = resUpload.url || resUpload.file_url;
         setUploadingReceipt(false);
       }
 
@@ -1509,6 +1542,22 @@ export default function FundsScreen() {
                           {comp.referencia_pago ? (
                             <Text style={styles.contributorRef}>Ref: {comp.referencia_pago}</Text>
                           ) : null}
+                          {comp.comprobante_url ? (
+                            <TouchableOpacity
+                              style={[styles.receiptLinkBtn, { marginTop: 6 }]}
+                              onPress={() => openReceiptViewer(
+                                comp.comprobante_url,
+                                `Comprobante de Aporte - ${comp.socio_name}`,
+                                {
+                                  amount: `$${formatVE(comp.monto_usd)} USD`,
+                                  reference: comp.referencia_pago,
+                                  method: comp.payment_method
+                                }
+                              )}
+                            >
+                              <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
+                            </TouchableOpacity>
+                          ) : null}
                         </View>
                         <View
                           style={[
@@ -1530,11 +1579,21 @@ export default function FundsScreen() {
                     <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por el Beneficiario:</Text>
                     <Text style={styles.expenseValidatedDesc}>{selectedColecta.descripcion_gasto}</Text>
                     {selectedColecta.comprobante_gasto_url ? (
-                      <Image
-                        source={{ uri: selectedColecta.comprobante_gasto_url }}
-                        style={styles.receiptPreviewImage}
-                        resizeMode="contain"
-                      />
+                      <View style={{ marginTop: 8 }}>
+                        <TouchableOpacity
+                          style={styles.receiptLinkBtn}
+                          onPress={() => openReceiptViewer(
+                            selectedColecta.comprobante_gasto_url,
+                            `Comprobante de Gasto - ${selectedColecta.titulo}`,
+                            {
+                              amount: `$${formatVE(selectedColecta.monto_meta_usd)} USD`,
+                              reference: selectedColecta.descripcion_gasto
+                            }
+                          )}
+                        >
+                          <Text style={styles.receiptLinkText}>🧾 Ver factura / comprobante de gasto</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : (
                       <Text style={styles.emptySubText}>Sin comprobante físico adjunto.</Text>
                     )}
@@ -2044,6 +2103,94 @@ export default function FundsScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSubmit} onPress={handleCreateFund} disabled={submitting}>
                 {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalSubmitText}>Crear</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Visor de Comprobantes */}
+      <Modal 
+        visible={receiptViewerVisible} 
+        animationType="fade" 
+        transparent={true}
+        onRequestClose={() => setReceiptViewerVisible(false)}
+      >
+        <View style={styles.receiptModalOverlay}>
+          <View style={styles.receiptModalCard}>
+            <View style={styles.receiptModalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.receiptModalTitle} numberOfLines={1}>
+                  {selectedReceipt?.title || 'Comprobante'}
+                </Text>
+                {selectedReceipt?.amount && (
+                  <Text style={styles.receiptModalSubtitle}>
+                    Monto: <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{selectedReceipt.amount}</Text>
+                    {selectedReceipt?.method ? ` • Vía ${selectedReceipt.method}` : ''}
+                  </Text>
+                )}
+                {selectedReceipt?.reference && (
+                  <Text style={styles.receiptModalRef}>Ref: {selectedReceipt.reference}</Text>
+                )}
+              </View>
+              <TouchableOpacity 
+                style={styles.receiptCloseBtn}
+                onPress={() => setReceiptViewerVisible(false)}
+              >
+                <Text style={styles.receiptCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.receiptImageContainer}>
+              {imageLoading && (
+                <View style={styles.receiptImageLoader}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={{ color: '#94a3b8', marginTop: 10, fontSize: 13 }}>Cargando comprobante...</Text>
+                </View>
+              )}
+              {imageError ? (
+                <View style={styles.receiptErrorContainer}>
+                  <Text style={{ fontSize: 32, marginBottom: 8 }}>⚠️</Text>
+                  <Text style={{ color: '#f8fafc', fontWeight: 'bold', fontSize: 14 }}>No se pudo cargar la imagen previa</Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 }}>
+                    Puedes abrir el comprobante directamente en tu navegador o visor externo.
+                  </Text>
+                </View>
+              ) : (
+                selectedReceipt?.url && (
+                  <Image
+                    source={{ uri: selectedReceipt.url }}
+                    style={styles.receiptImage}
+                    resizeMode="contain"
+                    onLoadStart={() => setImageLoading(true)}
+                    onLoadEnd={() => setImageLoading(false)}
+                    onError={() => {
+                      setImageLoading(false);
+                      setImageError(true);
+                    }}
+                  />
+                )
+              )}
+            </View>
+
+            <View style={styles.receiptModalFooter}>
+              {selectedReceipt?.url && (
+                <TouchableOpacity 
+                  style={styles.receiptExternalBtn}
+                  onPress={() => {
+                    if (selectedReceipt?.url) {
+                      Linking.openURL(selectedReceipt.url);
+                    }
+                  }}
+                >
+                  <Text style={styles.receiptExternalBtnText}>🔗 Abrir completo en navegador</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                style={styles.receiptDismissBtn}
+                onPress={() => setReceiptViewerVisible(false)}
+              >
+                <Text style={styles.receiptDismissBtnText}>Cerrar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2892,5 +3039,122 @@ const styles = StyleSheet.create({
     color: '#fca5a5',
     fontSize: 12,
     lineHeight: 17,
+  },
+  receiptLinkBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
+  },
+  receiptLinkText: {
+    color: '#60a5fa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  receiptModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    padding: 15,
+  },
+  receiptModalCard: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 16,
+    maxHeight: '90%',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  receiptModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  receiptModalTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  receiptModalSubtitle: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginTop: 3,
+  },
+  receiptModalRef: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  receiptCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptCloseText: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  receiptImageContainer: {
+    height: 380,
+    backgroundColor: '#0a0f1d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  receiptImage: {
+    width: '100%',
+    height: '100%',
+  },
+  receiptImageLoader: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptErrorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  receiptModalFooter: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 8,
+  },
+  receiptExternalBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  receiptExternalBtnText: {
+    color: '#93c5fd',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  receiptDismissBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  receiptDismissBtnText: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
