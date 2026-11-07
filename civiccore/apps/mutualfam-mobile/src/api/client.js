@@ -184,6 +184,14 @@ export const authApi = {
   getMembers: async (orgId) => {
     const { data } = await apiClient.get('/membership/members', { headers: { 'X-Organization-ID': orgId }});
     return data;
+  },
+  solicitarRetiro: async (orgId) => {
+    const { data } = await apiClient.post(`/membership/organizations/${orgId}/withdrawal/request`);
+    return data;
+  },
+  consultarSolvencia: async (orgId) => {
+    const { data } = await apiClient.get(`/membership/organizations/${orgId}/solvencia`);
+    return data;
   }
 };
 

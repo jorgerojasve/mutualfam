@@ -283,9 +283,23 @@ def proponer_expulsion(
     target_user = db.query(User).filter(User.id == req.target_user_id).first()
     target_name = f"{target_user.first_name} {target_user.last_name}".strip() if target_user else "Miembro"
 
+    # Validación informativa de Solvencia para la Asamblea
+    from models import LoanRequest, LoanStatus
+    active_loans = db.query(LoanRequest).filter(
+        LoanRequest.organization_id == org.id,
+        LoanRequest.requester_id == req.target_user_id,
+        LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
+    ).all()
+    unpaid_loans = [l for l in active_loans if l.repaid_at is None]
+    total_debt = sum(l.amount_usd for l in unpaid_loans) if unpaid_loans else 0.0
+
+    motivo_content = req.motivo
+    if total_debt > 0:
+        motivo_content += f"\n\n⚠️ Advertencia de Solvencia: Este miembro mantiene un préstamo activo de ${total_debt:,.2f} USD pendiente de pago. De aprobarse la expulsión, la deuda permanecerá en cobranza o cobertura según las normas de la mutual."
+
     proposal_in = ProposalCreate(
         title=f"Expulsión de {target_name}",
-        content=req.motivo,
+        content=motivo_content,
         category="expulsion",
         proposal_type=ProposalType.EXPULSION,
         target_member_id=req.target_user_id,
@@ -294,7 +308,9 @@ def proponer_expulsion(
         extra_fields={
             "target_user_name": target_name,
             "target_user_email": target_user.email if target_user else "",
-            "motivo": req.motivo
+            "motivo": req.motivo,
+            "has_active_debt": total_debt > 0,
+            "active_debt_usd": round(total_debt, 2)
         }
     )
     proposal = GovernanceService.create_proposal(db, author_id=user.id, proposal_in=proposal_in)

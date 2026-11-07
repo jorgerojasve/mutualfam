@@ -445,3 +445,87 @@ def delete_push_token(token: str, current_user: User = Depends(get_current_user)
         db.delete(existing)
         db.commit()
     return {"message": "Token eliminado"}
+
+
+# ==========================================
+# RETIRO VOLUNTARIO Y SOLVENCIA
+# ==========================================
+
+@router.get("/organizations/{org_id}/solvencia")
+def check_solvency(
+    org_id: int,
+    target_user_id: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verifica la solvencia del usuario en la mutual (deudas activas por préstamos).
+    """
+    check_user_id = target_user_id if target_user_id else current_user.id
+    from models import LoanRequest, LoanStatus
+
+    active_loans = db.query(LoanRequest).filter(
+        LoanRequest.organization_id == org_id,
+        LoanRequest.requester_id == check_user_id,
+        LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
+    ).all()
+
+    total_debt = sum(l.amount_usd for l in active_loans if l.repaid_at is None)
+
+    return {
+        "user_id": check_user_id,
+        "organization_id": org_id,
+        "is_solvent": total_debt == 0,
+        "active_debt_usd": round(total_debt, 2),
+        "active_loans_count": len(active_loans),
+        "detail": "Solvente sin deudas activas" if total_debt == 0 else f"Tiene ${total_debt:,.2f} USD pendientes en préstamos activos"
+    }
+
+
+@router.post("/organizations/{org_id}/withdrawal/request")
+def request_withdrawal(
+    org_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Procesa la solicitud de retiro voluntario de un miembro.
+    Valida previamente la solvencia: no permite el retiro si tiene préstamos activos impagos.
+    """
+    membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == current_user.id
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=404, detail="No eres miembro de esta mutual.")
+
+    if membership.status in [MemberStatus.WITHDRAWN, MemberStatus.WITHDRAWAL_REQUESTED]:
+        raise HTTPException(status_code=400, detail="Ya has solicitado tu retiro o ya no eres miembro activo.")
+
+    # 1. Validación de Solvencia
+    from models import LoanRequest, LoanStatus
+    active_loans = db.query(LoanRequest).filter(
+        LoanRequest.organization_id == org_id,
+        LoanRequest.requester_id == current_user.id,
+        LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
+    ).all()
+
+    unpaid_loans = [l for l in active_loans if l.repaid_at is None]
+    if unpaid_loans:
+        total_debt = sum(l.amount_usd for l in unpaid_loans)
+        raise HTTPException(
+            status_code=400,
+            detail=f"No puedes retirarte de la mutual mientras mantengas préstamos activos pendientes de pago (${total_debt:,.2f} USD). Por favor salda tus compromisos antes de salir."
+        )
+
+    # 2. Procesar retiro
+    membership.status = MemberStatus.WITHDRAWN
+    db.commit()
+
+    return {
+        "message": "Tu retiro voluntario ha sido procesado exitosamente.",
+        "status": "withdrawn",
+        "organization_id": org_id,
+        "user_id": current_user.id
+    }

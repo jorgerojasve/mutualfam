@@ -22,7 +22,35 @@ export default function InviteMembersScreen({ navigation }) {
   const [debugOrgId, setDebugOrgId] = useState('');
   const [members, setMembers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
-  const { activeOrg, loading: orgLoading } = React.useContext(OrgContext);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const { activeOrg, loading: orgLoading, isOffline } = React.useContext(OrgContext);
+
+  const handleRequestWithdrawal = () => {
+    Alert.alert(
+      '¿Solicitar Retiro Voluntario?',
+      `¿Estás seguro de que deseas retirarte de la mutual "${activeOrg?.name}"? Esta acción finalizará tu participación activa en la mutual.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sí, Solicitar Retiro',
+          style: 'destructive',
+          onPress: async () => {
+            setWithdrawing(true);
+            try {
+              const res = await authApi.solicitarRetiro(activeOrg.id);
+              Alert.alert('Retiro Procesado', res.message || 'Tu retiro voluntario ha sido registrado.');
+              fetchOrgInfo();
+            } catch (e) {
+              const msg = getErrorMessage(e, 'No se pudo procesar el retiro voluntario.');
+              Alert.alert('Solvencia Requerida', msg);
+            } finally {
+              setWithdrawing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   useEffect(() => {
     if (activeOrg?.id) {
@@ -161,7 +189,7 @@ export default function InviteMembersScreen({ navigation }) {
           onPress={() => setActiveTab('miembros')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'miembros' && styles.tabButtonTextActive]}>
-            👥 Miembros ({members.length})
+            {isOffline && members.length === 0 ? '👥 Miembros (Sin conexión)' : `👥 Miembros (${members.length})`}
           </Text>
         </TouchableOpacity>
 
@@ -182,7 +210,9 @@ export default function InviteMembersScreen({ navigation }) {
       ) : (
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <View style={[styles.card, { marginBottom: 20 }]}>
-            <Text style={styles.cardTitle}>Miembros Actuales ({members.length})</Text>
+            <Text style={styles.cardTitle}>
+              {isOffline && members.length === 0 ? 'Miembros Actuales (Sin conexión)' : `Miembros Actuales (${members.length})`}
+            </Text>
             {members.length === 0 ? (
               <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
             ) : (
@@ -261,6 +291,24 @@ export default function InviteMembersScreen({ navigation }) {
               )}
             </View>
           )}
+          <View style={[styles.card, { marginTop: 16 }]}>
+            <Text style={styles.cardTitle}>Gestión de Membresía</Text>
+            <Text style={styles.cardText}>
+              Puedes solicitar el retiro voluntario de la mutual familiar en cualquier momento, siempre y cuando no tengas deudas o préstamos activos pendientes por liquidar.
+            </Text>
+            <TouchableOpacity
+              style={styles.btnWithdrawal}
+              onPress={handleRequestWithdrawal}
+              disabled={withdrawing}
+            >
+              {withdrawing ? (
+                <ActivityIndicator color="#ef4444" />
+              ) : (
+                <Text style={styles.btnWithdrawalText}>🚪 Solicitar Retiro Voluntario</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <View style={{height: 40}} />
         </ScrollView>
       )}
@@ -301,7 +349,6 @@ const styles = StyleSheet.create({
   tabButtonTextActive: {
     color: '#ffffff',
     fontWeight: '700'
-  },
   },
   centerContainer: {
     flex: 1,
@@ -440,5 +487,19 @@ const styles = StyleSheet.create({
     color: '#bae6fd',
     fontSize: 13,
     lineHeight: 18,
+  },
+  btnWithdrawal: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  btnWithdrawalText: {
+    color: '#ef4444',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });
