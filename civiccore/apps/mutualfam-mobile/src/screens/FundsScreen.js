@@ -11,7 +11,9 @@ import {
   TextInput,
   ScrollView,
   Image,
-  Platform
+  Platform,
+  Keyboard,
+  KeyboardAvoidingView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -103,6 +105,22 @@ export default function FundsScreen() {
   const [connectionError, setConnectionError] = useState(false);
   const [retryingFunds, setRetryingFunds] = useState(false);
   const [paymentBankCode, setPaymentBankCode] = useState('0102');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
 
   // Estados de Colectas
@@ -612,8 +630,9 @@ export default function FundsScreen() {
     }
     setSubmitting(true);
     try {
+      const isBeneficiarySelf = Boolean(currentUser && targetColecta.beneficiario_id === currentUser.id);
       let finalComprobanteUrl = null;
-      if (receiptUri) {
+      if (!isBeneficiarySelf && receiptUri) {
         setUploadingReceipt(true);
         const resUpload = await loansApi.uploadFile(receiptUri);
         finalComprobanteUrl = resUpload.file_url;
@@ -622,11 +641,11 @@ export default function FundsScreen() {
 
       const compromisoId = targetColecta.mi_compromiso.id;
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
-        payment_method: paymentMethod,
-        codigo_banco: paymentBankCode,
-        referencia_pago: paymentRef.trim() || undefined,
-        comprobante_url: finalComprobanteUrl,
-        nota_pago: paymentNote.trim() || undefined,
+        payment_method: isBeneficiarySelf ? 'Aporte Propio' : paymentMethod,
+        codigo_banco: isBeneficiarySelf ? undefined : paymentBankCode,
+        referencia_pago: isBeneficiarySelf ? 'Aporte directo de beneficiario' : (paymentRef.trim() || undefined),
+        comprobante_url: isBeneficiarySelf ? undefined : finalComprobanteUrl,
+        nota_pago: isBeneficiarySelf ? 'Aporte propio directo' : (paymentNote.trim() || undefined),
       });
 
       setShowPaymentModal(false);
@@ -636,7 +655,12 @@ export default function FundsScreen() {
       setTargetColecta(null);
       setConnectionError(false);
       if (setIsOffline) setIsOffline(false);
-      Alert.alert('¡Pago Confirmado!', 'Tu aporte ha sido registrado como pagado.');
+      Alert.alert(
+        isBeneficiarySelf ? '¡Aporte Propio Confirmado!' : '¡Pago Confirmado!',
+        isBeneficiarySelf
+          ? 'Tu aporte voluntario ha sido registrado y acreditado directamente a la colecta.'
+          : 'Tu aporte ha sido registrado como pagado.'
+      );
       fetchColectas();
     } catch (e) {
       if (isNetworkError(e)) {
@@ -987,16 +1011,7 @@ export default function FundsScreen() {
               >
                 <Text style={styles.headerAddButtonText}>+ Colecta</Text>
               </TouchableOpacity>
-            ) : (
-              activeOrg?.role === 'founder' && (
-                <TouchableOpacity
-                  style={styles.headerAddButton}
-                  onPress={() => setShowFundModal(true)}
-                >
-                  <Text style={styles.headerAddButtonText}>+ Crear Fondo</Text>
-                </TouchableOpacity>
-              )
-            )
+            ) : null
           }
         />
 
@@ -1018,7 +1033,9 @@ export default function FundsScreen() {
             onPress={() => setActiveTab('colectas')}
           >
             <Text style={[styles.segmentBtnText, activeTab === 'colectas' && styles.segmentBtnTextActive]}>
-              🐮 Colectas (Vacas) {colectas.length > 0 ? `(${colectas.length})` : ''}
+              {(isOffline || connectionError) && colectas.length === 0
+                ? '🐮 Colectas (Sin conexión)'
+                : `🐮 Colectas (Vacas)${colectas.length > 0 ? ` (${colectas.length})` : ''}`}
             </Text>
           </TouchableOpacity>
 
@@ -1110,9 +1127,17 @@ export default function FundsScreen() {
       {/* MODAL 1: CREAR COLECTA                               */}
       {/* ==================================================== */}
       <Modal visible={showCreateModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>🐮 Nueva Colecta ("Vaca")</Text>
               <Text style={styles.modalSubtitle}>
                 Propón un fin común con meta en USD. Quienes deseen colaborar prometerán sus aportes.
@@ -1328,7 +1353,7 @@ export default function FundsScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ==================================================== */}
@@ -1532,9 +1557,18 @@ export default function FundsScreen() {
       {/* MODAL 3: PROMETER APORTE VOLUNTARIO                  */}
       {/* ==================================================== */}
       <Modal visible={showPledgeModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🤝 Prometer Aporte</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
+              <Text style={styles.modalTitle}>🤝 Prometer Aporte</Text>
             {targetColecta && (
               <>
                 <Text style={styles.modalSubtitle}>Colecta: "{targetColecta.titulo}"</Text>
@@ -1627,17 +1661,26 @@ export default function FundsScreen() {
                 </View>
               </>
             )}
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ==================================================== */}
       {/* MODAL 4: CONFIRMAR PAGO DE APORTE                    */}
       {/* ==================================================== */}
       <Modal visible={showPaymentModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>💵 Confirmar Pago de Aporte</Text>
               {targetColecta && (
                 <>
@@ -1659,6 +1702,23 @@ export default function FundsScreen() {
                     </View>
                   )}
 
+                  {currentUser && targetColecta.beneficiario_id === currentUser.id ? (
+                    <View style={styles.selfPledgeBox}>
+                      <Text style={styles.selfPledgeTitle}>🤝 Aporte Propio del Beneficiario</Text>
+                      <Text style={styles.selfPledgeText}>
+                        Eres el beneficiario de esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
+                      </Text>
+                      <View style={{ marginTop: 12, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                        <Text style={{ color: '#10b981', fontWeight: 'bold', fontSize: 15, textAlign: 'center' }}>
+                          Monto a Acreditar: ${formatVE(targetColecta.mi_compromiso?.monto_usd)} USD
+                        </Text>
+                        <Text style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
+                          Equivalente: Bs {formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
                   {(() => {
                     const availableMethods = getAvailablePaymentMethods(targetColecta.beneficiario_datos_pago);
 
@@ -1853,6 +1913,8 @@ export default function FundsScreen() {
                   {receiptUri && (
                     <Image source={{ uri: receiptUri }} style={styles.receiptPreviewImage} />
                   )}
+                    </>
+                  )}
 
                   <View style={styles.modalActions}>
                     <TouchableOpacity
@@ -1869,7 +1931,11 @@ export default function FundsScreen() {
                       {submitting || uploadingReceipt ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.modalSubmitText}>Registrar Pago</Text>
+                        <Text style={styles.modalSubmitText}>
+                          {currentUser && targetColecta.beneficiario_id === currentUser.id
+                            ? 'Confirmar Aporte Propio'
+                            : 'Registrar Pago'}
+                        </Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -1877,16 +1943,24 @@ export default function FundsScreen() {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ==================================================== */}
       {/* MODAL 5: VALIDAR GASTO REALIZADO (BENEFICIARIO)      */}
       {/* ==================================================== */}
       <Modal visible={showExpenseModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <Text style={styles.modalTitle}>✅ Validar Gasto Realizado</Text>
               <Text style={styles.modalSubtitle}>
                 Como beneficiario, confirma a la mutual cómo se utilizaron los fondos recaudados.
@@ -1937,7 +2011,7 @@ export default function FundsScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ==================================================== */}
@@ -2295,6 +2369,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     padding: 16,
+  },
+  modalOverlayShifted: {
+    justifyContent: 'flex-start',
+    paddingTop: Platform.OS === 'android' ? 35 : 55,
+  },
+  selfPledgeBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 12,
+  },
+  selfPledgeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#10b981',
+    marginBottom: 6,
+  },
+  selfPledgeText: {
+    fontSize: 13,
+    color: '#cbd5e1',
+    lineHeight: 19,
   },
   modalContent: {
     backgroundColor: theme.cardBg,

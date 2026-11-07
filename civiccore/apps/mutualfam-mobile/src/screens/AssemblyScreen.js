@@ -11,7 +11,10 @@ import {
   TextInput,
   ScrollView,
   RefreshControl,
-  Share
+  Share,
+  Platform,
+  Keyboard,
+  KeyboardAvoidingView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
@@ -31,6 +34,22 @@ export default function AssemblyScreen({ embedded = false }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [connectionError, setConnectionError] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Propuestas y pestañas
   const [activeTab, setActiveTab] = useState('activas'); // 'activas' | 'historial'
@@ -257,19 +276,42 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
-  // Adjuntar imagen desde la galería
+  // Adjuntar imagen desde la galería (original por defecto para evitar crashes del recortador del sistema)
   const handlePickCommentImage = async () => {
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso Requerido', 'Necesitamos acceso a tus fotos para adjuntar imágenes en el foro.');
+        return;
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.7,
+        allowsEditing: false,
+        quality: 0.8,
       });
       if (!res.canceled && res.assets && res.assets.length > 0) {
         setCommentAttachment({ uri: res.assets[0].uri, type: 'image' });
       }
     } catch (e) {
       console.warn('Error picking image for comment', e);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen de la galería.');
+    }
+  };
+
+  // Recortar / editar imagen de forma opcional
+  const handleEditCommentImage = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        setCommentAttachment({ uri: res.assets[0].uri, type: 'image' });
+      }
+    } catch (e) {
+      console.warn('Error cropping image for comment', e);
+      Alert.alert('Error', 'No se pudo editar o recortar la imagen.');
     }
   };
 
@@ -653,7 +695,7 @@ export default function AssemblyScreen({ embedded = false }) {
           onPress={() => setActiveTab('activas')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'activas' && styles.tabButtonTextActive]}>
-            Activas ({countActivas})
+            {(isOffline || connectionError) && countActivas === 0 ? 'Activas (Sin conexión)' : `Activas (${countActivas})`}
           </Text>
         </TouchableOpacity>
 
@@ -662,7 +704,7 @@ export default function AssemblyScreen({ embedded = false }) {
           onPress={() => setActiveTab('historial')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'historial' && styles.tabButtonTextActive]}>
-            Historial ({countHistorial})
+            {(isOffline || connectionError) && countHistorial === 0 ? 'Historial (Sin conexión)' : `Historial (${countHistorial})`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -723,15 +765,23 @@ export default function AssemblyScreen({ embedded = false }) {
       {/* MODAL DETALLE Y VOTACIÓN                                 */}
       {/* ======================================================== */}
       <Modal visible={showDetailModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
             {loadingDetail || !proposalDetail ? (
               <View style={{ padding: 40, alignItems: 'center' }}>
                 <ActivityIndicator size="large" color="#3b82f6" />
                 <Text style={{ color: '#94a3b8', marginTop: 12 }}>Cargando detalle de asamblea...</Text>
               </View>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              >
                 {/* Header Modal */}
                 <View style={styles.modalHeaderRow}>
                   <View style={[styles.typeBadge, { backgroundColor: proposalDetail.proposal_type === 'member_admission' ? '#0369a1' : '#be123c' }]}>
@@ -1036,7 +1086,12 @@ export default function AssemblyScreen({ embedded = false }) {
                       {commentAttachment && (
                         <View style={styles.attachmentPreviewRow}>
                           <Image source={{ uri: commentAttachment.uri }} style={styles.attachmentThumb} />
-                          <Text style={styles.attachmentLabel}>Imagen adjunta</Text>
+                          <View style={{ flex: 1, marginLeft: 8 }}>
+                            <Text style={styles.attachmentLabel}>Imagen adjunta</Text>
+                            <TouchableOpacity onPress={handleEditCommentImage} style={{ marginTop: 2 }}>
+                              <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '600' }}>✏️ Recortar imagen</Text>
+                            </TouchableOpacity>
+                          </View>
                           <TouchableOpacity onPress={() => setCommentAttachment(null)}>
                             <Text style={styles.removeAttachmentText}>✕ Quitar</Text>
                           </TouchableOpacity>
@@ -1110,15 +1165,18 @@ export default function AssemblyScreen({ embedded = false }) {
               </ScrollView>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ======================================================== */}
       {/* MODAL PROPONER INGRESO                                   */}
       {/* ======================================================== */}
       <Modal visible={showIngresoModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
             {createdInvite ? (
               <View style={styles.successModalContainer}>
                 {createdInvite.status === 'approved' ? (
@@ -1197,7 +1255,12 @@ export default function AssemblyScreen({ embedded = false }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+              >
                 <View style={styles.modalHeaderRow}>
                   <Text style={styles.modalTitle}>📥 Proponer Ingreso Familiar</Text>
                   <TouchableOpacity onPress={() => setShowIngresoModal(false)}>
@@ -1281,16 +1344,24 @@ export default function AssemblyScreen({ embedded = false }) {
               </ScrollView>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ======================================================== */}
       {/* MODAL PROPONER EXPULSIÓN                                 */}
       {/* ======================================================== */}
       <Modal visible={showExpulsionModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
+            >
               <View style={styles.modalHeaderRow}>
                 <Text style={[styles.modalTitle, { color: '#f43f5e' }]}>⚠️ Proponer Expulsión</Text>
                 <TouchableOpacity onPress={() => setShowExpulsionModal(false)}>
@@ -1366,7 +1437,7 @@ export default function AssemblyScreen({ embedded = false }) {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1592,6 +1663,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end'
+  },
+  modalOverlayShifted: {
+    justifyContent: 'flex-start',
+    paddingTop: Platform.OS === 'android' ? 35 : 55,
   },
   modalContent: {
     backgroundColor: '#1e293b',
