@@ -22,7 +22,7 @@ import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
-import { governanceApi, authApi, loansApi } from '../api/client';
+import { governanceApi, authApi, loansApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
@@ -36,6 +36,35 @@ export default function AssemblyScreen({ embedded = false }) {
   const [connectionError, setConnectionError] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Visor de Imágenes / Adjuntos del Foro
+  const [receiptViewerVisible, setReceiptViewerVisible] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const serverUrl = (baseURL || '').replace('/api/v1', '');
+
+  const getFullUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${serverUrl}${cleanPath}`;
+  };
+
+  const openImageViewer = (imgUrl, title = 'Adjunto de la Asamblea', extraInfo = {}) => {
+    if (!imgUrl) return;
+    const fullUrl = getFullUrl(imgUrl);
+    setSelectedReceipt({
+      url: fullUrl,
+      title: title,
+      author: extraInfo.author,
+      date: extraInfo.date,
+    });
+    setImageLoading(true);
+    setImageError(false);
+    setReceiptViewerVisible(true);
+  };
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -256,7 +285,7 @@ export default function AssemblyScreen({ embedded = false }) {
       let finalAttachmentType = null;
       if (commentAttachment?.uri) {
         const uploadRes = await loansApi.uploadFile(commentAttachment.uri);
-        finalAttachmentUrl = uploadRes.file_url;
+        finalAttachmentUrl = uploadRes.url || uploadRes.file_url;
         finalAttachmentType = commentAttachment.type || 'image';
       }
 
@@ -1030,11 +1059,24 @@ export default function AssemblyScreen({ embedded = false }) {
                           </View>
                           <Text style={styles.commentContent}>{c.content}</Text>
                           {c.attachment_url && c.attachment_type === 'image' && (
-                            <Image
-                              source={{ uri: c.attachment_url }}
-                              style={styles.commentImageAttachment}
-                              resizeMode="cover"
-                            />
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              onPress={() => openImageViewer(
+                                c.attachment_url,
+                                `Adjunto - ${c.author_name}`,
+                                { author: c.author_name, date: c.created_at }
+                              )}
+                              style={styles.commentImageTouchable}
+                            >
+                              <Image
+                                source={{ uri: getFullUrl(c.attachment_url) }}
+                                style={styles.commentImageAttachment}
+                                resizeMode="cover"
+                              />
+                              <View style={styles.imageTapHint}>
+                                <Text style={styles.imageTapHintText}>🔍 Toca para ampliar imagen</Text>
+                              </View>
+                            </TouchableOpacity>
                           )}
                           <Text style={styles.commentDate}>
                             {c.created_at ? new Date(c.created_at).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : ''}
@@ -1439,6 +1481,95 @@ export default function AssemblyScreen({ embedded = false }) {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Visor de Imágenes / Adjuntos */}
+      <Modal 
+        visible={receiptViewerVisible} 
+        animationType="fade" 
+        transparent={true}
+        onRequestClose={() => setReceiptViewerVisible(false)}
+      >
+        <View style={styles.receiptModalOverlay}>
+          <View style={styles.receiptModalCard}>
+            <View style={styles.receiptModalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.receiptModalTitle} numberOfLines={1}>
+                  {selectedReceipt?.title || 'Adjunto de la Asamblea'}
+                </Text>
+                {selectedReceipt?.author && (
+                  <Text style={styles.receiptModalSubtitle}>
+                    Publicado por: <Text style={{ color: '#38bdf8', fontWeight: 'bold' }}>{selectedReceipt.author}</Text>
+                  </Text>
+                )}
+                {selectedReceipt?.date && (
+                  <Text style={styles.receiptModalRef}>
+                    {new Date(selectedReceipt.date).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity 
+                style={styles.receiptCloseBtn}
+                onPress={() => setReceiptViewerVisible(false)}
+              >
+                <Text style={styles.receiptCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.receiptImageContainer}>
+              {imageLoading && (
+                <View style={styles.receiptImageLoader}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={{ color: '#94a3b8', marginTop: 10, fontSize: 13 }}>Cargando imagen...</Text>
+                </View>
+              )}
+              {imageError ? (
+                <View style={styles.receiptErrorContainer}>
+                  <Text style={{ fontSize: 32, marginBottom: 8 }}>⚠️</Text>
+                  <Text style={{ color: '#f8fafc', fontWeight: 'bold', fontSize: 14 }}>No se pudo cargar la imagen previa</Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 20 }}>
+                    Puedes abrir el adjunto directamente en tu navegador o visor externo.
+                  </Text>
+                </View>
+              ) : (
+                selectedReceipt?.url && (
+                  <Image
+                    source={{ uri: selectedReceipt.url }}
+                    style={styles.receiptImage}
+                    resizeMode="contain"
+                    onLoadStart={() => setImageLoading(true)}
+                    onLoadEnd={() => setImageLoading(false)}
+                    onError={() => {
+                      setImageLoading(false);
+                      setImageError(true);
+                    }}
+                  />
+                )
+              )}
+            </View>
+
+            <View style={styles.receiptModalFooter}>
+              {selectedReceipt?.url && (
+                <TouchableOpacity 
+                  style={styles.receiptExternalBtn}
+                  onPress={() => {
+                    if (selectedReceipt?.url) {
+                      Linking.openURL(selectedReceipt.url);
+                    }
+                  }}
+                >
+                  <Text style={styles.receiptExternalBtnText}>🔗 Abrir completo en navegador</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity 
+                style={styles.receiptDismissBtn}
+                onPress={() => setReceiptViewerVisible(false)}
+              >
+                <Text style={styles.receiptDismissBtnText}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -2416,5 +2547,125 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700'
+  },
+  commentImageTouchable: {
+    marginTop: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  imageTapHint: {
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  imageTapHintText: {
+    color: '#93c5fd',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  receiptModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    padding: 15,
+  },
+  receiptModalCard: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 16,
+    maxHeight: '90%',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  receiptModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  receiptModalTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  receiptModalSubtitle: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginTop: 3,
+  },
+  receiptModalRef: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  receiptCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptCloseText: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  receiptImageContainer: {
+    height: 380,
+    backgroundColor: '#0a0f1d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  receiptImage: {
+    width: '100%',
+    height: '100%',
+  },
+  receiptImageLoader: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptErrorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  receiptModalFooter: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 8,
+  },
+  receiptExternalBtn: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  receiptExternalBtnText: {
+    color: '#93c5fd',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  receiptDismissBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  receiptDismissBtnText: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
   }
 });

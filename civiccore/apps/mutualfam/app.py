@@ -18,6 +18,8 @@ from routers import auth, membership, config
 Base.metadata.create_all(bind=engine)
 from services.repayment_reminders import ensure_reminder_column_exists
 ensure_reminder_column_exists(engine)
+from services.colectas_migration import ensure_colectas_columns_exist
+ensure_colectas_columns_exist(engine)
 
 load_dotenv()
 
@@ -81,9 +83,17 @@ app.include_router(colectas.router, prefix="/api/v1/colectas", tags=["colectas"]
 app.include_router(upload.router, prefix="/api/v1/upload", tags=["upload"])
 app.include_router(gobernanza.router, prefix="/api/v1/gobernanza", tags=["gobernanza"])
 
-from routers.upload import UPLOADS_DIR
+from routers.upload import UPLOADS_DIR, get_or_restore_file
 os.makedirs(UPLOADS_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+class TelegramBackedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        filepath = os.path.join(self.directory, path)
+        if not os.path.exists(filepath):
+            get_or_restore_file(path)
+        return await super().get_response(path, scope)
+
+app.mount("/uploads", TelegramBackedStaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 if os.getenv("CIVICCORE_ENV") == "sandbox":
     from civiccore.testing.sandbox_router import router as sandbox_router

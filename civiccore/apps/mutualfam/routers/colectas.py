@@ -17,7 +17,7 @@ from models import (
     utcnow
 )
 from routers.membership import get_current_org_member
-from services.telegram_bot import send_telegram_notification
+from services.telegram_bot import send_telegram_notification, send_telegram_photo
 from services.realtime import notify_org
 from services.notifications import notify_users
 from services import tasa_cambio
@@ -722,12 +722,26 @@ def confirm_commitment_payment(
             f"{org_member['user'].first_name} confirmó el pago de ${compromiso.monto_usd:,.2f} USD para '{colecta.titulo}'."
         )
 
-    send_telegram_notification(
+    msg_pago = (
         f"💰 <b>Aporte Confirmado en Colecta</b>\n\n"
-        f"👤 {org_member['user'].first_name} confirmó su pago de <b>${compromiso.monto_usd:,.2f} USD</b> para <i>{colecta.titulo}</i>.\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"👤 {org_member['user'].first_name} confirmó su pago de <b>${compromiso.monto_usd:,.2f} USD</b>.\n"
         f"Ref: <code>{req.referencia_pago or 'N/A'}</code>\n"
         f"Total recaudado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
     )
+    if compromiso.comprobante_url:
+        import os
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(compromiso.comprobante_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{compromiso.comprobante_url}"
+        if os.path.exists(photo_path):
+            send_telegram_photo(msg_pago, photo_path)
+        else:
+            send_telegram_notification(msg_pago)
+    else:
+        send_telegram_notification(msg_pago)
 
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
     return _serialize_colecta(colecta, org_member["user"].id)
@@ -785,14 +799,26 @@ def validate_expense(
         f"{beneficiario_name} validó el gasto de la colecta '{colecta.titulo}'. ¡Gracias a todos los aportantes!"
     )
 
-    send_telegram_notification(
+    msg_gasto = (
         f"✅ <b>¡Gasto Validado y Colecta Completada!</b>\n\n"
         f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
         f"👤 Beneficiario: {beneficiario_name}\n"
         f"📝 Detalle del gasto: <i>{colecta.descripcion_gasto}</i>\n"
-        f"📎 Comprobante adjunto: {'Sí' if colecta.comprobante_gasto_url else 'No'}\n"
         f"¡Objetivo solidario cumplido exitosamente!"
     )
+    if colecta.comprobante_gasto_url:
+        import os
+        from routers.upload import UPLOADS_DIR
+        filename = os.path.basename(colecta.comprobante_gasto_url)
+        photo_path = os.path.join(UPLOADS_DIR, filename)
+        if not os.path.exists(photo_path):
+            photo_path = f".{colecta.comprobante_gasto_url}"
+        if os.path.exists(photo_path):
+            send_telegram_photo(msg_gasto, photo_path)
+        else:
+            send_telegram_notification(msg_gasto)
+    else:
+        send_telegram_notification(msg_gasto)
 
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
     return _serialize_colecta(colecta, org_member["user"].id)

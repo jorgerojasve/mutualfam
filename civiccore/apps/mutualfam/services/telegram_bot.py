@@ -67,10 +67,50 @@ def send_telegram_photo(message: str, photo_path: str):
         
         req = urllib.request.Request(url, data=bytes(body), headers=headers, method='POST')
         with urllib.request.urlopen(req) as response:
-            return response.status == 200
+            if response.status == 200:
+                try:
+                    res_json = json.loads(response.read().decode('utf-8'))
+                    if res_json.get("ok"):
+                        photos = res_json.get("result", {}).get("photo", [])
+                        if photos:
+                            return photos[-1].get("file_id")
+                        doc = res_json.get("result", {}).get("document", {})
+                        if doc:
+                            return doc.get("file_id")
+                except Exception:
+                    pass
+                return True
+            return False
     except Exception as e:
         error_body = ""
         if hasattr(e, 'read'):
             error_body = e.read().decode('utf-8', errors='ignore')
         print(f"Error enviando foto a Telegram: {e} - Response: {error_body}")
+        return False
+
+def download_telegram_file(file_id: str, dest_path: str) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not file_id:
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile?file_id={file_id}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=12) as response:
+            if response.status != 200:
+                return False
+            data = json.loads(response.read().decode('utf-8'))
+            if not data.get("ok"):
+                return False
+            file_path = data["result"]["file_path"]
+
+        download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+        dl_req = urllib.request.Request(download_url)
+        with urllib.request.urlopen(dl_req, timeout=25) as dl_resp:
+            if dl_resp.status != 200:
+                return False
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            with open(dest_path, "wb") as f:
+                f.write(dl_resp.read())
+            return True
+    except Exception as e:
+        print(f"Error descargando archivo de Telegram {file_id}: {e}")
         return False
