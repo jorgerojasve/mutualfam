@@ -760,9 +760,36 @@ export default function LoansScreen() {
       '¿Cómo deseas agregar el comprobante?',
       [
         {
-          text: '🖼️ Galería (Captura)',
+          text: '✂️ Galería (Recortar)',
           onPress: async () => {
             try {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permiso requerido', 'Se requiere acceso a la galería.');
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (!result.canceled && result.assets?.[0]?.uri) {
+                setReceiptUri(result.assets[0].uri);
+              }
+            } catch (err) {
+              console.warn('Error al abrir galería:', err);
+            }
+          },
+        },
+        {
+          text: '🖼️ Galería (Original)',
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert('Permiso requerido', 'Se requiere acceso a la galería.');
+                return;
+              }
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: false,

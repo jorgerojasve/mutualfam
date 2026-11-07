@@ -167,7 +167,6 @@ export default function FundsScreen() {
 
   // Modales
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedColecta, setSelectedColecta] = useState(null);
   const [showPledgeModal, setShowPledgeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -398,13 +397,40 @@ export default function FundsScreen() {
     return () => unsubs.forEach((u) => u());
   }, [activeOrg?.id]);
 
-  // Manejar selector de imágenes
+  // Manejar selector de imágenes con opción previa de recortar
   const pickImage = async (onSelected) => {
-    Alert.alert('Comprobante', 'Selecciona el origen del comprobante:', [
+    Alert.alert('Adjuntar Comprobante', '¿Cómo deseas agregar el comprobante?', [
       {
-        text: '🖼️ Galería',
+        text: '✂️ Galería (Recortar)',
         onPress: async () => {
           try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permiso requerido', 'Se requiere acceso a la galería.');
+              return;
+            }
+            const res = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              quality: 0.8,
+            });
+            if (!res.canceled && res.assets?.[0]?.uri) {
+              onSelected(res.assets[0].uri);
+            }
+          } catch (err) {
+            console.warn('Error picker:', err);
+          }
+        },
+      },
+      {
+        text: '🖼️ Galería (Original)',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permiso requerido', 'Se requiere acceso a la galería.');
+              return;
+            }
             const res = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: false,
@@ -419,7 +445,7 @@ export default function FundsScreen() {
         },
       },
       {
-        text: '📷 Cámara',
+        text: '📷 Tomar Foto',
         onPress: async () => {
           try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -913,20 +939,107 @@ export default function FundsScreen() {
             <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por el Beneficiario:</Text>
             <Text style={styles.expenseValidatedDesc}>{item.descripcion_gasto}</Text>
             {item.comprobante_gasto_url ? (
-              <Text style={styles.expenseValidatedReceipt}>📎 Comprobante adjunto disponible</Text>
+              <TouchableOpacity
+                style={[styles.receiptLinkBtn, { marginTop: 8 }]}
+                onPress={() => openReceiptViewer(
+                  item.comprobante_gasto_url,
+                  `Factura / Gasto - ${item.titulo}`,
+                  {
+                    amount: `$${formatVE(item.monto_meta_usd)} USD`,
+                    reference: item.descripcion_gasto
+                  }
+                )}
+              >
+                <Text style={styles.receiptLinkText}>🧾 Ver factura / comprobante de gasto</Text>
+              </TouchableOpacity>
             ) : null}
           </View>
         )}
 
+        {/* Lista de Aportes en curso (Homologado a Préstamos) */}
+        {(() => {
+          const activeCompromisos = (item.compromisos || []).filter(c => c.estado !== 'cancelado');
+          if (activeCompromisos.length === 0) return null;
+          return (
+            <View style={styles.contribsList}>
+              <Text style={styles.contribsTitle}>Aportes en curso ({activeCompromisos.length}):</Text>
+              {activeCompromisos.map(comp => {
+                const csMap = {
+                  prometido: { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Prometido' },
+                  notificado: { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '💵', label: 'Cobro listo' },
+                  pagado: { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '✅', label: 'Pagado' },
+                };
+                const cs = csMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
+                const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
+
+                return (
+                  <View key={comp.id} style={[styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}>
+                    {/* Cabecera: avatar + nombre + monto + badge de estado */}
+                    <View style={styles.contribCardHeader}>
+                      <View style={styles.contribAvatarWrap}>
+                        <View style={[styles.contribAvatar, { backgroundColor: cs.border + '33', borderColor: cs.border }]}>
+                          <Text style={{ fontSize: 16, fontWeight: '700', color: cs.border }}>{initial}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.contribName}>{comp.socio_name}</Text>
+                          <Text style={styles.contribAmountLine}>
+                            ${formatVE(comp.monto_usd)} USD
+                            <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
+                              {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * item.tasa_actual))})`}
+                            </Text>
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
+                        <Text style={{ fontSize: 11 }}>{cs.icon}</Text>
+                        <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
+                      </View>
+                    </View>
+
+                    {/* Detalles de método o referencia */}
+                    {(comp.payment_method || comp.referencia_pago) ? (
+                      <View style={styles.contribMeta}>
+                        {comp.payment_method ? (
+                          <View style={styles.contribMetaRow}>
+                            <Text style={styles.contribMetaIcon}>💳</Text>
+                            <Text style={styles.contribMetaText}>{comp.payment_method}</Text>
+                          </View>
+                        ) : null}
+                        {comp.referencia_pago ? (
+                          <View style={styles.contribMetaRow}>
+                            <Text style={styles.contribMetaIcon}>#</Text>
+                            <Text style={styles.contribMetaText}>{comp.referencia_pago}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {/* Comprobante de aporte directo */}
+                    {comp.comprobante_url ? (
+                      <TouchableOpacity
+                        style={[styles.receiptLinkBtn, { marginTop: 8 }]}
+                        onPress={() => openReceiptViewer(
+                          comp.comprobante_url,
+                          `Comprobante de Aporte - ${comp.socio_name}`,
+                          {
+                            method: comp.payment_method,
+                            reference: comp.referencia_pago,
+                            amount: `$${formatVE(comp.monto_usd)} USD (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * item.tasa_actual))})`
+                          }
+                        )}
+                      >
+                        <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })()}
+
         {/* Botones de acción */}
         <View style={styles.cardActions}>
-          {/* Botón Ver Detalle */}
-          <TouchableOpacity
-            style={styles.btnSecondary}
-            onPress={() => setSelectedColecta(item)}
-          >
-            <Text style={styles.btnSecondaryText}>👁️ Detalle ({item.total_aportantes})</Text>
-          </TouchableOpacity>
 
           {/* Botón Prometer Aporte */}
           {(item.estado === 'propuesta' || item.estado === 'activa') && !myPledge && (
@@ -1390,230 +1503,7 @@ export default function FundsScreen() {
       </Modal>
 
       {/* ==================================================== */}
-      {/* MODAL 2: DETALLE DE COLECTA Y APORTANTES             */}
-      {/* ==================================================== */}
-      <Modal visible={!!selectedColecta} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            {selectedColecta && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={styles.modalTitle}>🐮 {selectedColecta.titulo}</Text>
-                <Text style={styles.detailProposito}>{selectedColecta.proposito}</Text>
-
-                <View style={styles.detailInfoBox}>
-                  <Text style={styles.detailInfoItem}>
-                    💵 <Text style={{ fontWeight: 'bold' }}>Meta:</Text> ${formatVE(selectedColecta.monto_meta_usd)} USD (~Bs {formatVE(selectedColecta.monto_meta_bs || (selectedColecta.monto_meta_usd * selectedColecta.tasa_actual))})
-                  </Text>
-                  <Text style={styles.detailInfoItem}>
-                    📊 <Text style={{ fontWeight: 'bold' }}>Tasa:</Text> {selectedColecta.tasa_label} (Bs {formatVE(selectedColecta.tasa_actual)})
-                  </Text>
-                  <Text style={styles.detailInfoItem}>
-                    👤 <Text style={{ fontWeight: 'bold' }}>Beneficiario:</Text> {selectedColecta.beneficiario_nombre}
-                  </Text>
-                  <Text style={styles.detailInfoItem}>
-                    📅 <Text style={{ fontWeight: 'bold' }}>Fecha de pago:</Text> {selectedColecta.fecha_pago}
-                  </Text>
-                </View>
-
-                {/* Datos de Pago del Beneficiario */}
-                <Text style={styles.sectionHeader}>💳 Datos de Pago del Beneficiario</Text>
-                {(() => {
-                  const methods = getAvailablePaymentMethods(selectedColecta.beneficiario_datos_pago);
-                  if (methods.length === 0) {
-                    return (
-                      <View style={styles.noPmBox}>
-                        <Text style={styles.noPmText}>
-                          ℹ️ El beneficiario no tiene datos de pago registrados. Deberás coordinar el aporte directamente con {selectedColecta.beneficiario_nombre}.
-                        </Text>
-                      </View>
-                    );
-                  }
-                  const pmData = getBeneficiaryMethodData(selectedColecta.beneficiario_datos_pago, 'Pago Móvil');
-                  return (
-                    <View style={styles.beneficiaryPmContainer}>
-                      {pmData && (
-                        <View style={styles.pmCard}>
-                          <View style={styles.pmCardHeader}>
-                            <Text style={styles.pmCardTitle}>📲 Pago Móvil</Text>
-                            <Text style={styles.pmCardSubtitle}>Beneficiario: {selectedColecta.beneficiario_nombre}</Text>
-                          </View>
-
-                          <TouchableOpacity
-                            style={styles.copyDataRow}
-                            onPress={() => copyField('banco', pmData.banco)}
-                            activeOpacity={0.7}
-                          >
-                            <View style={{ flex: 1, paddingRight: 8 }}>
-                              <Text style={styles.copyDataLabel}>Banco</Text>
-                              <Text style={styles.copyDataValue}>{getBankLabel(pmData.banco)}</Text>
-                            </View>
-                            <Text style={styles.copyIcon}>{copiedField === 'banco' ? '✓' : '📋'}</Text>
-                          </TouchableOpacity>
-
-                          {(() => {
-                            const getPrefix = (tipo) => {
-                              if (!tipo || tipo === 'Persona') return 'V';
-                              if (tipo === 'Comercio') return 'J';
-                              if (tipo === 'Comuna') return 'G';
-                              return tipo[0] || 'V';
-                            };
-                            const docPrefix = getPrefix(pmData.tipo_doc);
-                            const safeDoc = `${docPrefix}-${pmData.cedula || ''}`;
-                            return (
-                              <TouchableOpacity
-                                style={styles.copyDataRow}
-                                onPress={() => copyField('doc', safeDoc)}
-                                activeOpacity={0.7}
-                              >
-                                <View>
-                                  <Text style={styles.copyDataLabel}>Cédula / RIF</Text>
-                                  <Text style={styles.copyDataValue}>{safeDoc}</Text>
-                                </View>
-                                <Text style={styles.copyIcon}>{copiedField === 'doc' ? '✓' : '📋'}</Text>
-                              </TouchableOpacity>
-                            );
-                          })()}
-
-                          <TouchableOpacity
-                            style={styles.copyDataRow}
-                            onPress={() => copyField('tel', pmData.telefono)}
-                            activeOpacity={0.7}
-                          >
-                            <View>
-                              <Text style={styles.copyDataLabel}>Teléfono</Text>
-                              <Text style={styles.copyDataValue}>{pmData.telefono}</Text>
-                            </View>
-                            <Text style={styles.copyIcon}>{copiedField === 'tel' ? '✓' : '📋'}</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.copyAllButton}
-                            onPress={() => copyAllPagoMovil(pmData, null)}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.copyAllButtonText}>
-                              {copiedField === 'all' ? '✅ ¡Copiado!' : '📋 Copiar todo para el banco'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-
-                      {methods.filter(m => m !== 'Pago Móvil').map(m => {
-                        const val = getBeneficiaryMethodData(selectedColecta.beneficiario_datos_pago, m);
-                        const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val || '');
-                        return (
-                          <View key={m} style={[styles.pmCard, { marginTop: 10 }]}>
-                            <Text style={styles.pmCardTitle}>💳 {m}</Text>
-                            <TouchableOpacity
-                              style={[styles.copyDataRow, { marginTop: 6 }]}
-                              onPress={() => copyField(m, strVal)}
-                              activeOpacity={0.7}
-                            >
-                              <View style={{ flex: 1, paddingRight: 8 }}>
-                                <Text style={styles.copyDataLabel}>Datos</Text>
-                                <Text style={[styles.copyDataValue, { fontSize: 15 }]}>{strVal}</Text>
-                              </View>
-                              <Text style={styles.copyIcon}>{copiedField === m ? '✓' : '📋'}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })()}
-
-                {/* Lista de Aportantes */}
-                <Text style={styles.sectionHeader}>
-                  🤝 Aportantes ({selectedColecta.compromisos.filter((c) => c.estado !== 'cancelado').length})
-                </Text>
-                {selectedColecta.compromisos.filter((c) => c.estado !== 'cancelado').length === 0 ? (
-                  <Text style={styles.emptySubText}>Aún no hay compromisos registrados.</Text>
-                ) : (
-                  selectedColecta.compromisos
-                    .filter((c) => c.estado !== 'cancelado')
-                    .map((comp) => (
-                      <View key={comp.id} style={styles.contributorRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.contributorName}>{comp.socio_name}</Text>
-                          <Text style={styles.contributorAmount}>
-                            ${formatVE(comp.monto_usd)} USD
-                            {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * selectedColecta.tasa_actual))})`}
-                          </Text>
-                          {comp.referencia_pago ? (
-                            <Text style={styles.contributorRef}>Ref: {comp.referencia_pago}</Text>
-                          ) : null}
-                          {comp.comprobante_url ? (
-                            <TouchableOpacity
-                              style={[styles.receiptLinkBtn, { marginTop: 6 }]}
-                              onPress={() => openReceiptViewer(
-                                comp.comprobante_url,
-                                `Comprobante de Aporte - ${comp.socio_name}`,
-                                {
-                                  amount: `$${formatVE(comp.monto_usd)} USD`,
-                                  reference: comp.referencia_pago,
-                                  method: comp.payment_method
-                                }
-                              )}
-                            >
-                              <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
-                            </TouchableOpacity>
-                          ) : null}
-                        </View>
-                        <View
-                          style={[
-                            styles.pledgeStatePill,
-                            { backgroundColor: comp.estado === 'pagado' ? '#065f46' : '#1e3a8a' },
-                          ]}
-                        >
-                          <Text style={styles.pledgeStateText}>
-                            {comp.estado === 'pagado' ? '✅ Pagado' : comp.estado === 'notificado' ? '💵 Notificado' : '⏳ Prometido'}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
-                )}
-
-                {/* Comprobante de Gasto si fue validado */}
-                {selectedColecta.gasto_validado && (
-                  <View style={[styles.expenseValidatedBox, { marginTop: 16 }]}>
-                    <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por el Beneficiario:</Text>
-                    <Text style={styles.expenseValidatedDesc}>{selectedColecta.descripcion_gasto}</Text>
-                    {selectedColecta.comprobante_gasto_url ? (
-                      <View style={{ marginTop: 8 }}>
-                        <TouchableOpacity
-                          style={styles.receiptLinkBtn}
-                          onPress={() => openReceiptViewer(
-                            selectedColecta.comprobante_gasto_url,
-                            `Comprobante de Gasto - ${selectedColecta.titulo}`,
-                            {
-                              amount: `$${formatVE(selectedColecta.monto_meta_usd)} USD`,
-                              reference: selectedColecta.descripcion_gasto
-                            }
-                          )}
-                        >
-                          <Text style={styles.receiptLinkText}>🧾 Ver factura / comprobante de gasto</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <Text style={styles.emptySubText}>Sin comprobante físico adjunto.</Text>
-                    )}
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={[styles.btnPrimary, { marginTop: 20 }]}
-                  onPress={() => setSelectedColecta(null)}
-                >
-                  <Text style={styles.btnPrimaryText}>Cerrar</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* ==================================================== */}
-      {/* MODAL 3: PROMETER APORTE VOLUNTARIO                  */}
+      {/* MODAL 2: PROMETER APORTE VOLUNTARIO                  */}
       {/* ==================================================== */}
       <Modal visible={showPledgeModal} animationType="slide" transparent={true}>
         <KeyboardAvoidingView
@@ -3157,4 +3047,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  contribsList: { marginTop: 12, gap: 8 },
+  contribsTitle: { color: '#94a3b8', fontWeight: '700', marginBottom: 6, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase' },
+  contribCard: {
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    padding: 12,
+    marginBottom: 0,
+  },
+  contribCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  contribAvatarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  contribAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contribName: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
+  contribAmountLine: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
+  contribStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  contribStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  contribMeta: {
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRadius: 6,
+    padding: 7,
+    marginTop: 4,
+    gap: 3,
+  },
+  contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  contribMetaIcon: { fontSize: 12, width: 16 },
+  contribMetaText: { color: '#94a3b8', fontSize: 12 },
 });
