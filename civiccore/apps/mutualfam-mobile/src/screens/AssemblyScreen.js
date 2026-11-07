@@ -306,8 +306,8 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
-  // Adjuntar imagen desde la galería (original por defecto para evitar crashes del recortador del sistema)
-  const handlePickCommentImage = async () => {
+  // Adjuntar imagen desde la galería (con opción previa de recortar)
+  const pickCommentImage = async (crop = false) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -316,7 +316,7 @@ export default function AssemblyScreen({ embedded = false }) {
       }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+        allowsEditing: crop,
         quality: 0.8,
       });
       if (!res.canceled && res.assets && res.assets.length > 0) {
@@ -324,25 +324,29 @@ export default function AssemblyScreen({ embedded = false }) {
       }
     } catch (e) {
       console.warn('Error picking image for comment', e);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen de la galería.');
+      Alert.alert('Error', 'No se pudo seleccionar o procesar la imagen de la galería.');
     }
   };
 
-  // Recortar / editar imagen de forma opcional
-  const handleEditCommentImage = async () => {
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-      });
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        setCommentAttachment({ uri: res.assets[0].uri, type: 'image' });
-      }
-    } catch (e) {
-      console.warn('Error cropping image for comment', e);
-      Alert.alert('Error', 'No se pudo editar o recortar la imagen.');
-    }
+  const handlePickCommentImage = () => {
+    Alert.alert(
+      'Adjuntar Foto al Foro',
+      '¿Deseas recortar la foto antes de adjuntarla?',
+      [
+        {
+          text: '✂️ Recortar foto',
+          onPress: () => pickCommentImage(true),
+        },
+        {
+          text: '🖼️ Foto completa (sin recortar)',
+          onPress: () => pickCommentImage(false),
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   // Abrir modal de detalle
@@ -1130,9 +1134,9 @@ export default function AssemblyScreen({ embedded = false }) {
                         <View style={styles.attachmentPreviewRow}>
                           <Image source={{ uri: commentAttachment.uri }} style={styles.attachmentThumb} />
                           <View style={{ flex: 1, marginLeft: 8 }}>
-                            <Text style={styles.attachmentLabel}>Imagen adjunta</Text>
-                            <TouchableOpacity onPress={handleEditCommentImage} style={{ marginTop: 2 }}>
-                              <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '600' }}>✏️ Recortar imagen</Text>
+                            <Text style={styles.attachmentLabel}>Foto lista para el foro</Text>
+                            <TouchableOpacity onPress={handlePickCommentImage} style={{ marginTop: 2 }}>
+                              <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '600' }}>✏️ Cambiar / Recortar otra</Text>
                             </TouchableOpacity>
                           </View>
                           <TouchableOpacity onPress={() => setCommentAttachment(null)}>
