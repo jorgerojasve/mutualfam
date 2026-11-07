@@ -1,0 +1,121 @@
+f9fd7531-677d-5cea-8de7-2fbdf5ed5a84@tokens.fly.io
+==> Verifying app config
+Validating fly.qa.toml
+[32m✓[0m Configuration is valid
+--> Verified app config
+[33mWARN[0m DATABASE_URL may be a potentially sensitive environment variable. Consider setting it as a secret, and removing it from the [env] section: https://fly.io/docs/apps/secrets/
+
+==> Building image
+
+WARN Build context is 218 MB across 567 files. It is uploaded to the builder on
+     every deploy, and a large context can make builds noticeably slower.
+     Largest paths in the context:
+       .git/       209 MB
+       civiccore/  8.2 MB
+     If some of these don't need to be in the image, add them to .dockerignore:
+     https://docs.docker.com/build/concepts/context/#dockerignore-files
+     (disable with --build-context-warn-size 0)
+Waiting for depot builder...
+
+==> Building image with Depot
+--> build:  (​)
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.09kB 0.2s done
+#1 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/library/python:3.11-slim
+#2 DONE 0.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 273B 0.2s done
+#3 DONE 0.2s
+
+#4 [1/9] FROM docker.io/library/python:3.11-slim@sha256:65bd3d9f1d7fa268dd1909973ba7eb4bdf41f6dcf2cfbe76ba9528b170f3fd79
+#4 resolve docker.io/library/python:3.11-slim@sha256:65bd3d9f1d7fa268dd1909973ba7eb4bdf41f6dcf2cfbe76ba9528b170f3fd79 done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 452.21kB 0.5s done
+#5 DONE 0.5s
+
+#6 [3/9] RUN apt-get update && apt-get install -y --no-install-recommends     sqlite3     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [2/9] WORKDIR /app
+#7 CACHED
+
+#8 [5/9] RUN grep -v "\-e " /app/requirements.txt > /app/req_prod.txt && pip install --no-cache-dir -r /app/req_prod.txt
+#8 CACHED
+
+#9 [6/9] COPY civiccore/backend /civiccore_backend
+#9 CACHED
+
+#10 [4/9] COPY civiccore/backend/requirements.txt /app/requirements.txt
+#10 CACHED
+
+#11 [7/9] RUN pip install --no-cache-dir /civiccore_backend
+#11 CACHED
+
+#12 [8/9] COPY civiccore/apps/mutualfam /app
+#12 DONE 0.0s
+
+#13 [9/9] RUN mkdir -p /app/data
+#13 DONE 0.1s
+
+#14 exporting to image
+#14 exporting layers 0.0s done
+#14 exporting manifest sha256:10279be8ebcf9ca09e8f14d8fb8ec8783b35f6f14d8086d529f421a54041f852 done
+#14 exporting config sha256:07e285186ab4fd8b43ba1e3fcfa6b67c45b73bafa3b6dffa4263796133afd761 done
+#14 pushing layers for registry.fly.io/mutualfam-qa-backend:deployment-01M6V3EEV0PHFHS444S7KK8XMG@sha256:10279be8ebcf9ca09e8f14d8fb8ec8783b35f6f14d8086d529f421a54041f852
+#14 pushing layer sha256:07e285186ab4fd8b43ba1e3fcfa6b67c45b73bafa3b6dffa4263796133afd761
+#14 pushing layer sha256:e5601662697cd126529f3e0f138b6f4209684ed73582c6559128d5180a2c38ae
+#14 pushing layer sha256:8c16438578cf7b18f6e8faca661ffe9b16d7a45e959013dede4704a4a5c8dd17
+#14 pushing layer sha256:af8d0921175288cfb932a28184d6b7974714044192bbd8c241a6b8c334b68dbe
+#14 pushing layer sha256:4395359b92e5969b14f869c8dbf416ae5000a901d2211a8f4066d00f4af94b09
+#14 pushing layer sha256:0dd2b884e56909e1a43ce4259205284032c9bb11811c77eefe4ccc216c095002
+#14 pushing layer sha256:12170353c9e899d6f3619d9e785fb5d2e55b3fabf5ccfe8e5f81a0446635f658
+#14 pushing layer sha256:8b59035135c258a1b98963541b84dfecaf95f8141ea031c0fe1c4b657d4bf8c7 0.1s done
+#14 pushing layer sha256:8f3865ebe99971cb1e7cae98c39b939d83033449df8471f0b6546084678155d2
+#14 pushing layer sha256:e02afc75f1e2897545f3dfa4da83ad94c961c4b06b4f6c8f8952646b1067cbbb
+#14 pushing layer sha256:1a697a8fd7ebd189d9a212759c73add974e5096a76188cec4f378b18514d8e29
+#14 pushing layer sha256:e09180fd276c38456abbd0f5e757aa5a2f936613bcf7ea633f026d47cfb3b9f6
+#14 pushing layer sha256:6818130ceec3c38dec6dbf130c3b05224416e5395017fc53d56bc1709c16cbb4
+#14 pushing layer sha256:0dd2b884e56909e1a43ce4259205284032c9bb11811c77eefe4ccc216c095002 0.8s done
+#14 pushing layer sha256:12170353c9e899d6f3619d9e785fb5d2e55b3fabf5ccfe8e5f81a0446635f658 0.8s done
+#14 pushing layer sha256:e5601662697cd126529f3e0f138b6f4209684ed73582c6559128d5180a2c38ae 0.9s done
+#14 pushing layer sha256:8c16438578cf7b18f6e8faca661ffe9b16d7a45e959013dede4704a4a5c8dd17 0.8s done
+#14 pushing layer sha256:e02afc75f1e2897545f3dfa4da83ad94c961c4b06b4f6c8f8952646b1067cbbb 0.8s done
+#14 pushing layer sha256:1a697a8fd7ebd189d9a212759c73add974e5096a76188cec4f378b18514d8e29 0.8s done
+#14 pushing layer sha256:e09180fd276c38456abbd0f5e757aa5a2f936613bcf7ea633f026d47cfb3b9f6 0.8s done
+#14 pushing layer sha256:6818130ceec3c38dec6dbf130c3b05224416e5395017fc53d56bc1709c16cbb4 0.8s done
+#14 pushing layers for registry.fly.io/mutualfam-qa-backend:deployment-01M6V3EEV0PHFHS444S7KK8XMG@sha256:10279be8ebcf9ca09e8f14d8fb8ec8783b35f6f14d8086d529f421a54041f852 1.1s done
+#14 pushing layer sha256:07e285186ab4fd8b43ba1e3fcfa6b67c45b73bafa3b6dffa4263796133afd761 1.0s done
+#14 pushing layer sha256:af8d0921175288cfb932a28184d6b7974714044192bbd8c241a6b8c334b68dbe 1.0s done
+#14 pushing layer sha256:4395359b92e5969b14f869c8dbf416ae5000a901d2211a8f4066d00f4af94b09 1.0s done
+#14 pushing layer sha256:8f3865ebe99971cb1e7cae98c39b939d83033449df8471f0b6546084678155d2 1.1s done
+#14 pushing manifest for registry.fly.io/mutualfam-qa-backend:deployment-01M6V3EEV0PHFHS444S7KK8XMG@sha256:10279be8ebcf9ca09e8f14d8fb8ec8783b35f6f14d8086d529f421a54041f852
+#14 pushing manifest for registry.fly.io/mutualfam-qa-backend:deployment-01M6V3EEV0PHFHS444S7KK8XMG@sha256:10279be8ebcf9ca09e8f14d8fb8ec8783b35f6f14d8086d529f421a54041f852 0.1s done
+#14 DONE 1.3s
+--> Build Summary:  (​)
+[38;5;252m--> Building image done[0m
+image: registry.fly.io/mutualfam-qa-backend:deployment-01M6V3EEV0PHFHS444S7KK8XMG
+image size: 63 MB
+
+Watch your deployment at https://fly.io/apps/mutualfam-qa-backend/monitoring
+
+Updating existing machines in 'mutualfam-qa-backend' with rolling strategy
+> Acquiring lease for 891115db455d58
+> Acquired lease for 891115db455d58
+> Updating machine config for 891115db455d58
+> Updating 891115db455d58 [app]
+> Updated machine config for 891115db455d58
+> Waiting for machine 891115db455d58 to reach a good state
+> Machine 891115db455d58 reached stopped state
+✔ Machine 891115db455d58 is now in a good state
+> Clearing lease for 891115db455d58
+✔ Cleared lease for 891115db455d58
+Checking DNS configuration for mutualfam-qa-backend.fly.dev
+✓ DNS configuration verified
+
+Visit your newly deployed app at https://mutualfam-qa-backend.fly.dev/
+
