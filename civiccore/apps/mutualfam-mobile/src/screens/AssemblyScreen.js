@@ -1378,7 +1378,7 @@ export default function AssemblyScreen({ embedded = false }) {
                   {submittingIngreso ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.primaryButtonText}>Crear Propuesta y Generar Enlace</Text>
+                    <Text style={styles.primaryButtonText}>Crear Propuesta</Text>
                   )}
                 </TouchableOpacity>
 

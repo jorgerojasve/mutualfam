@@ -23,6 +23,7 @@ import * as Linking from 'expo-linking';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { fundsApi, colectasApi, loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
+import PaymentConfigModal from '../components/PaymentConfigModal';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
@@ -212,6 +213,7 @@ export default function FundsScreen() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [userPaymentConfig, setUserPaymentConfig] = useState(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const copyField = async (fieldKey, value) => {
     if (!value) return;
@@ -520,6 +522,26 @@ export default function FundsScreen() {
     ? parsedPledge / effPledgeRate
     : null;
 
+  const handleOpenConfig = () => {
+    setShowConfigModal(true);
+  };
+
+  const handlePressCreateColecta = async () => {
+    const latestConfig = await fetchUserPaymentConfig();
+    if (!hasConfiguredPaymentMethods(latestConfig)) {
+      Alert.alert(
+        'Datos de Pago Requeridos',
+        'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
+        [
+          { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+    setShowCreateModal(true);
+  };
+
   // Crear Colecta
   const handleCreateColecta = async () => {
     if (!titulo.trim() || !proposito.trim() || !montoMeta) {
@@ -533,6 +555,19 @@ export default function FundsScreen() {
     }
     if (tipoTasa === 'fija' && (!tasaFijaValor || parseFloat(tasaFijaValor) <= 0)) {
       Alert.alert('Tasa fija requerida', 'Ingresa el valor numérico para la tasa fija.');
+      return;
+    }
+
+    const latestConfig = await fetchUserPaymentConfig();
+    if (!hasConfiguredPaymentMethods(latestConfig)) {
+      Alert.alert(
+        'Datos de Pago Requeridos',
+        'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
+        [
+          { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
       return;
     }
 
@@ -701,8 +736,8 @@ export default function FundsScreen() {
       const compromisoId = targetColecta.mi_compromiso.id;
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
         payment_method: isBeneficiarySelf ? 'Aporte Propio' : paymentMethod,
-        codigo_banco: isBeneficiarySelf ? undefined : paymentBankCode,
-        referencia_pago: isBeneficiarySelf ? 'Aporte directo de beneficiario' : (paymentRef.trim() || undefined),
+        codigo_banco: undefined,
+        referencia_pago: isBeneficiarySelf ? 'Aporte directo de quien gestiona' : (paymentRef.trim() || undefined),
         comprobante_url: isBeneficiarySelf ? undefined : finalComprobanteUrl,
         nota_pago: isBeneficiarySelf ? 'Aporte propio directo' : (paymentNote.trim() || undefined),
       });
@@ -860,10 +895,10 @@ export default function FundsScreen() {
           {item.proposito}
         </Text>
 
-        {/* Beneficiario y Fecha */}
+        {/* Responsable de gestión y Fecha */}
         <View style={styles.infoRow}>
           <Text style={styles.infoText}>
-            👤 Beneficiario: <Text style={styles.infoHighlight}>{item.beneficiario_nombre}</Text>
+            👤 Gestionado por: <Text style={styles.infoHighlight}>{item.beneficiario_nombre}</Text>
           </Text>
           <Text style={styles.infoText}>
             📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}</Text>
@@ -936,7 +971,7 @@ export default function FundsScreen() {
         {/* Validación de gasto si está completada */}
         {item.gasto_validado && (
           <View style={styles.expenseValidatedBox}>
-            <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por el Beneficiario:</Text>
+            <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por quien gestiona:</Text>
             <Text style={styles.expenseValidatedDesc}>{item.descripcion_gasto}</Text>
             {item.comprobante_gasto_url ? (
               <TouchableOpacity
@@ -1150,14 +1185,33 @@ export default function FundsScreen() {
         <ScreenTitle
           title="Fondos"
           right={
-            activeTab === 'colectas' ? (
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               <TouchableOpacity
-                style={styles.headerAddButton}
-                onPress={() => setShowCreateModal(true)}
+                style={[
+                  styles.headerAddButton,
+                  {
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderColor: '#3b82f6',
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                  },
+                ]}
+                onPress={handleOpenConfig}
               >
-                <Text style={styles.headerAddButtonText}>+ Colecta</Text>
+                <Text style={[styles.headerAddButtonText, { color: '#3b82f6', fontSize: 13 }]}>
+                  ⚙️ Datos
+                </Text>
               </TouchableOpacity>
-            ) : null
+              {activeTab === 'colectas' && (
+                <TouchableOpacity
+                  style={styles.headerAddButton}
+                  onPress={handlePressCreateColecta}
+                >
+                  <Text style={styles.headerAddButtonText}>+ Colecta</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           }
         />
 
@@ -1195,6 +1249,25 @@ export default function FundsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {!hasConfiguredPaymentMethods(userPaymentConfig) && (
+        <TouchableOpacity
+          style={styles.missingPmBanner}
+          onPress={handleOpenConfig}
+          activeOpacity={0.8}
+        >
+          <View style={styles.missingPmBannerIconBox}>
+            <Text style={styles.missingPmBannerIcon}>💳</Text>
+          </View>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.missingPmBannerTitle}>Datos de pago pendientes</Text>
+            <Text style={styles.missingPmBannerSubtitle}>
+              Debes registrar al menos un método de pago antes de proponer una colecta o aportar. Toca aquí para configurarlo.
+            </Text>
+          </View>
+          <Text style={styles.missingPmBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
 
       {(isOffline || connectionError) ? (
         <OfflineNotice
@@ -1445,16 +1518,16 @@ export default function FundsScreen() {
                 </View>
               )}
 
-              <Text style={styles.inputLabel}>Nombre del Beneficiario que recibirá los fondos</Text>
+              <Text style={styles.inputLabel}>Responsable de gestionar la compra o pago</Text>
               <TextInput
                 style={styles.input}
                 value={beneficiarioNombre}
                 onChangeText={setBeneficiarioNombre}
-                placeholder="Nombre de quien pagará el servicio/bien"
+                placeholder="Nombre de quien gestionará la compra o servicio"
                 placeholderTextColor="#64748b"
               />
 
-              {/* Información sobre Métodos de Pago del Creador/Beneficiario */}
+              {/* Información sobre Métodos de Pago de quien gestiona */}
               {userPaymentConfig && hasConfiguredPaymentMethods(userPaymentConfig) ? (
                 <View style={styles.pmConfiguredInfoCard}>
                   <Text style={styles.pmConfiguredInfoTitle}>
@@ -1464,18 +1537,21 @@ export default function FundsScreen() {
                     {getAvailablePaymentMethods(userPaymentConfig).join(' • ')}
                   </Text>
                   <Text style={styles.pmConfiguredInfoSub}>
-                    Los miembros que aporten verán estos datos para transferir directamente a tu cuenta o Pago Móvil.
+                    Los miembros que aporten verán estos datos para transferir directamente a tu cuenta o Pago Móvil para que gestiones la compra o servicio.
                   </Text>
                 </View>
               ) : (
-                <View style={styles.pmWarningInfoCard}>
-                  <Text style={styles.pmWarningInfoTitle}>
-                    ⚠️ Datos de Pago Móvil no configurados
+                <TouchableOpacity
+                  style={[styles.pmWarningInfoCard, { borderColor: '#ef4444' }]}
+                  onPress={handleOpenConfig}
+                >
+                  <Text style={[styles.pmWarningInfoTitle, { color: '#ef4444' }]}>
+                    ⚠️ Datos de Pago requeridos
                   </Text>
                   <Text style={styles.pmWarningInfoSub}>
-                    Aún no has configurado tus datos de pago en tu perfil. Puedes registrarlos en Préstamos > ⚙️ Datos para que los aportantes reciban tus datos bancarios automáticamente.
+                    Debes configurar tus datos de pago para proponer la colecta. Toca aquí para configurarlos ahora mismo.
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
 
               <View style={styles.modalActions}>
@@ -1634,7 +1710,7 @@ export default function FundsScreen() {
               {targetColecta && (
                 <>
                   <Text style={styles.modalSubtitle}>
-                    Colecta: "{targetColecta.titulo}" • Beneficiario: {targetColecta.beneficiario_nombre}
+                    Colecta: "{targetColecta.titulo}" • Gestionado por: {targetColecta.beneficiario_nombre}
                   </Text>
 
                   {targetColecta.mi_compromiso && (
@@ -1653,9 +1729,9 @@ export default function FundsScreen() {
 
                   {currentUser && targetColecta.beneficiario_id === currentUser.id ? (
                     <View style={styles.selfPledgeBox}>
-                      <Text style={styles.selfPledgeTitle}>🤝 Aporte Propio del Beneficiario</Text>
+                      <Text style={styles.selfPledgeTitle}>🤝 Aporte Propio (Responsable de Gestión)</Text>
                       <Text style={styles.selfPledgeText}>
-                        Eres el beneficiario de esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
+                        Eres quien gestiona esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
                       </Text>
                       <View style={{ marginTop: 12, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
                         <Text style={{ color: '#10b981', fontWeight: 'bold', fontSize: 15, textAlign: 'center' }}>
@@ -1676,8 +1752,8 @@ export default function FundsScreen() {
                         <View style={styles.noPmWarningBox}>
                           <Text style={styles.noPmWarningTitle}>⚠️ Sin métodos registrados</Text>
                           <Text style={styles.noPmWarningText}>
-                            El beneficiario ({targetColecta.beneficiario_nombre}) no tiene métodos de pago registrados en el sistema.
-                            Por favor coordina directamente con él para realizar la entrega o transferencia de tu aporte.
+                            Quien gestiona ({targetColecta.beneficiario_nombre}) no tiene métodos de pago registrados en el sistema.
+                            Por favor coordina directamente para realizar la entrega o transferencia de tu aporte.
                           </Text>
                         </View>
                       );
@@ -1713,8 +1789,8 @@ export default function FundsScreen() {
                         {isPagoMovil && pmData && (
                           <View style={styles.pmCard}>
                             <View style={styles.pmCardHeader}>
-                              <Text style={styles.pmCardTitle}>📲 Datos de Pago Móvil del Beneficiario</Text>
-                              <Text style={styles.pmCardSubtitle}>Beneficiario: {targetColecta.beneficiario_nombre}</Text>
+                              <Text style={styles.pmCardTitle}>📲 Datos de Pago Móvil de quien gestiona</Text>
+                              <Text style={styles.pmCardSubtitle}>Gestionado por: {targetColecta.beneficiario_nombre}</Text>
                             </View>
 
                             {/* Monto a pagar en Bs */}
@@ -1821,6 +1897,7 @@ export default function FundsScreen() {
                     );
                   })()}
 
+                  {/* Comentado: No se solicita banco emisor para agilizar el pago de aportes
                   {(normalizePaymentMethodName(paymentMethod) === 'Pago Móvil' || normalizePaymentMethodName(paymentMethod) === 'Transferencia Bancaria') && (
                     <View style={{ marginBottom: 8 }}>
                       <Text style={styles.inputLabel}>Tu Banco Emisor (Venezuela)</Text>
@@ -1839,6 +1916,7 @@ export default function FundsScreen() {
                       </ScrollView>
                     </View>
                   )}
+                  */}
 
                   <Text style={styles.inputLabel}>Número de Referencia Bancaria</Text>
                   <TextInput
@@ -1912,7 +1990,7 @@ export default function FundsScreen() {
             >
               <Text style={styles.modalTitle}>✅ Validar Gasto Realizado</Text>
               <Text style={styles.modalSubtitle}>
-                Como beneficiario, confirma a la mutual cómo se utilizaron los fondos recaudados.
+                Como responsable de la gestión, confirma a la mutual cómo se utilizaron los fondos recaudados.
               </Text>
 
               <Text style={styles.inputLabel}>Detalle del Gasto Realizado *</Text>
@@ -2086,11 +2164,60 @@ export default function FundsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal para Configurar Datos de Pago */}
+      <PaymentConfigModal
+        visible={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSuccess={(savedConfig) => setUserPaymentConfig(savedConfig)}
+        initialConfig={userPaymentConfig}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  missingPmBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
+    padding: 12,
+    backgroundColor: 'rgba(234, 179, 8, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(234, 179, 8, 0.4)',
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  missingPmBannerIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  missingPmBannerIcon: {
+    fontSize: 20,
+  },
+  missingPmBannerTitle: {
+    color: '#fef08a',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  missingPmBannerSubtitle: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  missingPmBannerArrow: {
+    color: '#fef08a',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.screenBg,
