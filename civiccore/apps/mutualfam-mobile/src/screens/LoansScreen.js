@@ -8,6 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi, baseURL } from '../api/client';
 import ScreenTitle from '../components/ScreenTitle';
 import PaymentConfigModal from '../components/PaymentConfigModal';
+import BankTransferCard from '../components/BankTransferCard';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
@@ -152,6 +153,17 @@ export default function LoansScreen() {
     return Object.entries(config).some(([method, val]) => {
       if (method === 'Pago Móvil') {
         return val && typeof val === 'object' && Boolean(val.banco) && Boolean(val.cedula) && Boolean(val.telefono);
+      }
+      if (method === 'Transferencia Bancaria') {
+        return (
+          val &&
+          typeof val === 'object' &&
+          Boolean(val.banco) &&
+          Boolean(val.numero_cuenta) &&
+          String(val.numero_cuenta).replace(/\D/g, '').length === 20 &&
+          Boolean(val.cedula) &&
+          Boolean(val.titular)
+        );
       }
       return typeof val === 'string' && val.trim().length > 0;
     });
@@ -410,6 +422,10 @@ export default function LoansScreen() {
          if (m === 'Pago Móvil') {
             const pm = userConfig[m];
             return !pm || !pm.banco || !pm.telefono || !pm.cedula;
+         }
+         if (m === 'Transferencia Bancaria') {
+            const tb = userConfig[m];
+            return !tb || !tb.banco || !tb.numero_cuenta || String(tb.numero_cuenta).replace(/\D/g, '').length !== 20 || !tb.titular || !tb.cedula;
          }
          return !userConfig[m] || userConfig[m].trim() === '';
       });
@@ -1158,7 +1174,7 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {AVAILABLE_PAYMENT_METHODS.map(method => {
                   const isSelected = acceptedMethods.includes(method);
-                  const isDisabled = method !== "Pago Móvil";
+                  const isDisabled = method !== "Pago Móvil" && method !== "Transferencia Bancaria";
                   return (
                     <TouchableOpacity 
                       key={method} 
@@ -1264,7 +1280,7 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
-                  const isDisabled = method !== "Pago Móvil";
+                  const isDisabled = method !== "Pago Móvil" && method !== "Transferencia Bancaria";
                   return (
                     <TouchableOpacity 
                       key={method} 
@@ -1296,6 +1312,18 @@ export default function LoansScreen() {
                     try {
                       const config = JSON.parse(selectedLoan.requester_payment_methods_json)[notifyMethod];
                       if (!config) return <Text style={{color: '#94a3b8'}}>El solicitante no configuró datos para este método. Deberás coordinar por otro medio.</Text>;
+                      if (notifyMethod === 'Transferencia Bancaria' && typeof config === 'object') {
+                        const montoBs = effectiveBcvRate ? (selectedContrib?.amount_usd * effectiveBcvRate).toFixed(2) : null;
+                        return (
+                          <BankTransferCard
+                            data={config}
+                            montoBs={montoBs}
+                            recipientName={selectedLoan?.requester_name}
+                            tasaLabel={`Tasa BCV: ${effectiveBcvRate}`}
+                            banks={banks}
+                          />
+                        );
+                      }
                       if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
                         const getPrefix = (tipo) => {
                           if (!tipo) return 'V';
@@ -1461,6 +1489,18 @@ export default function LoansScreen() {
                     try {
                       const config = JSON.parse(selectedContrib.funder_payment_methods_json)[notifyMethod];
                       if (!config) return <Text style={{color: '#94a3b8'}}>No tiene este método bien configurado.</Text>;
+                      if (notifyMethod === 'Transferencia Bancaria' && typeof config === 'object') {
+                        const montoBs = effectiveBcvRate && repayAmount ? (parseFloat(repayAmount) * effectiveBcvRate).toFixed(2) : null;
+                        return (
+                          <BankTransferCard
+                            data={config}
+                            montoBs={montoBs}
+                            recipientName={selectedContrib?.funder_name}
+                            tasaLabel={`Tasa BCV: ${effectiveBcvRate}`}
+                            banks={banks}
+                          />
+                        );
+                      }
                       if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
                         const getPrefix = (tipo) => {
                           if (!tipo) return 'V';

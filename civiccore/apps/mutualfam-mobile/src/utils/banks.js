@@ -44,3 +44,37 @@ export function getBankLabel(code, banksList = VENEZUELAN_BANKS) {
   }
   return code;
 }
+
+/**
+ * Limpia cualquier caracter no numérico y limita a 20 dígitos
+ */
+export function cleanAccountNumber(raw) {
+  if (!raw) return '';
+  return String(raw).replace(/\D/g, '').slice(0, 20);
+}
+
+/**
+ * Formatea un número de cuenta de 20 dígitos en el estándar SUDEBAN:
+ * BBBB AAAA DD CCCCCCCCCC (4 - 4 - 2 - 10)
+ */
+export function formatAccountNumber(raw) {
+  const digits = cleanAccountNumber(raw);
+  if (!digits) return '';
+  const parts = [];
+  if (digits.length > 0) parts.push(digits.slice(0, 4));
+  if (digits.length > 4) parts.push(digits.slice(4, 8));
+  if (digits.length > 8) parts.push(digits.slice(8, 10));
+  if (digits.length > 10) parts.push(digits.slice(10, 20));
+  return parts.join(' ');
+}
+
+/**
+ * Encuentra el banco asociado según los primeros 4 dígitos del número de cuenta
+ */
+export function findBankByAccount(accountNumber, banksList = VENEZUELAN_BANKS) {
+  const digits = cleanAccountNumber(accountNumber);
+  if (digits.length < 4) return null;
+  const code = digits.slice(0, 4);
+  return (banksList || VENEZUELAN_BANKS).find((b) => b.code === code) || null;
+}
+

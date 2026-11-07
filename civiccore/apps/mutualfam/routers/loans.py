@@ -80,7 +80,13 @@ def user_has_payment_methods(user_id: int, db: Session) -> bool:
             if method == "Pago Móvil" and isinstance(val, dict):
                 if val.get("banco") and val.get("cedula") and val.get("telefono"):
                     return True
+            elif method == "Transferencia Bancaria" and isinstance(val, dict):
+                cuenta_clean = str(val.get("numero_cuenta") or "").replace(" ", "").replace("-", "")
+                if val.get("banco") and len(cuenta_clean) == 20 and val.get("cedula") and val.get("titular"):
+                    return True
             elif isinstance(val, str) and val.strip():
+                return True
+            elif isinstance(val, dict) and bool(val):
                 return True
         return False
     except Exception:
