@@ -196,7 +196,13 @@ class Colecta(Base):
 
     # Fechas
     fecha_pago = Column(Date, nullable=False)
+    hora_pago = Column(String(10), default="12:00")
     fecha_limite_aportes = Column(Date, nullable=True)
+
+    # Recordatorios y notificaciones automáticas/manuales
+    recordatorio_previo_enviado = Column(Boolean, default=False)
+    recordatorio_mismo_dia_enviado = Column(Boolean, default=False)
+    ultimo_recordatorio_manual = Column(DateTime, nullable=True)
 
     # Parámetros preparados para futuros Smart Contracts
     limite_cancelacion_horas = Column(Integer, nullable=True, default=None)
@@ -247,6 +253,8 @@ class CompromisoColecta(Base):
     fecha_pago = Column(DateTime, nullable=True)
     fecha_validacion = Column(DateTime, nullable=True)
     fecha_cancelacion = Column(DateTime, nullable=True)
+    motivo_rechazo = Column(Text, nullable=True)
+    fecha_rechazo = Column(DateTime, nullable=True)
 
     # Devolución por cancelación de colecta
     fecha_devolucion = Column(DateTime, nullable=True)

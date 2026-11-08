@@ -323,11 +323,25 @@ export const colectasApi = {
     const { data } = await apiClient.post(`/colectas/${colectaId}/notificar-cobro`);
     return data;
   },
+  recordarPendientes: async (colectaId) => {
+    if (!colectaId) {
+      throw new Error('ID de colecta no válido');
+    }
+    const { data } = await apiClient.post(`/colectas/${colectaId}/recordar-pendientes`);
+    return data;
+  },
   confirmPayment: async (colectaId, compromisoId, paymentData) => {
     if (!colectaId || !compromisoId) {
       throw new Error('Parámetros de pago no válidos');
     }
     const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, paymentData);
+    return data;
+  },
+  rejectPayment: async (colectaId, compromisoId, { motivo }) => {
+    if (!colectaId || !compromisoId) {
+      throw new Error('Parámetros de rechazo no válidos');
+    }
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/rechazar-pago`, { motivo });
     return data;
   },
   verifyPayment: async (colectaId, compromisoId) => {

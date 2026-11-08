@@ -38,11 +38,13 @@ async def start_repayment_reminders_task():
         while True:
             try:
                 from services.repayment_reminders import check_and_send_repayment_reminders
+                from services.colectas_reminders import check_and_send_colectas_reminders
                 from civiccore.core.database import SessionLocal
                 with SessionLocal() as db:
                     check_and_send_repayment_reminders(db)
+                    check_and_send_colectas_reminders(db)
             except Exception as e:
-                print(f"⚠️ [REPAYMENT REMINDERS] Error en ciclo periódico: {e}", flush=True)
+                print(f"⚠️ [REPAYMENT/COLECTAS REMINDERS] Error en ciclo periódico: {e}", flush=True)
             await asyncio.sleep(interval)
 
     asyncio.create_task(reminder_loop())
