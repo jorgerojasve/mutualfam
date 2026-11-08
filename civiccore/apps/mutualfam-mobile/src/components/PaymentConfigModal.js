@@ -14,6 +14,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { loansApi } from '../api/client';
+import { Ionicons } from '@expo/vector-icons';
 import {
   VENEZUELAN_BANKS,
   getBankLabel,
@@ -411,13 +412,13 @@ export default function PaymentConfigModal({
                       activeOpacity={isDisabled ? 1 : 0.7}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 16 }}>
-                          {method === 'Pago Móvil'
-                            ? '📲'
-                            : method === 'Transferencia Bancaria'
-                            ? '🏛️'
-                            : '💳'}
-                        </Text>
+                        {method === 'Pago Móvil' ? (
+                          <Ionicons name="phone-portrait-outline" size={17} color="#38bdf8" />
+                        ) : method === 'Transferencia Bancaria' ? (
+                          <Ionicons name="swap-horizontal" size={19} color="#818cf8" />
+                        ) : (
+                          <Ionicons name="card-outline" size={17} color="#94a3b8" />
+                        )}
                         <Text style={[{ color: '#fff' }, isDisabled && { color: '#94a3b8' }]}>
                           {method}
                         </Text>

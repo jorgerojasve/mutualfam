@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { loansApi, authApi, baseURL } from '../api/client';
@@ -756,42 +757,52 @@ export default function LoansScreen() {
   const renderPaymentMethodBadge = (method) => {
     if (!method) return null;
     const m = String(method).trim();
-    let icon = '💳';
+    let iconName = 'card-outline';
     let label = m;
     let bg = 'rgba(148, 163, 184, 0.12)';
     let border = 'rgba(148, 163, 184, 0.3)';
     let textColor = '#cbd5e1';
+    let iconColor = '#cbd5e1';
+    let iconSize = 13;
 
     const lower = m.toLowerCase();
     if (lower.includes('pago móvil') || lower.includes('pago movil')) {
-      icon = '📱';
+      iconName = 'phone-portrait-outline';
       label = 'Pago Móvil';
       bg = 'rgba(2, 132, 199, 0.14)';
       border = 'rgba(56, 189, 248, 0.35)';
       textColor = '#38bdf8';
+      iconColor = '#38bdf8';
+      iconSize = 13;
     } else if (lower.includes('transferencia')) {
-      icon = '🏛️';
+      iconName = 'swap-horizontal';
       label = 'Transferencia';
       bg = 'rgba(99, 102, 241, 0.14)';
       border = 'rgba(129, 140, 248, 0.35)';
       textColor = '#a5b4fc';
+      iconColor = '#a5b4fc';
+      iconSize = 15;
     } else if (lower.includes('efectivo')) {
-      icon = '💵';
+      iconName = 'cash-outline';
       label = 'Efectivo';
       bg = 'rgba(16, 185, 129, 0.14)';
       border = 'rgba(52, 211, 153, 0.35)';
       textColor = '#34d399';
+      iconColor = '#34d399';
+      iconSize = 13;
     } else if (lower.includes('propio') || lower.includes('gestor') || lower.includes('beneficiario')) {
-      icon = '🤝';
+      iconName = 'person-outline';
       label = 'Aporte Propio';
       bg = 'rgba(245, 158, 11, 0.14)';
       border = 'rgba(251, 191, 36, 0.35)';
       textColor = '#fbbf24';
+      iconColor = '#fbbf24';
+      iconSize = 13;
     }
 
     return (
       <View key={m} style={[styles.methodBadge, { backgroundColor: bg, borderColor: border }]}>
-        <Text style={styles.methodBadgeIcon}>{icon}</Text>
+        <Ionicons name={iconName} size={iconSize} color={iconColor} style={styles.methodBadgeIcon} />
         <Text style={[styles.methodBadgeText, { color: textColor }]}>{label}</Text>
       </View>
     );
