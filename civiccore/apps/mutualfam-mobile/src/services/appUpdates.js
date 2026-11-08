@@ -69,6 +69,18 @@ export const checkForAppUpdate = async () => {
     const downloadUrl = data.download_url || `${baseURL}/config/latest-apk`;
     const releaseNotes = data.release_notes || '';
 
+    // Si el servidor reporta error explícito o devolvió un fallback inferior a la versión instalada,
+    // significa que no pudo consultar los releases reales de GitHub. No engañar diciendo "Estás al día".
+    const isOutdatedFallback = compareVersions(latestVersion, currentVersion) < 0;
+    if (data.error || isOutdatedFallback) {
+      return {
+        hasUpdate: false,
+        isMandatory: false,
+        currentVersion,
+        error: data.error || 'No se pudo obtener la versión más reciente del servidor.',
+      };
+    }
+
     // Hay actualización si la última versión es estrictamente mayor a la instalada
     const hasUpdate = compareVersions(currentVersion, latestVersion) < 0;
 
