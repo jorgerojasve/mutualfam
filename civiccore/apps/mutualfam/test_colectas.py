@@ -307,7 +307,70 @@ def run_tests():
         assert c2["tiene_devoluciones_pendientes"] is False
         print(f"✅ Aporte #2 devuelto a Carlos en el mismo efectivo ($15 USD). Todas las devoluciones completadas.")
 
-        print("\n🎉 ¡TODOS LOS TESTS DEL CICLO DE VIDA DE COLECTAS (INCLUYENDO APORTAR MÁS Y DEVOLUCIONES) PASARON EXITOSAMENTE!")
+        print("\n--- TEST 13: Hora de pago, rechazo de pago y recordatorios automáticos ---")
+        # 1. Crear colecta con hora_pago personalizada (08:30)
+        colecta_hora = {
+            "titulo": "Colecta Médica Matutina",
+            "proposito": "Compra de insumos a primera hora",
+            "monto_meta_usd": 40.0,
+            "currency": "USD",
+            "tipo_tasa": "bcv",
+            "fecha_pago": str(date.today()),
+            "hora_pago": "08:30"
+        }
+        res = client.post("/api/v1/colectas/", json=colecta_hora, headers=headers_ana)
+        assert res.status_code == 200
+        c3 = res.json()
+        c3_id = c3["id"]
+        assert c3["hora_pago"] == "08:30"
+        print("✅ Colecta creada exitosamente con hora_pago=08:30.")
+
+        # 2. Carlos promete $40
+        res = client.post(f"/api/v1/colectas/{c3_id}/compromisos", json={"monto_usd": 40.0, "currency": "USD"}, headers=headers_carlos)
+        assert res.status_code == 200
+        c3 = res.json()
+        comp_carlos_id = c3["compromisos"][0]["id"]
+        assert c3["compromisos"][0]["estado"] in ["prometido", "activa"]
+
+        # 3. Carlos notifica pago
+        pago_carlos = {
+            "payment_method": "Pago Móvil",
+            "referencia_pago": "PM-998877",
+            "nota_pago": "Transferido temprano"
+        }
+        res = client.post(f"/api/v1/colectas/{c3_id}/compromisos/{comp_carlos_id}/confirmar-pago", json=pago_carlos, headers=headers_carlos)
+        assert res.status_code == 200
+        c3 = res.json()
+        comp_pagado = next(c for c in c3["compromisos"] if c["id"] == comp_carlos_id)
+        assert comp_pagado["estado"] == "pagado"
+        print("✅ Carlos notificó pago (estado='pagado').")
+
+        # 4. Ana (gestora) rechaza el pago con motivo
+        rechazo = {
+            "motivo": "No se visualiza el dinero en la cuenta de Banco Mercantil"
+        }
+        res = client.post(f"/api/v1/colectas/{c3_id}/compromisos/{comp_carlos_id}/rechazar-pago", json=rechazo, headers=headers_ana)
+        assert res.status_code == 200
+        c3 = res.json()
+        comp_rechazado = next(c for c in c3["compromisos"] if c["id"] == comp_carlos_id)
+        assert comp_rechazado["estado"] == "prometido"
+        assert comp_rechazado["motivo_rechazo"] == "No se visualiza el dinero en la cuenta de Banco Mercantil"
+        assert comp_rechazado["comprobante_url"] is None
+        assert comp_rechazado["referencia_pago"] is None
+        print(f"✅ Pago rechazado por la gestora. Aporte regresó a estado prometido con motivo guardado.")
+
+        # 5. Probar servicio de recordatorios automáticos
+        from services.colectas_reminders import check_and_send_colectas_reminders
+        reminders_result = check_and_send_colectas_reminders(db, force=True)
+        assert "sent_day_before" in reminders_result or "sent_same_day" in reminders_result
+        print(f"✅ Servicio de recordatorios automáticos ejecutado exitosamente ({reminders_result}).")
+
+        # 6. Probar endpoint de recordatorio manual
+        res = client.post(f"/api/v1/colectas/{c3_id}/recordar-pendientes", headers=headers_ana)
+        assert res.status_code == 200
+        print("✅ Endpoint /recordar-pendientes ejecutado exitosamente por la gestora.")
+
+        print("\n🎉 ¡TODOS LOS TESTS DEL CICLO DE VIDA DE COLECTAS (INCLUYENDO APORTAR MÁS, DEVOLUCIONES Y RECORDATORIOS/RECHAZOS) PASARON EXITOSAMENTE!")
     finally:
         db.close()
 

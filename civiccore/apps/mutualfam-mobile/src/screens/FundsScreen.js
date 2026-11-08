@@ -226,6 +226,31 @@ export default function FundsScreen() {
     return d;
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [horaPago, setHoraPago] = useState('12:00');
+  const [timeObj, setTimeObj] = useState(() => {
+    const t = new Date();
+    t.setHours(12, 0, 0, 0);
+    return t;
+  });
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+  const onTimeChange = (event, selectedTime) => {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (selectedTime) {
+      setTimeObj(selectedTime);
+      const hours = String(selectedTime.getHours()).padStart(2, '0');
+      const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+      setHoraPago(`${hours}:${minutes}`);
+    }
+  };
+
+  // Rechazar Pago por parte del Gestor
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectCompromiso, setRejectCompromiso] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const [beneficiarioNombre, setBeneficiarioNombre] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -669,6 +694,7 @@ export default function FundsScreen() {
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
+        hora_pago: horaPago || '12:00',
         beneficiario_nombre: beneficiarioNombre.trim() || undefined,
         beneficiario_datos_pago: (userPaymentConfig && Object.keys(userPaymentConfig).length > 0) ? userPaymentConfig : undefined,
       });
@@ -684,6 +710,7 @@ export default function FundsScreen() {
       defaultD.setDate(defaultD.getDate() + 7);
       setDateObj(defaultD);
       setFechaPago(defaultD.toISOString().split('T')[0]);
+      setHoraPago('12:00');
       Alert.alert('¡Colecta Creada!', 'La propuesta de colecta está activa y lista para recibir compromisos.');
       setConnectionError(false);
       if (setIsOffline) setIsOffline(false);
@@ -770,34 +797,37 @@ export default function FundsScreen() {
     );
   };
 
-  // Notificar Cobro en Bs
-  const handleNotifyPayment = async (colecta) => {
+  // Recordatorio de Cobro para Aportes Pendientes (Gestor)
+  const handleRemindPending = async (colecta) => {
     Alert.alert(
-      'Notificar Cobro',
-      `¿Deseas calcular el monto en Bs según la tasa ${colecta.tasa_label} (${colecta.tasa_actual?.toFixed(2)}) y notificar a los aportantes?`,
+      'Recordar Pago',
+      `¿Deseas enviar un recordatorio con el monto actualizado en Bs (tasa ${colecta.tasa_label}: ${colecta.tasa_actual?.toFixed(2)}) a los aportantes que aún no han notificado su pago?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Notificar a Todos',
+          text: 'Enviar Recordatorio',
           onPress: async () => {
             try {
-              await colectasApi.triggerPaymentNotifications(colecta.id);
+              await colectasApi.recordarPendientes(colecta.id);
               setConnectionError(false);
               if (setIsOffline) setIsOffline(false);
-              Alert.alert('Notificaciones Enviadas', 'Se notificó a los aportantes su monto en Bolívares.');
+              Alert.alert('¡Recordatorio Enviado!', 'Se notificó a los aportantes con compromisos pendientes.');
               fetchColectas();
             } catch (e) {
               if (isNetworkError(e)) {
                 setConnectionError(true);
                 if (setIsOffline) setIsOffline(true);
               }
-              Alert.alert('Error', getErrorMessage(e, 'No se pudieron enviar las notificaciones'));
+              Alert.alert('Error', getErrorMessage(e, 'No se pudo enviar el recordatorio'));
             }
           },
         },
       ]
     );
   };
+
+  // Alias para retrocompatibilidad
+  const handleNotifyPayment = handleRemindPending;
 
   // Confirmar Pago de Aporte
   const handleConfirmPayment = async () => {
@@ -1017,6 +1047,44 @@ export default function FundsScreen() {
     );
   };
 
+  // Rechazar Pago de Aporte por el Gestor
+  const handleOpenRejectCompromiso = (colecta, comp) => {
+    setTargetColecta(colecta);
+    setRejectCompromiso(comp);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const handleConfirmRejectCompromiso = async () => {
+    if (!targetColecta || !rejectCompromiso) return;
+    if (!rejectReason.trim()) {
+      Alert.alert('Motivo requerido', 'Por favor ingresa la razón por la cual rechazas la notificación de pago.');
+      return;
+    }
+    setRejecting(true);
+    try {
+      await colectasApi.rejectPayment(targetColecta.id, rejectCompromiso.id, {
+        motivo: rejectReason.trim(),
+      });
+      setShowRejectModal(false);
+      setRejectCompromiso(null);
+      setRejectReason('');
+      Alert.alert(
+        'Pago Rechazado',
+        'El aporte ha regresado a estado prometido y se notificó al socio con el motivo para que pueda revisar o transferir nuevamente.'
+      );
+      fetchColectas();
+    } catch (e) {
+      if (isNetworkError(e)) {
+        setConnectionError(true);
+        if (setIsOffline) setIsOffline(true);
+      }
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo rechazar la notificación de pago'));
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   // Crear Fondo Común
   const handleCreateFund = async () => {
     if (!newFundName.trim()) {
@@ -1109,7 +1177,7 @@ export default function FundsScreen() {
             👤 Gestionado por: <Text style={styles.infoHighlight}>{item.beneficiario_nombre}</Text>
           </Text>
           <Text style={styles.infoText}>
-            📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}</Text>
+            📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}{item.hora_pago ? ` (${item.hora_pago})` : ''}</Text>
           </Text>
         </View>
 
@@ -1357,7 +1425,16 @@ export default function FundsScreen() {
                           </View>
                         )}
 
-                        {/* Acciones de aporte */}
+                        {/* Aviso si el pago fue rechazado por el gestor */}
+                        {comp.motivo_rechazo && comp.estado === 'prometido' && (
+                          <View style={styles.rejectNoticeBox}>
+                            <Text style={styles.rejectNoticeTitle}>⚠️ Notificación de pago rechazada por quien gestiona:</Text>
+                            <Text style={styles.rejectNoticeMotive}>"{comp.motivo_rechazo}"</Text>
+                            <Text style={styles.rejectNoticeHelp}>Por favor verifica tu pago o transfiere nuevamente y notifícalo con el comprobante correspondiente.</Text>
+                          </View>
+                        )}
+
+                        {/* Acciones de aporte para el gestor */}
                         {isGestor && comp.estado === 'pagado' && (
                           <View style={styles.contribActions}>
                             <TouchableOpacity
@@ -1365,6 +1442,12 @@ export default function FundsScreen() {
                               onPress={() => handleVerifyCompromiso(item.id, comp.id, comp.socio_name, comp.monto_usd)}
                             >
                               <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.btnReject}
+                              onPress={() => handleOpenRejectCompromiso(item, comp)}
+                            >
+                              <Text style={styles.btnRejectText}>✕ Rechazar</Text>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -1479,6 +1562,16 @@ export default function FundsScreen() {
               onPress={() => handleCancelColecta(item)}
             >
               <Text style={[styles.btnDangerOutlineText, { color: '#f87171' }]}>⚠️ Cancelar Colecta</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Botón Recordatorio de Pago para el Gestor */}
+          {isGestor && (item.estado === 'activa' || item.estado === 'propuesta') && item.compromisos?.some(c => c.estado === 'prometido' || c.estado === 'notificado') && (
+            <TouchableOpacity
+              style={styles.btnReminder}
+              onPress={() => handleRemindPending(item)}
+            >
+              <Text style={styles.btnReminderText}>🔔 Recordar Pago a Pendientes</Text>
             </TouchableOpacity>
           )}
 
@@ -1876,6 +1969,47 @@ export default function FundsScreen() {
                 </View>
               )}
 
+              <Text style={styles.inputLabel}>Hora de Pago / Liquidación *</Text>
+              <TouchableOpacity
+                style={[styles.input, { justifyContent: 'center' }]}
+                onPress={() => setShowTimePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: horaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
+                  ⏰ {horaPago || '12:00'} (Tocar para cambiar hora)
+                </Text>
+              </TouchableOpacity>
+              {showTimePicker && (
+                <View style={Platform.OS === 'ios' ? styles.iosDatePickerWrapper : null}>
+                  <DateTimePicker
+                    value={timeObj}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    onChange={onTimeChange}
+                    themeVariant="dark"
+                  />
+                  {Platform.OS === 'ios' && (
+                    <TouchableOpacity
+                      style={styles.iosDateDoneButton}
+                      onPress={() => setShowTimePicker(false)}
+                    >
+                      <Text style={styles.iosDateDoneButtonText}>✓ Listo</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Caja Explicativa de Regla de Monedas */}
+              <View style={styles.paymentRuleCard}>
+                <Text style={styles.paymentRuleTitle}>ℹ️ Regla de Aportes y Liquidación</Text>
+                <Text style={styles.paymentRuleText}>
+                  • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan exactamente el día de pago/liquidación a la tasa de ese día.
+                </Text>
+                <Text style={styles.paymentRuleText}>
+                  • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden pagarse o entregarse con anticipación.
+                </Text>
+              </View>
+
               <Text style={styles.inputLabel}>Responsable de gestionar la compra o pago</Text>
               <TextInput
                 style={styles.input}
@@ -2016,9 +2150,15 @@ export default function FundsScreen() {
                   )}
                 </View>
 
-                <Text style={styles.noteBox}>
-                  ℹ️ Tu compromiso es voluntario. Al llegar la fecha de cobro recibirás la notificación con el monto exacto en Bolívares.
-                </Text>
+                <View style={styles.paymentRuleCard}>
+                  <Text style={styles.paymentRuleTitle}>ℹ️ ¿Cuándo se realiza el pago?</Text>
+                  <Text style={styles.paymentRuleText}>
+                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan el día de pago/liquidación ({targetColecta?.fecha_pago}{targetColecta?.hora_pago ? ` a las ${targetColecta.hora_pago}` : ''}) calculados a la tasa de ese día.
+                  </Text>
+                  <Text style={styles.paymentRuleText}>
+                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden transferirse o entregarse antes.
+                  </Text>
+                </View>
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
@@ -2684,6 +2824,66 @@ export default function FundsScreen() {
                   </>
                 );
               })()}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ==================================================== */}
+      {/* MODAL 9: RECHAZAR PAGO (GESTOR)                      */}
+      {/* ==================================================== */}
+      <Modal visible={showRejectModal} animationType="slide" transparent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+            >
+              <Text style={[styles.modalTitle, { color: '#f87171' }]}>✕ Rechazar Notificación de Pago</Text>
+              <Text style={styles.modalSubtitle}>
+                Indica a {rejectCompromiso?.socio_name} el motivo por el cual no se acredita su aporte de ${formatVE(rejectCompromiso?.monto_usd)} USD. El aporte volverá al estado prometido para que el socio pueda verificar o pagar nuevamente.
+              </Text>
+
+              <Text style={styles.inputLabel}>Motivo del Rechazo *</Text>
+              <TextInput
+                style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="Ej: No aparece en cuenta bancaria, comprobante ilegible, referencia errónea..."
+                placeholderTextColor="#64748b"
+                multiline
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => {
+                    setShowRejectModal(false);
+                    setRejectCompromiso(null);
+                    setRejectReason('');
+                  }}
+                  disabled={rejecting}
+                >
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalSubmit, { backgroundColor: '#ef4444' }]}
+                  onPress={handleConfirmRejectCompromiso}
+                  disabled={rejecting}
+                >
+                  {rejecting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Rechazar Pago</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -4053,5 +4253,80 @@ const styles = StyleSheet.create({
     color: '#f87171',
     fontSize: 11,
     fontWeight: '600',
+  },
+  btnReminder: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
+  },
+  btnReminderText: {
+    color: '#fbbf24',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  btnReject: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  btnRejectText: {
+    color: '#f87171',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  paymentRuleCard: {
+    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 10,
+    gap: 4,
+  },
+  paymentRuleTitle: {
+    color: '#38bdf8',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  paymentRuleText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  rejectNoticeBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 6,
+    gap: 3,
+  },
+  rejectNoticeTitle: {
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rejectNoticeMotive: {
+    color: '#fca5a5',
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  rejectNoticeHelp: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    marginTop: 2,
   },
 });

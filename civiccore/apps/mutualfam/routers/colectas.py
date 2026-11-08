@@ -38,9 +38,14 @@ class CreateColectaRequest(BaseModel):
     tipo_tasa: str = "bcv"  # bcv, usdt, euro, fija
     tasa_fija_valor: Optional[float] = None
     fecha_pago: date
+    hora_pago: Optional[str] = "12:00"
     fecha_limite_aportes: Optional[date] = None
     beneficiario_nombre: Optional[str] = None
     beneficiario_datos_pago: Optional[Dict[str, Any]] = None
+
+
+class RechazarPagoRequest(BaseModel):
+    motivo: str
 
 
 class PledgeCommitmentRequest(BaseModel):
@@ -101,6 +106,8 @@ class CompromisoResponse(BaseModel):
     referencia_devolucion: Optional[str] = None
     comprobante_devolucion_url: Optional[str] = None
     comision_descontada: Optional[float] = 0.0
+    motivo_rechazo: Optional[str] = None
+    fecha_rechazo: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -135,6 +142,7 @@ class ColectaResponse(BaseModel):
     descripcion_gasto: Optional[str] = None
     comprobante_gasto_url: Optional[str] = None
     fecha_pago: date
+    hora_pago: Optional[str] = "12:00"
     fecha_limite_aportes: Optional[date] = None
     estado: str
     motivo_cancelacion: Optional[str] = None
@@ -203,6 +211,8 @@ def _serialize_compromiso(comp: CompromisoColecta, db: Optional[Session] = None)
         referencia_devolucion=getattr(comp, "referencia_devolucion", None),
         comprobante_devolucion_url=getattr(comp, "comprobante_devolucion_url", None),
         comision_descontada=getattr(comp, "comision_descontada", 0.0) or 0.0,
+        motivo_rechazo=getattr(comp, "motivo_rechazo", None),
+        fecha_rechazo=getattr(comp, "fecha_rechazo", None),
     )
 
 
@@ -330,6 +340,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int, db: Optional[Sess
         descripcion_gasto=colecta.descripcion_gasto,
         comprobante_gasto_url=colecta.comprobante_gasto_url,
         fecha_pago=colecta.fecha_pago,
+        hora_pago=getattr(colecta, "hora_pago", "12:00") or "12:00",
         fecha_limite_aportes=colecta.fecha_limite_aportes,
         estado=estado_str,
         motivo_cancelacion=getattr(colecta, "motivo_cancelacion", None),
@@ -446,6 +457,7 @@ def create_colecta(
         beneficiario_nombre=req.beneficiario_nombre or f"{org_member['user'].first_name} {org_member['user'].last_name or ''}".strip(),
         beneficiario_datos_pago=datos_pago_json,
         fecha_pago=req.fecha_pago,
+        hora_pago=req.hora_pago or "12:00",
         fecha_limite_aportes=req.fecha_limite_aportes or req.fecha_pago,
         estado=EstadoColecta.PROPUESTA
     )
@@ -461,7 +473,7 @@ def create_colecta(
         f"👤 Proponente: {org_member['user'].first_name}\n"
         f"💵 Meta: <b>${nueva_colecta.monto_meta_usd:,.2f} USD</b> (Bs {meta_ves:,.2f})\n"
         f"📊 Tasa acordada: <b>{nueva_colecta.tipo_tasa.value.upper()}</b> (Ref: Bs {rate_val:,.2f})\n"
-        f"📅 Fecha de pago: {nueva_colecta.fecha_pago}\n"
+        f"📅 Fecha de pago: {nueva_colecta.fecha_pago} (Hora: {nueva_colecta.hora_pago})\n"
         f"📝 <i>{nueva_colecta.proposito}</i>"
     )
     send_telegram_notification(msg)
@@ -699,6 +711,7 @@ def cancel_commitment(
     return _serialize_colecta(colecta, org_member["user"].id)
 
 
+@router.post("/{colecta_id}/recordar-pendientes", response_model=ColectaResponse)
 @router.post("/{colecta_id}/notificar-cobro", response_model=ColectaResponse)
 def trigger_payment_notifications(
     colecta_id: int,
@@ -707,7 +720,7 @@ def trigger_payment_notifications(
 ):
     """
     Calcula el monto exacto en Bolívares de cada compromiso según la tasa del día
-    y envía la notificación push con los montos en Bs a cada aportante.
+    y envía la notificación/recordatorio push con los montos en Bs a cada aportante con pago pendiente.
     """
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
@@ -719,6 +732,10 @@ def trigger_payment_notifications(
 
     if not colecta:
         raise HTTPException(status_code=404, detail="Colecta no encontrada.")
+
+    gestor_id = colecta.beneficiario_id or colecta.proponente_id
+    if gestor_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el responsable de la colecta puede enviar recordatorios.")
 
     tasa_tipo_str = colecta.tipo_tasa.value if hasattr(colecta.tipo_tasa, "value") else str(colecta.tipo_tasa)
     rate_hoy = tasa_cambio.get_rate(tasa_tipo_str, colecta.tasa_fija_valor)
@@ -739,12 +756,21 @@ def trigger_payment_notifications(
             notify_users(
                 db,
                 [comp.socio_id],
-                f"💵 Cobro de Colecta: {colecta.titulo}",
-                f"Tu aporte de ${comp.monto_usd:,.2f} USD equivale a Bs {comp.monto_bs:,.2f} (Tasa {tasa_tipo_str.upper()}: {rate_hoy:,.2f})."
+                f"🔔 Recordatorio de Pago: {colecta.titulo}",
+                f"Quien gestiona te recuerda tu aporte de ${comp.monto_usd:,.2f} USD (≈ Bs {comp.monto_bs:,.2f} a tasa {tasa_tipo_str.upper()}: {rate_hoy:,.2f}). Por favor realiza tu pago y adjunta el comprobante.",
+                data={"colecta_id": colecta.id, "tipo": "recordatorio_manual"}
             )
 
+    colecta.ultimo_recordatorio_manual = now
     db.commit()
     db.refresh(colecta)
+
+    msg_rec = (
+        f"🔔 <b>Recordatorio de Pago emitido</b>\n\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"👤 {org_member['user'].first_name} ha enviado un recordatorio a los aportantes con compromisos pendientes."
+    )
+    send_telegram_notification(msg_rec)
 
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
     return _serialize_colecta(colecta, org_member["user"].id)
@@ -935,6 +961,84 @@ def verify_commitment_payment(
 
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
     return _serialize_colecta(colecta, org_member["user"].id)
+
+
+@router.post("/{colecta_id}/compromisos/{compromiso_id}/rechazar-pago", response_model=ColectaResponse)
+def reject_commitment_payment(
+    colecta_id: int,
+    compromiso_id: int,
+    req: RechazarPagoRequest,
+    org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    El responsable de la colecta indica que quien notificó el pago en realidad aún no ha pagado.
+    El compromiso regresa del estado de PAGADO o NOTIFICADO al estado de PROMETIDO,
+    guardando el comentario de rechazo para conocimiento del aportante.
+    """
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    colecta = db.query(Colecta).filter(
+        Colecta.id == colecta_id,
+        Colecta.organization_id == org_member["organization"].id
+    ).first()
+    if not colecta:
+        raise HTTPException(status_code=404, detail="Colecta no encontrada.")
+
+    gestor_id = colecta.beneficiario_id or colecta.proponente_id
+    if gestor_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el responsable de la colecta puede rechazar pagos.")
+
+    compromiso = db.query(CompromisoColecta).filter(
+        CompromisoColecta.id == compromiso_id,
+        CompromisoColecta.colecta_id == colecta.id
+    ).first()
+    if not compromiso:
+        raise HTTPException(status_code=404, detail="Compromiso no encontrado.")
+
+    if compromiso.estado not in [EstadoCompromiso.PAGADO, EstadoCompromiso.NOTIFICADO]:
+        raise HTTPException(status_code=400, detail="Solo se pueden rechazar aportes con pago notificado o en validación.")
+
+    motivo = req.motivo.strip()
+    if not motivo:
+        raise HTTPException(status_code=400, detail="Debe indicar el motivo por el cual se rechaza el pago.")
+
+    # Revertir estado a PROMETIDO y registrar motivo
+    compromiso.estado = EstadoCompromiso.PROMETIDO
+    compromiso.motivo_rechazo = motivo
+    compromiso.fecha_rechazo = utcnow()
+    compromiso.fecha_pago = None
+    compromiso.comprobante_url = None
+    compromiso.referencia_pago = None
+    compromiso.payment_method = None
+    compromiso.nota_pago = None
+
+    db.commit()
+    db.refresh(colecta)
+
+    socio_name = f"{compromiso.socio.first_name} {compromiso.socio.last_name or ''}".strip() if compromiso.socio else "Socio"
+
+    # Notificación Telegram
+    msg_rej = (
+        f"⚠️ <b>Pago No Verificado en Colecta</b>\n\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"👤 Aportante: <b>{socio_name}</b>\n"
+        f"📝 Motivo de rechazo: <i>{motivo}</i>\n"
+        f"El aporte de ${compromiso.monto_usd:,.2f} USD ha regresado a estado prometido."
+    )
+    send_telegram_notification(msg_rej)
+
+    # Push Notification al socio
+    notify_users(
+        db,
+        [compromiso.socio_id],
+        "⚠️ Pago no recibido en colecta",
+        f"Quien gestiona '{colecta.titulo}' indicó que no ha recibido tu pago. Motivo: \"{motivo}\". Tu aporte volvió a estado prometido para que puedas pagar nuevamente.",
+        data={"colecta_id": colecta.id, "compromiso_id": compromiso.id, "tipo": "pago_rechazado"}
+    )
+
+    notify_org(colecta.organization_id, "COLECTAS_CHANGED")
     return _serialize_colecta(colecta, org_member["user"].id)
 
 

@@ -181,7 +181,9 @@ export const colectasApi = {
   },
   cancelCommitment: (colectaId, compromisoId) => request(`/colectas/${colectaId}/compromisos/${compromisoId}`, { method: 'DELETE' }),
   triggerPaymentNotifications: (colectaId) => request(`/colectas/${colectaId}/notificar-cobro`, { method: 'POST' }),
+  recordarPendientes: (colectaId) => request(`/colectas/${colectaId}/recordar-pendientes`, { method: 'POST' }),
   confirmPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, { method: 'POST', body: JSON.stringify(data) }),
+  rejectPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/rechazar-pago`, { method: 'POST', body: JSON.stringify(data) }),
   validateExpense: (colectaId, data) => request(`/colectas/${colectaId}/validar-gasto`, { method: 'POST', body: JSON.stringify(data) }),
   cancelColecta: (colectaId) => request(`/colectas/${colectaId}/cancelar`, { method: 'PATCH' }),
 };
