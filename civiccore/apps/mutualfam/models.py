@@ -152,7 +152,8 @@ class TipoTasaColecta(str, enum.Enum):
 class EstadoCompromiso(str, enum.Enum):
     PROMETIDO = "prometido"       # Socio prometió aportar
     NOTIFICADO = "notificado"     # Notificado con monto en Bs
-    PAGADO = "pagado"             # Pago confirmado con comprobante
+    PAGADO = "pagado"             # Pago confirmado con comprobante (En validación)
+    VALIDADO = "validado"         # Pago verificado por el gestor de la colecta
     CANCELADO = "cancelado"       # Cancelado antes del pago
 
 
@@ -171,10 +172,12 @@ class Colecta(Base):
     titulo = Column(String(200), nullable=False)
     proposito = Column(Text, nullable=False)
 
-    # Metas financieras (Base USD)
+    # Metas financieras (Base USD y Contravalor VES)
     monto_meta_usd = Column(Float, nullable=False)
+    monto_meta_ves = Column(Float, nullable=True)
     monto_prometido_usd = Column(Float, default=0.0)
     monto_recaudado_usd = Column(Float, default=0.0)
+    moneda_origen = Column(String(10), default="USD")  # 'USD' | 'VES'
 
     # Tasa de cambio acordada
     tipo_tasa = Column(Enum(TipoTasaColecta), default=TipoTasaColecta.BCV, nullable=False)
@@ -239,6 +242,7 @@ class CompromisoColecta(Base):
     fecha_compromiso = Column(DateTime, default=utcnow)
     fecha_notificacion = Column(DateTime, nullable=True)
     fecha_pago = Column(DateTime, nullable=True)
+    fecha_validacion = Column(DateTime, nullable=True)
     fecha_cancelacion = Column(DateTime, nullable=True)
 
     # Relaciones

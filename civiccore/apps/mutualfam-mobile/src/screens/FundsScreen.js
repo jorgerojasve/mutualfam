@@ -827,6 +827,33 @@ export default function FundsScreen() {
     }
   };
 
+  // Validar Pago de Aporte por el Gestor (Homologado a Préstamos)
+  const handleVerifyCompromiso = (colectaId, compId, socioName, montoUsd) => {
+    Alert.alert(
+      "Validar Pago",
+      `¿Confirmas que recibiste el aporte de $${formatVE(montoUsd)} USD de ${socioName || 'este socio'}?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Sí, Validar",
+          onPress: async () => {
+            try {
+              await colectasApi.verifyPayment(colectaId, compId);
+              Alert.alert('¡Éxito!', 'Pago de aporte validado correctamente.');
+              fetchColectas();
+            } catch (e) {
+              if (isNetworkError(e)) {
+                setConnectionError(true);
+                if (setIsOffline) setIsOffline(true);
+              }
+              Alert.alert('Error', getErrorMessage(e, 'No se pudo validar el pago'));
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Crear Fondo Común
   const handleCreateFund = async () => {
     if (!newFundName.trim()) {
@@ -880,6 +907,7 @@ export default function FundsScreen() {
     const badge = getStatusBadge(item.estado);
     const isOwner = currentUser && item.proponente_id === currentUser.id;
     const isBeneficiary = currentUser && item.beneficiario_id === currentUser.id;
+    const isGestor = currentUser && (currentUser.id === (item.beneficiario_id || item.proponente_id));
     const myPledge = item.mi_compromiso;
 
     return (
@@ -919,68 +947,71 @@ export default function FundsScreen() {
           </Text>
         </View>
 
-        {/* Barra de Progreso Financiero */}
+        {/* Barra de Progreso Financiero (Homologada a Préstamos) */}
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
-            <View>
-              <Text style={styles.progressLabel}>
-                Prometido: <Text style={styles.progressAmount}>${formatVE(item.monto_prometido_usd)} USD</Text>
+            <Text style={styles.progressHeaderMeta}>
+              🎯 Meta: ${formatVE(item.monto_meta_usd)} USD{' '}
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
+                (~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * item.tasa_actual))})
               </Text>
-              <Text style={{ fontSize: 11, color: '#38bdf8', fontWeight: '600', marginTop: 1 }}>
-                • Bs {formatVE(item.monto_prometido_bs || (item.monto_prometido_usd * item.tasa_actual))}
-              </Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.progressMeta}>
-                Meta: ${formatVE(item.monto_meta_usd)} USD
-              </Text>
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
-                ~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * item.tasa_actual))}
-              </Text>
-            </View>
+            </Text>
+            <Text style={[styles.progressStatusHint, { color: item.is_active ? '#4ade80' : '#f59e0b' }]}>
+              {item.is_active
+                ? '🎉 Quorum alcanzado'
+                : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - ((item.monto_prometido_usd || 0) + (item.monto_pagado_usd || 0) + (item.monto_validado_usd || 0))))} USD`}
+            </Text>
           </View>
 
-          <View style={styles.progressBarBackground}>
+          <Text style={styles.progressText}>📢 Prometido: ${formatVE(item.monto_prometido_usd || 0)} USD</Text>
+          <Text style={styles.progressText}>💸 Pagado: ${formatVE(item.monto_pagado_usd || 0)} USD</Text>
+          <Text style={styles.progressText}>✅ Validado: ${formatVE(item.monto_validado_usd || 0)} USD</Text>
+
+          <View style={[styles.progressBarBackground, { marginTop: 6 }]}>
             <View
               style={[
                 styles.progressBarFill,
                 {
-                  width: `${Math.min(item.porcentaje_prometido, 100)}%`,
+                  width: `${Math.min(item.porcentaje_prometido || 0, 100)}%`,
                   backgroundColor: item.porcentaje_prometido >= 100 ? '#10b981' : '#3b82f6',
                 },
               ]}
             />
           </View>
-
-          <View style={styles.progressFooter}>
-            <Text style={styles.progressPercent}>{item.porcentaje_prometido}% alcanzado</Text>
-            <Text style={[styles.progressStatusHint, { color: item.is_active ? '#10b981' : '#f59e0b' }]}>
-              {item.is_active
-                ? '🎉 ¡Quorum alcanzado!'
-                : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - item.monto_prometido_usd))} USD`}
-            </Text>
-          </View>
         </View>
 
-        {/* Estado de mi compromiso si existe */}
-        {myPledge && (
-          <View style={styles.myPledgeBox}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.myPledgeTitle}>Mi compromiso voluntario:</Text>
-              <Text style={styles.myPledgeAmount}>
-                ${formatVE(myPledge.monto_usd)} USD
-                <Text style={{ color: '#38bdf8', fontWeight: 'normal' }}>
-                  {` (~Bs ${formatVE(myPledge.monto_bs || (myPledge.monto_usd * item.tasa_actual))})`}
+        {/* Estado de mi compromiso si existe (Homologado a Préstamos) */}
+        {(() => {
+          if (!myPledge) return null;
+          const myPledgeStateConfig = {
+            prometido:  { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+            notificado: { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+            pagado:     { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+            paid:       { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+            validado:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+            verified:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+          };
+          const myCfg = myPledgeStateConfig[myPledge.estado] || myPledgeStateConfig.prometido;
+
+          return (
+            <View style={[styles.myPledgeBox, { backgroundColor: myCfg.bg, borderColor: myCfg.border }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.myPledgeTitle, { color: myCfg.border }]}>Mi compromiso voluntario:</Text>
+                <Text style={styles.myPledgeAmount}>
+                  ${formatVE(myPledge.monto_usd)} USD
+                  <Text style={{ color: '#cbd5e1', fontWeight: 'normal' }}>
+                    {` (~Bs ${formatVE(myPledge.monto_bs || (myPledge.monto_usd * item.tasa_actual))})`}
+                  </Text>
                 </Text>
-              </Text>
+              </View>
+              <View style={[styles.pledgeStatePill, { backgroundColor: myCfg.badgeBg }]}>
+                <Text style={[styles.pledgeStateText, { color: myCfg.badgeText }]}>
+                  {myCfg.icon} {myCfg.label}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.pledgeStatePill, { backgroundColor: myPledge.estado === 'pagado' ? '#065f46' : '#1e3a8a' }]}>
-              <Text style={styles.pledgeStateText}>
-                {myPledge.estado === 'pagado' ? '✅ Pagado' : myPledge.estado === 'notificado' ? '💵 Cobro Listo' : '⏳ Prometido'}
-              </Text>
-            </View>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Validación de gasto si está completada */}
         {item.gasto_validado && (
@@ -1014,9 +1045,12 @@ export default function FundsScreen() {
               <Text style={styles.contribsTitle}>Aportes en curso ({activeCompromisos.length}):</Text>
               {activeCompromisos.map(comp => {
                 const csMap = {
-                  prometido: { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Prometido' },
-                  notificado: { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '💵', label: 'Cobro listo' },
-                  pagado: { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '✅', label: 'Pagado' },
+                  prometido:     { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+                  notificado:    { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+                  pagado:        { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+                  paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+                  validado:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+                  verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
                 };
                 const cs = csMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
                 const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
@@ -1040,7 +1074,7 @@ export default function FundsScreen() {
                         </View>
                       </View>
                       <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
-                        <Text style={{ fontSize: 11 }}>{cs.icon}</Text>
+                        <Text style={{ fontSize: 11 }}>{cs.icon} </Text>
                         <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
                       </View>
                     </View>
@@ -1080,6 +1114,18 @@ export default function FundsScreen() {
                         <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
                       </TouchableOpacity>
                     ) : null}
+
+                    {/* Acciones de aporte (Homologado a Préstamos) */}
+                    {isGestor && comp.estado === 'pagado' && (
+                      <View style={styles.contribActions}>
+                        <TouchableOpacity
+                          style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]}
+                          onPress={() => handleVerifyCompromiso(item.id, comp.id, comp.socio_name, comp.monto_usd)}
+                        >
+                          <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -1119,7 +1165,7 @@ export default function FundsScreen() {
           )}
 
           {/* Botón Cancelar Mi Aporte (permitido antes de pagado) */}
-          {myPledge && myPledge.estado !== 'pagado' && (
+          {myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado') && (
             <TouchableOpacity
               style={styles.btnDangerOutline}
               onPress={() => handleCancelCommitment(item, myPledge)}
@@ -2269,7 +2315,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   ratesTicker: {
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -2284,7 +2330,7 @@ const styles = StyleSheet.create({
   },
   segmentedControl: {
     flexDirection: 'row',
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 10,
     padding: 4,
     marginTop: 12,
@@ -2308,12 +2354,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 14,
+    backgroundColor: theme.cardBg,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: theme.cardBorder,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -2341,15 +2387,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   rateBadgeStrip: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
     marginTop: 8,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   rateBadgeText: {
-    color: '#60a5fa',
+    color: '#cbd5e1',
     fontSize: 12,
   },
   propositoText: {
@@ -2380,11 +2428,21 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
   },
+  progressText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    marginBottom: 2,
+  },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
     marginBottom: 6,
+  },
+  progressHeaderMeta: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#f8fafc',
   },
   progressLabel: {
     fontSize: 12,
@@ -2424,10 +2482,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   myPledgeBox: {
-    backgroundColor: 'rgba(30, 58, 138, 0.25)',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
     borderRadius: 8,
+    borderWidth: 1,
     padding: 10,
     marginTop: 10,
     flexDirection: 'row',
@@ -2436,7 +2492,7 @@ const styles = StyleSheet.create({
   },
   myPledgeTitle: {
     fontSize: 11,
-    color: '#93c5fd',
+    fontWeight: '600',
   },
   myPledgeAmount: {
     fontSize: 13,
@@ -3255,4 +3311,20 @@ const styles = StyleSheet.create({
   contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   contribMetaIcon: { fontSize: 12, width: 16 },
   contribMetaText: { color: '#94a3b8', fontSize: 12 },
+  contribActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    flexWrap: 'wrap',
+  },
+  contribActionPrimary: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  contribActionPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

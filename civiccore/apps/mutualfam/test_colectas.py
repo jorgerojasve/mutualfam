@@ -150,7 +150,7 @@ def run_tests():
                 assert comp["tasa_usada"] > 0
         print(f"✅ Compromisos notificados con montos calculados en Bs.")
 
-        print("\n--- TEST 8: Carlos confirma su pago ---")
+        print("\n--- TEST 8: Carlos confirma su pago (Pasa a En Validación) ---")
         pago_payload = {
             "payment_method": "pago_movil",
             "referencia_pago": "REF-987654",
@@ -159,10 +159,19 @@ def run_tests():
         res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/confirmar-pago", json=pago_payload, headers=headers_carlos)
         assert res.status_code == 200
         colecta = res.json()
-        assert colecta["monto_recaudado_usd"] == 20.0
-        print(f"✅ Pago de Carlos confirmado. Total recaudado: ${colecta['monto_recaudado_usd']}.")
+        assert colecta["monto_pagado_usd"] == 20.0
+        assert colecta["monto_validado_usd"] == 0.0
+        print(f"✅ Pago de Carlos notificado exitosamente (En validación: ${colecta['monto_pagado_usd']}).")
 
-        print("\n--- TEST 9: Ana confirma su pago -> Colecta pasa a CERRADA (en espera de gasto) ---")
+        print("\n--- TEST 8.1: Ana (Gestora) valida el pago de Carlos ---")
+        res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/validar-pago", headers=headers_ana)
+        assert res.status_code == 200
+        colecta = res.json()
+        assert colecta["monto_validado_usd"] == 20.0
+        assert colecta["monto_pagado_usd"] == 0.0
+        print(f"✅ Pago de Carlos validado por la gestora (Total validado: ${colecta['monto_validado_usd']}).")
+
+        print("\n--- TEST 9: Ana confirma su propio pago -> Colecta pasa a CERRADA (en espera de gasto) ---")
         pago_ana = {
             "payment_method": "efectivo",
             "referencia_pago": "EFECTIVO-ANA",
@@ -171,9 +180,10 @@ def run_tests():
         res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{ana_comp_id}/confirmar-pago", json=pago_ana, headers=headers_ana)
         assert res.status_code == 200
         colecta = res.json()
+        assert colecta["monto_validado_usd"] == 50.0
         assert colecta["monto_recaudado_usd"] == 50.0
         assert colecta["estado"] == "cerrada"
-        print(f"✅ Todos los pagos confirmados ($50/$50). Colecta pasó a CERRADA.")
+        print(f"✅ Todos los pagos validados ($50/$50). Colecta pasó a CERRADA.")
 
         print("\n--- TEST 10: Beneficiaria valida el gasto (comprobante opcional) ---")
         gasto_payload = {
