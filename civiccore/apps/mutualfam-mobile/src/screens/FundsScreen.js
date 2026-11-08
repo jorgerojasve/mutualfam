@@ -191,11 +191,19 @@ export default function FundsScreen() {
   const [targetColecta, setTargetColecta] = useState(null);
   const [targetCompromiso, setTargetCompromiso] = useState(null);
   const [expandedContribs, setExpandedContribs] = useState({});
+  const [expandedSocioContribs, setExpandedSocioContribs] = useState({});
 
   const toggleExpandedContribs = (colectaId) => {
     setExpandedContribs(prev => ({
       ...prev,
       [colectaId]: !prev[colectaId],
+    }));
+  };
+
+  const toggleExpandedSocioContribs = (key) => {
+    setExpandedSocioContribs(prev => ({
+      ...prev,
+      [key]: !prev[key],
     }));
   };
 
@@ -1147,6 +1155,307 @@ export default function FundsScreen() {
     }
   };
 
+  // Helper para formatear fecha y hora en formato legible venezolano
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('es-VE', {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const contribStatusMap = {
+    prometido:     { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+    notificado:    { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+    pagado:        { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+    paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+    validado:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+    verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+    devuelto:      { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
+  };
+
+  const renderGroupStatusBadges = (compromisos) => {
+    const counts = {};
+    for (const c of compromisos) {
+      const key = (c.estado === 'paid' ? 'pagado' : c.estado === 'verified' ? 'validado' : c.estado === 'notificado' ? 'prometido' : c.estado);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const keys = Object.keys(counts);
+    if (keys.length === 1) {
+      const st = keys[0];
+      const n = counts[st];
+      const cfg = contribStatusMap[st] || contribStatusMap.prometido;
+      const label = n > 1 ? (st === 'prometido' ? `Pendientes (${n})` : st === 'pagado' ? `Por validar (${n})` : st === 'validado' ? `Validados (${n})` : `${cfg.label}s (${n})`) : cfg.label;
+      return (
+        <View style={[styles.contribStatusBadge, { backgroundColor: cfg.badgeBg }]}>
+          <Text style={{ fontSize: 11 }}>{cfg.icon} </Text>
+          <Text style={[styles.contribStatusBadgeText, { color: cfg.badgeText }]}>{label}</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end', maxWidth: 170 }}>
+        {counts.pagado ? (
+          <View style={[styles.contribStatusBadge, { backgroundColor: contribStatusMap.pagado.badgeBg }]}>
+            <Text style={{ fontSize: 11 }}>{contribStatusMap.pagado.icon} </Text>
+            <Text style={[styles.contribStatusBadgeText, { color: contribStatusMap.pagado.badgeText }]}>
+              {counts.pagado} por validar
+            </Text>
+          </View>
+        ) : null}
+        {counts.prometido ? (
+          <View style={[styles.contribStatusBadge, { backgroundColor: contribStatusMap.prometido.badgeBg }]}>
+            <Text style={{ fontSize: 11 }}>{contribStatusMap.prometido.icon} </Text>
+            <Text style={[styles.contribStatusBadgeText, { color: contribStatusMap.prometido.badgeText }]}>
+              {counts.prometido} pendiente{counts.prometido > 1 ? 's' : ''}
+            </Text>
+          </View>
+        ) : null}
+        {counts.validado ? (
+          <View style={[styles.contribStatusBadge, { backgroundColor: contribStatusMap.validado.badgeBg }]}>
+            <Text style={{ fontSize: 11 }}>{contribStatusMap.validado.icon} </Text>
+            <Text style={[styles.contribStatusBadgeText, { color: contribStatusMap.validado.badgeText }]}>
+              {counts.validado} validado{counts.validado > 1 ? 's' : ''}
+            </Text>
+          </View>
+        ) : null}
+        {counts.devuelto ? (
+          <View style={[styles.contribStatusBadge, { backgroundColor: contribStatusMap.devuelto.badgeBg }]}>
+            <Text style={{ fontSize: 11 }}>{contribStatusMap.devuelto.icon} </Text>
+            <Text style={[styles.contribStatusBadgeText, { color: contribStatusMap.devuelto.badgeText }]}>
+              {counts.devuelto} devuelto{counts.devuelto > 1 ? 's' : ''}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderCompromisoDetails = (comp, colectaItem, isSub = false, index = null) => {
+    const cs = contribStatusMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
+    const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
+    const isGestor = currentUser && (currentUser.id === (colectaItem.beneficiario_id || colectaItem.proponente_id));
+
+    return (
+      <View
+        key={comp.id}
+        style={isSub ? [styles.socioSubCard, { borderLeftColor: cs.border }] : [styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}
+      >
+        {/* Cabecera */}
+        <View style={styles.contribCardHeader}>
+          {isSub ? (
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#f8fafc' }}>
+                Aporte #{index}
+              </Text>
+              {comp.fecha_compromiso ? (
+                <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+                  📅 Prometido: {formatDateTime(comp.fecha_compromiso)}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.contribAvatarWrap}>
+              <View style={[styles.contribAvatar, { backgroundColor: cs.border + '33', borderColor: cs.border }]}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: cs.border }}>{initial}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.contribName}>{comp.socio_name}</Text>
+                <Text style={styles.contribAmountLine}>
+                  ${formatVE(comp.monto_usd)} USD
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
+                    {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))})`}
+                  </Text>
+                </Text>
+                {comp.fecha_compromiso ? (
+                  <Text style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                    📅 Prometido: {formatDateTime(comp.fecha_compromiso)}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
+            <Text style={{ fontSize: 11 }}>{cs.icon} </Text>
+            <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
+          </View>
+        </View>
+
+        {isSub && (
+          <View style={{ marginBottom: 4 }}>
+            <Text style={[styles.contribAmountLine, { fontSize: 13, fontWeight: '700', color: '#f1f5f9' }]}>
+              ${formatVE(comp.monto_usd)} USD
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
+                {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))})`}
+              </Text>
+            </Text>
+          </View>
+        )}
+
+        {/* Trazabilidad de estampa de tiempo y cambios de estado */}
+        {comp.fecha_validacion ? (
+          <Text style={[styles.contribTimestampInfo, { color: '#60a5fa' }]}>
+            ✅ Validado el {formatDateTime(comp.fecha_validacion)}
+          </Text>
+        ) : comp.fecha_notificacion ? (
+          <Text style={[styles.contribTimestampInfo, { color: '#facc15' }]}>
+            🕐 Notificado el {formatDateTime(comp.fecha_notificacion)}
+          </Text>
+        ) : null}
+
+        {/* Detalles de método o referencia */}
+        {(comp.payment_method || comp.referencia_pago) ? (
+          <View style={styles.contribMeta}>
+            {comp.payment_method ? renderPaymentMethodBadge(comp.payment_method) : null}
+            {comp.referencia_pago ? (
+              <View style={styles.contribMetaRow}>
+                <Text style={styles.contribMetaIcon}>#</Text>
+                <Text style={styles.contribMetaText}>
+                  {comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Comprobante de aporte directo */}
+        {comp.comprobante_url ? (
+          <TouchableOpacity
+            style={[styles.receiptLinkBtn, { marginTop: 8 }]}
+            onPress={() => openReceiptViewer(
+              comp.comprobante_url,
+              `Comprobante de Aporte - ${comp.socio_name}${isSub ? ` (#${index})` : ''}`,
+              {
+                method: comp.payment_method,
+                reference: comp.referencia_pago ? comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona') : undefined,
+                amount: `$${formatVE(comp.monto_usd)} USD (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))})`
+              }
+            )}
+          >
+            <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Información si fue devuelto */}
+        {comp.estado === 'devuelto' && (
+          <View style={styles.refundedInfoBox}>
+            <Text style={styles.refundedInfoTitle}>🔄 Aporte Reintegrado al Socio:</Text>
+            <Text style={styles.refundedInfoText}>
+              Monto devuelto: <Text style={{ fontWeight: 'bold', color: '#10b981' }}>
+                {comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}
+                {formatVE(comp.monto_devuelto)}
+              </Text>
+              {comp.metodo_devolucion ? ` mediante ${comp.metodo_devolucion}` : ''}
+            </Text>
+            {comp.fecha_devolucion ? (
+              <Text style={styles.refundedInfoSub}>📅 Fecha: {formatDateTime(comp.fecha_devolucion)}</Text>
+            ) : null}
+            {comp.comision_descontada > 0 ? (
+              <Text style={styles.refundedInfoSub}>
+                Comisión bancaria deducida: Bs {formatVE(comp.comision_descontada)}
+              </Text>
+            ) : null}
+            {comp.referencia_devolucion ? (
+              <Text style={styles.refundedInfoSub}># Ref: {comp.referencia_devolucion}</Text>
+            ) : null}
+            {comp.comprobante_devolucion_url ? (
+              <TouchableOpacity
+                style={[styles.receiptLinkBtn, { marginTop: 6 }]}
+                onPress={() => openReceiptViewer(
+                  comp.comprobante_devolucion_url,
+                  `Comprobante de Devolución - ${comp.socio_name}`,
+                  {
+                    method: comp.metodo_devolucion,
+                    reference: comp.referencia_devolucion,
+                    amount: `${comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}${formatVE(comp.monto_devuelto)}`
+                  }
+                )}
+              >
+                <Text style={styles.receiptLinkText}>🧾 Ver comprobante de devolución</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
+        {/* Aviso si el pago fue rechazado por el gestor */}
+        {comp.motivo_rechazo && comp.estado === 'prometido' && (
+          <View style={styles.rejectNoticeBox}>
+            <Text style={styles.rejectNoticeTitle}>⚠️ Notificación de pago rechazada por quien gestiona:</Text>
+            <Text style={styles.rejectNoticeMotive}>"{comp.motivo_rechazo}"</Text>
+            {comp.fecha_rechazo ? (
+              <Text style={styles.refundedInfoSub}>📅 Fecha: {formatDateTime(comp.fecha_rechazo)}</Text>
+            ) : null}
+            <Text style={styles.rejectNoticeHelp}>Por favor verifica tu pago o transfiere nuevamente y notifícalo con el comprobante correspondiente.</Text>
+          </View>
+        )}
+
+        {/* Acciones de aporte para el gestor */}
+        {isGestor && comp.estado === 'pagado' && (
+          <View style={styles.contribActions}>
+            <TouchableOpacity
+              style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]}
+              onPress={() => handleVerifyCompromiso(colectaItem.id, comp.id, comp.socio_name, comp.monto_usd)}
+            >
+              <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnReject}
+              onPress={() => handleOpenRejectCompromiso(colectaItem, comp)}
+            >
+              <Text style={styles.btnRejectText}>✕ Rechazar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Botón Devolver Aporte (Gestor en colecta cancelada con aportes pagados o validados) */}
+        {colectaItem.estado === 'cancelada' && isGestor && (comp.estado === 'pagado' || comp.estado === 'validado') && comp.payment_method !== 'Aporte Propio' && (
+          <View style={styles.contribActions}>
+            <TouchableOpacity
+              style={[styles.contribActionPrimary, { backgroundColor: '#e11d48' }]}
+              onPress={() => handleOpenRefund(colectaItem, comp)}
+            >
+              <Text style={styles.contribActionPrimaryText}>🔄 Devolver Aporte</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Botón Pagar aporte individual si el socio tiene compromisos pendientes */}
+        {comp.socio_id === currentUser?.id && (comp.estado === 'prometido' || comp.estado === 'notificado') && (colectaItem.estado === 'propuesta' || colectaItem.estado === 'activa') && (
+          <View style={styles.contribActions}>
+            <TouchableOpacity
+              style={[styles.contribActionPrimary, { backgroundColor: '#10b981' }]}
+              onPress={() => {
+                setTargetColecta(colectaItem);
+                setTargetCompromiso(comp);
+                const avail = getAvailablePaymentMethods(colectaItem.beneficiario_datos_pago);
+                setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
+                setShowPaymentModal(true);
+              }}
+            >
+              <Text style={styles.contribActionPrimaryText}>💵 Pagar este aporte</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.contribActionPrimary, { backgroundColor: '#334155' }]}
+              onPress={() => handleCancelCommitment(colectaItem, comp)}
+            >
+              <Text style={[styles.contribActionPrimaryText, { color: '#f87171' }]}>✕ Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   // Render Card de Colecta
   const renderColectaCard = ({ item }) => {
     const badge = getStatusBadge(item.estado, item);
@@ -1281,13 +1590,39 @@ export default function FundsScreen() {
           </View>
         )}
 
-        {/* Lista de Aportes en curso (Minimizados por defecto con opción de desplegar detalle) */}
+        {/* Lista de Aportes en curso (Agrupados por persona con desglose desplegable para múltiples aportes) */}
         {(() => {
           const activeCompromisos = (item.compromisos || []).filter(c => c.estado !== 'cancelado');
           if (activeCompromisos.length === 0) return null;
           const isExpanded = !!expandedContribs[item.id];
           const pendingVerifCount = activeCompromisos.filter(c => c.estado === 'pagado').length;
           const devueltosCount = activeCompromisos.filter(c => c.estado === 'devuelto').length;
+
+          // Agrupar aportes por persona
+          const groupedBySocio = [];
+          const socioMap = new Map();
+
+          for (const comp of activeCompromisos) {
+            const sKey = String(comp.socio_id ?? comp.socio_name ?? comp.id);
+            if (!socioMap.has(sKey)) {
+              const group = {
+                key: sKey,
+                socio_id: comp.socio_id,
+                socio_name: comp.socio_name || 'Socio',
+                compromisos: [],
+                total_usd: 0,
+                total_bs: 0,
+              };
+              socioMap.set(sKey, group);
+              groupedBySocio.push(group);
+            }
+            const group = socioMap.get(sKey);
+            group.compromisos.push(comp);
+            group.total_usd += (Number(comp.monto_usd) || 0);
+            group.total_bs += (Number(comp.monto_bs) || ((Number(comp.monto_usd) || 0) * (item.tasa_actual || 1)));
+          }
+
+          const hasMultipleContributions = activeCompromisos.length > groupedBySocio.length;
 
           return (
             <View style={styles.contribsSection}>
@@ -1298,7 +1633,7 @@ export default function FundsScreen() {
               >
                 <View style={styles.contribsHeaderLeft}>
                   <Text style={styles.contribsTitleText}>
-                    Aportes en curso ({activeCompromisos.length})
+                    Aportes en curso ({groupedBySocio.length} persona{groupedBySocio.length !== 1 ? 's' : ''}{hasMultipleContributions ? ` · ${activeCompromisos.length} aportes` : ''})
                   </Text>
                   {isGestor && pendingVerifCount > 0 && (
                     <View style={styles.pendingVerifBadge}>
@@ -1328,174 +1663,85 @@ export default function FundsScreen() {
 
               {isExpanded && (
                 <View style={styles.contribsList}>
-                  {activeCompromisos.map(comp => {
-                    const csMap = {
-                      prometido:     { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
-                      notificado:    { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
-                      pagado:        { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
-                      paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
-                      validado:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
-                      verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
-                      devuelto:      { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
-                    };
-                    const cs = csMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
-                    const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
+                  {groupedBySocio.map(group => {
+                    // Si el socio tiene solo 1 aporte, se muestra directo sin desplegable anidado
+                    if (group.compromisos.length === 1) {
+                      return renderCompromisoDetails(group.compromisos[0], item, false);
+                    }
+
+                    // Múltiples aportes de la misma persona: tarjeta combinada con acordeón interno
+                    const isSocioExpanded = !!expandedSocioContribs[`${item.id}_${group.key}`];
+                    
+                    const hasPagado = group.compromisos.some(c => c.estado === 'pagado' || c.estado === 'paid');
+                    const hasPrometido = group.compromisos.some(c => c.estado === 'prometido' || c.estado === 'notificado');
+                    const allValidados = group.compromisos.every(c => c.estado === 'validado' || c.estado === 'verified');
+                    const allDevueltos = group.compromisos.every(c => c.estado === 'devuelto');
+
+                    let cardBorder = '#475569';
+                    let cardBg = 'rgba(100, 116, 139, 0.08)';
+                    if (hasPagado) {
+                      cardBorder = '#facc15';
+                      cardBg = 'rgba(250, 204, 21, 0.10)';
+                    } else if (hasPrometido) {
+                      cardBorder = '#f97316';
+                      cardBg = 'rgba(251, 146, 60, 0.10)';
+                    } else if (allValidados) {
+                      cardBorder = '#3b82f6';
+                      cardBg = 'rgba(59, 130, 246, 0.10)';
+                    } else if (allDevueltos) {
+                      cardBorder = '#10b981';
+                      cardBg = 'rgba(16, 185, 129, 0.10)';
+                    }
+
+                    const initial = group.socio_name ? group.socio_name.trim()[0].toUpperCase() : '?';
 
                     return (
-                      <View key={comp.id} style={[styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}>
-                        {/* Cabecera: avatar + nombre + monto + badge de estado */}
+                      <View key={group.key} style={[styles.contribCard, { backgroundColor: cardBg, borderLeftColor: cardBorder }]}>
+                        {/* Cabecera Agrupada: Avatar + Nombre + Conteo + Total acumulado */}
                         <View style={styles.contribCardHeader}>
                           <View style={styles.contribAvatarWrap}>
-                            <View style={[styles.contribAvatar, { backgroundColor: cs.border + '33', borderColor: cs.border }]}>
-                              <Text style={{ fontSize: 16, fontWeight: '700', color: cs.border }}>{initial}</Text>
+                            <View style={[styles.contribAvatar, { backgroundColor: cardBorder + '33', borderColor: cardBorder }]}>
+                              <Text style={{ fontSize: 16, fontWeight: '700', color: cardBorder }}>{initial}</Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.contribName}>{comp.socio_name}</Text>
-                              <Text style={styles.contribAmountLine}>
-                                ${formatVE(comp.monto_usd)} USD
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <Text style={styles.contribName}>{group.socio_name}</Text>
+                                <View style={styles.contribCountPill}>
+                                  <Text style={styles.contribCountPillText}>
+                                    {group.compromisos.length} aportes
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text style={[styles.contribAmountLine, { fontSize: 13, fontWeight: '700', color: '#f8fafc', marginTop: 2 }]}>
+                                Total: ${formatVE(group.total_usd)} USD
                                 <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
-                                  {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * item.tasa_actual))})`}
+                                  {` (~Bs ${formatVE(group.total_bs)})`}
                                 </Text>
                               </Text>
                             </View>
                           </View>
-                          <View style={[styles.contribStatusBadge, { backgroundColor: cs.badgeBg }]}>
-                            <Text style={{ fontSize: 11 }}>{cs.icon} </Text>
-                            <Text style={[styles.contribStatusBadgeText, { color: cs.badgeText }]}>{cs.label}</Text>
-                          </View>
+
+                          {/* Resumen de estados */}
+                          {renderGroupStatusBadges(group.compromisos)}
                         </View>
 
-                        {/* Detalles de método o referencia */}
-                        {(comp.payment_method || comp.referencia_pago) ? (
-                          <View style={styles.contribMeta}>
-                            {comp.payment_method ? renderPaymentMethodBadge(comp.payment_method) : null}
-                            {comp.referencia_pago ? (
-                              <View style={styles.contribMetaRow}>
-                                <Text style={styles.contribMetaIcon}>#</Text>
-                                <Text style={styles.contribMetaText}>
-                                  {comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona')}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        ) : null}
+                        {/* Botón para expandir/colapsar desglose */}
+                        <TouchableOpacity
+                          style={styles.socioBreakdownToggle}
+                          onPress={() => toggleExpandedSocioContribs(`${item.id}_${group.key}`)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.socioBreakdownToggleText}>
+                            {isSocioExpanded ? '▲ Ocultar desglose de aportes' : `▼ Ver desglose (${group.compromisos.length} aportes)`}
+                          </Text>
+                        </TouchableOpacity>
 
-                        {/* Comprobante de aporte directo */}
-                        {comp.comprobante_url ? (
-                          <TouchableOpacity
-                            style={[styles.receiptLinkBtn, { marginTop: 8 }]}
-                            onPress={() => openReceiptViewer(
-                              comp.comprobante_url,
-                              `Comprobante de Aporte - ${comp.socio_name}`,
-                              {
-                                method: comp.payment_method,
-                                reference: comp.referencia_pago ? comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona') : undefined,
-                                amount: `$${formatVE(comp.monto_usd)} USD (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * item.tasa_actual))})`
-                              }
+                        {/* Lista Desplegable de Sub-aportes con estampa de tiempo y trazabilidad */}
+                        {isSocioExpanded && (
+                          <View style={styles.socioSubList}>
+                            {group.compromisos.map((comp, idx) =>
+                              renderCompromisoDetails(comp, item, true, idx + 1)
                             )}
-                          >
-                            <Text style={styles.receiptLinkText}>🧾 Ver comprobante de aporte</Text>
-                          </TouchableOpacity>
-                        ) : null}
-
-                        {/* Información si fue devuelto */}
-                        {comp.estado === 'devuelto' && (
-                          <View style={styles.refundedInfoBox}>
-                            <Text style={styles.refundedInfoTitle}>🔄 Aporte Reintegrado al Socio:</Text>
-                            <Text style={styles.refundedInfoText}>
-                              Monto devuelto: <Text style={{ fontWeight: 'bold', color: '#10b981' }}>
-                                {comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}
-                                {formatVE(comp.monto_devuelto)}
-                              </Text>
-                              {comp.metodo_devolucion ? ` mediante ${comp.metodo_devolucion}` : ''}
-                            </Text>
-                            {comp.comision_descontada > 0 ? (
-                              <Text style={styles.refundedInfoSub}>
-                                Comisión bancaria deducida: Bs {formatVE(comp.comision_descontada)}
-                              </Text>
-                            ) : null}
-                            {comp.referencia_devolucion ? (
-                              <Text style={styles.refundedInfoSub}># Ref: {comp.referencia_devolucion}</Text>
-                            ) : null}
-                            {comp.comprobante_devolucion_url ? (
-                              <TouchableOpacity
-                                style={[styles.receiptLinkBtn, { marginTop: 6 }]}
-                                onPress={() => openReceiptViewer(
-                                  comp.comprobante_devolucion_url,
-                                  `Comprobante de Devolución - ${comp.socio_name}`,
-                                  {
-                                    method: comp.metodo_devolucion,
-                                    reference: comp.referencia_devolucion,
-                                    amount: `${comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}${formatVE(comp.monto_devuelto)}`
-                                  }
-                                )}
-                              >
-                                <Text style={styles.receiptLinkText}>🧾 Ver comprobante de devolución</Text>
-                              </TouchableOpacity>
-                            ) : null}
-                          </View>
-                        )}
-
-                        {/* Aviso si el pago fue rechazado por el gestor */}
-                        {comp.motivo_rechazo && comp.estado === 'prometido' && (
-                          <View style={styles.rejectNoticeBox}>
-                            <Text style={styles.rejectNoticeTitle}>⚠️ Notificación de pago rechazada por quien gestiona:</Text>
-                            <Text style={styles.rejectNoticeMotive}>"{comp.motivo_rechazo}"</Text>
-                            <Text style={styles.rejectNoticeHelp}>Por favor verifica tu pago o transfiere nuevamente y notifícalo con el comprobante correspondiente.</Text>
-                          </View>
-                        )}
-
-                        {/* Acciones de aporte para el gestor */}
-                        {isGestor && comp.estado === 'pagado' && (
-                          <View style={styles.contribActions}>
-                            <TouchableOpacity
-                              style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]}
-                              onPress={() => handleVerifyCompromiso(item.id, comp.id, comp.socio_name, comp.monto_usd)}
-                            >
-                              <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.btnReject}
-                              onPress={() => handleOpenRejectCompromiso(item, comp)}
-                            >
-                              <Text style={styles.btnRejectText}>✕ Rechazar</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-
-                        {/* Botón Devolver Aporte (Gestor en colecta cancelada con aportes pagados o validados) */}
-                        {item.estado === 'cancelada' && isGestor && (comp.estado === 'pagado' || comp.estado === 'validado') && comp.payment_method !== 'Aporte Propio' && (
-                          <View style={styles.contribActions}>
-                            <TouchableOpacity
-                              style={[styles.contribActionPrimary, { backgroundColor: '#e11d48' }]}
-                              onPress={() => handleOpenRefund(item, comp)}
-                            >
-                              <Text style={styles.contribActionPrimaryText}>🔄 Devolver Aporte</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-
-                        {/* Botón Pagar aporte individual si el socio tiene compromisos pendientes */}
-                        {comp.socio_id === currentUser?.id && (comp.estado === 'prometido' || comp.estado === 'notificado') && (item.estado === 'propuesta' || item.estado === 'activa') && (
-                          <View style={styles.contribActions}>
-                            <TouchableOpacity
-                              style={[styles.contribActionPrimary, { backgroundColor: '#10b981' }]}
-                              onPress={() => {
-                                setTargetColecta(item);
-                                setTargetCompromiso(comp);
-                                const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
-                                setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
-                                setShowPaymentModal(true);
-                              }}
-                            >
-                              <Text style={styles.contribActionPrimaryText}>💵 Pagar este aporte</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.contribActionPrimary, { backgroundColor: '#334155' }]}
-                              onPress={() => handleCancelCommitment(item, comp)}
-                            >
-                              <Text style={[styles.contribActionPrimaryText, { color: '#f87171' }]}>✕ Cancelar</Text>
-                            </TouchableOpacity>
                           </View>
                         )}
                       </View>
@@ -4342,5 +4588,51 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 11,
     marginTop: 2,
+  },
+  socioSubList: {
+    marginTop: 8,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 8,
+  },
+  socioSubCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    padding: 10,
+  },
+  socioBreakdownToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  socioBreakdownToggleText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  contribTimestampInfo: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  contribCountPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  contribCountPillText: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
