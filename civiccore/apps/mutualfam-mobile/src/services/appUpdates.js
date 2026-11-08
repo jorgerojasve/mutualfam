@@ -57,7 +57,7 @@ export const compareVersions = (v1, v2) => {
 export const checkForAppUpdate = async () => {
   const currentVersion = getCurrentAppVersion();
   try {
-    const response = await axios.get(`${baseURL}/config/version`, { timeout: 5000 });
+    const response = await axios.get(`${baseURL}/config/version`, { timeout: 15000 });
     const data = response.data || {};
 
     if (data.app_phase || typeof data.is_beta === 'boolean') {
@@ -85,6 +85,8 @@ export const checkForAppUpdate = async () => {
       downloadUrl,
       isBeta: data.is_beta,
       appPhase: data.app_phase,
+      isCompiling: Boolean(data.is_compiling),
+      pendingVersion: data.pending_version || null,
     };
   } catch (error) {
     console.warn('[appUpdates] No se pudo verificar la actualización:', error?.message || error);
