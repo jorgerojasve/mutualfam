@@ -1312,38 +1312,23 @@ export default function AssemblyScreen({ embedded = false }) {
                   )}
                 </View>
 
-                {/* Desglose Nominativo de Votos */}
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionHeader}>Registro de Votantes (Nominativo)</Text>
-                  {!proposalDetail.votes_list || proposalDetail.votes_list.length === 0 ? (
-                    <Text style={styles.emptyVotersText}>Aún no se han emitido votos en esta asamblea.</Text>
-                  ) : (
-                    proposalDetail.votes_list.map((v, idx) => (
-                      <View key={idx} style={styles.voterRow}>
-                        <Text style={styles.voterName}>👤 {v.voter_name}</Text>
-                        <View style={[styles.voterPill, { backgroundColor: v.choice === 'si' ? '#065f46' : v.choice === 'no' ? '#881337' : '#334155' }]}>
-                          <Text style={styles.voterPillText}>{v.choice.toUpperCase()}</Text>
-                        </View>
-                      </View>
-                    ))
-                  )}
-                </View>
-
-                {/* Botón de Cierre Manual / Computar */}
-                {(proposalDetail.status === 'voting' || proposalDetail.status === 'debate') && (
-                  <TouchableOpacity
-                    style={styles.closeProposalButton}
-                    onPress={handleCerrarPropuesta}
-                    disabled={closingProposal}
-                  >
-                    {closingProposal ? (
-                      <ActivityIndicator color="#fff" />
+                {/* Desglose Nominativo de Votos (Solo visible una vez iniciada la fase de votación) */}
+                {proposalDetail.status !== 'debate' && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionHeader}>Registro de Votantes (Nominativo)</Text>
+                    {!proposalDetail.votes_list || proposalDetail.votes_list.length === 0 ? (
+                      <Text style={styles.emptyVotersText}>Aún no se han emitido votos en esta asamblea.</Text>
                     ) : (
-                      <Text style={styles.closeProposalButtonText}>
-                        Computar Resultados y Cerrar Propuesta
-                      </Text>
+                      proposalDetail.votes_list.map((v, idx) => (
+                        <View key={idx} style={styles.voterRow}>
+                          <Text style={styles.voterName}>👤 {v.voter_name}</Text>
+                          <View style={[styles.voterPill, { backgroundColor: v.choice === 'si' ? '#065f46' : v.choice === 'no' ? '#881337' : '#334155' }]}>
+                            <Text style={styles.voterPillText}>{v.choice.toUpperCase()}</Text>
+                          </View>
+                        </View>
+                      ))
                     )}
-                  </TouchableOpacity>
+                  </View>
                 )}
 
                 <TouchableOpacity
