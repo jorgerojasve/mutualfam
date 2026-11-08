@@ -642,28 +642,36 @@ export default function AssemblyScreen({ embedded = false }) {
           </View>
         )}
 
-        {/* Resumen de Votos */}
-        <View style={styles.voteSummaryContainer}>
-          <View style={styles.voteCounter}>
-            <Text style={styles.voteCounterText}>
-              👍 <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> SÍ
-            </Text>
-            <Text style={styles.voteCounterText}>
-              👎 <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> NO
-            </Text>
-            <Text style={styles.voteCounterText}>
-              ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
-            </Text>
-          </View>
-
-          {item.my_vote && (
-            <View style={styles.myVoteBadge}>
-              <Text style={styles.myVoteText}>
-                Tu voto: <Text style={{ fontWeight: 'bold', color: item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#94a3b8' }}>{item.my_vote.toUpperCase()}</Text>
+        {/* Resumen de Votos (solo visible a partir de la fase de votación) */}
+        {!isDebate ? (
+          <View style={styles.voteSummaryContainer}>
+            <View style={styles.voteCounter}>
+              <Text style={styles.voteCounterText}>
+                👍 <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> SÍ
+              </Text>
+              <Text style={styles.voteCounterText}>
+                👎 <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> NO
+              </Text>
+              <Text style={styles.voteCounterText}>
+                ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
               </Text>
             </View>
-          )}
-        </View>
+
+            {item.my_vote && (
+              <View style={styles.myVoteBadge}>
+                <Text style={styles.myVoteText}>
+                  Tu voto: <Text style={{ fontWeight: 'bold', color: item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#94a3b8' }}>{item.my_vote.toUpperCase()}</Text>
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.voteSummaryContainer}>
+            <Text style={{ color: '#94a3b8', fontSize: 12, fontStyle: 'italic' }}>
+              💬 En debate • Votación aún no iniciada
+            </Text>
+          </View>
+        )}
 
         {/* Banner de veto si aplica */}
         {item.veto_activated && item.vetantes_names?.length > 0 && (
@@ -943,35 +951,37 @@ export default function AssemblyScreen({ embedded = false }) {
                   </View>
                 )}
 
-                {/* Conteo de Votos y Resultados */}
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionHeader}>Estado de Votación</Text>
-                  <View style={styles.voteStatsGrid}>
-                    <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
-                      <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                      <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
+                {/* Conteo de Votos y Resultados (Solo visible una vez iniciado el período de votación) */}
+                {proposalDetail.status !== 'debate' && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionHeader}>Estado de Votación</Text>
+                    <View style={styles.voteStatsGrid}>
+                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
+                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
+                      </View>
+                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
+                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
+                      </View>
+                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
+                      </View>
                     </View>
-                    <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
-                      <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                      <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
-                    </View>
-                    <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
-                      <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
-                      <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
-                    </View>
-                  </View>
 
-                  {proposalDetail.proposal_type === 'member_admission' && (
-                    <Text style={styles.ruleNote}>
-                      * Regla de Admisión: Requiere ≥75% de aprobación y cero votos NO (Consenso con Veto).
-                    </Text>
-                  )}
-                  {proposalDetail.proposal_type === 'expulsion' && (
-                    <Text style={styles.ruleNote}>
-                      * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
-                    </Text>
-                  )}
-                </View>
+                    {proposalDetail.proposal_type === 'member_admission' && (
+                      <Text style={styles.ruleNote}>
+                        * Regla de Admisión: Requiere ≥75% de aprobación y cero votos NO (Consenso con Veto).
+                      </Text>
+                    )}
+                    {proposalDetail.proposal_type === 'expulsion' && (
+                      <Text style={styles.ruleNote}>
+                        * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                      </Text>
+                    )}
+                  </View>
+                )}
 
                 {/* Botones de Voto si está en fase de votación */}
                 {proposalDetail.status === 'voting' && (
