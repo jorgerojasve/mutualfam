@@ -288,6 +288,50 @@ export default function FundsScreen() {
     }
   };
 
+  const renderPaymentMethodBadge = (method) => {
+    if (!method) return null;
+    const m = String(method).trim();
+    let icon = '💳';
+    let label = m;
+    let bg = 'rgba(148, 163, 184, 0.12)';
+    let border = 'rgba(148, 163, 184, 0.3)';
+    let textColor = '#cbd5e1';
+
+    const lower = m.toLowerCase();
+    if (lower.includes('pago móvil') || lower.includes('pago movil')) {
+      icon = '📱';
+      label = 'Pago Móvil';
+      bg = 'rgba(2, 132, 199, 0.14)';
+      border = 'rgba(56, 189, 248, 0.35)';
+      textColor = '#38bdf8';
+    } else if (lower.includes('transferencia')) {
+      icon = '🏛️';
+      label = 'Transferencia';
+      bg = 'rgba(99, 102, 241, 0.14)';
+      border = 'rgba(129, 140, 248, 0.35)';
+      textColor = '#a5b4fc';
+    } else if (lower.includes('efectivo')) {
+      icon = '💵';
+      label = 'Efectivo';
+      bg = 'rgba(16, 185, 129, 0.14)';
+      border = 'rgba(52, 211, 153, 0.35)';
+      textColor = '#34d399';
+    } else if (lower.includes('propio') || lower.includes('gestor') || lower.includes('beneficiario')) {
+      icon = '🤝';
+      label = 'Aporte Propio';
+      bg = 'rgba(245, 158, 11, 0.14)';
+      border = 'rgba(251, 191, 36, 0.35)';
+      textColor = '#fbbf24';
+    }
+
+    return (
+      <View key={m} style={[styles.methodBadge, { backgroundColor: bg, borderColor: border }]}>
+        <Text style={styles.methodBadgeIcon}>{icon}</Text>
+        <Text style={[styles.methodBadgeText, { color: textColor }]}>{label}</Text>
+      </View>
+    );
+  };
+
   const fetchUserPaymentConfig = async () => {
     try {
       const res = await loansApi.getPaymentMethods();
@@ -1245,12 +1289,7 @@ export default function FundsScreen() {
                         {/* Detalles de método o referencia */}
                         {(comp.payment_method || comp.referencia_pago) ? (
                           <View style={styles.contribMeta}>
-                            {comp.payment_method ? (
-                              <View style={styles.contribMetaRow}>
-                                <Text style={styles.contribMetaIcon}>💳</Text>
-                                <Text style={styles.contribMetaText}>{comp.payment_method}</Text>
-                              </View>
-                            ) : null}
+                            {comp.payment_method ? renderPaymentMethodBadge(comp.payment_method) : null}
                             {comp.referencia_pago ? (
                               <View style={styles.contribMetaRow}>
                                 <Text style={styles.contribMetaIcon}>#</Text>
@@ -3885,6 +3924,24 @@ const styles = StyleSheet.create({
   contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   contribMetaIcon: { fontSize: 12, width: 16 },
   contribMetaText: { color: '#94a3b8', fontSize: 12 },
+  methodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginVertical: 2,
+  },
+  methodBadgeIcon: {
+    fontSize: 13,
+  },
+  methodBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   contribActions: {
     flexDirection: 'row',
     gap: 8,
