@@ -1174,7 +1174,7 @@ export default function FundsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón Notificar Cobro (solo proponente si está activa) */}
+          {/* Botón Notificar Cobro (Ocultado a solicitud del usuario)
           {isOwner && item.estado === 'activa' && (
             <TouchableOpacity
               style={styles.btnWarning}
@@ -1182,7 +1182,7 @@ export default function FundsScreen() {
             >
               <Text style={styles.btnPrimaryText}>🔔 Notificar Bs</Text>
             </TouchableOpacity>
-          )}
+          )} */}
 
           {/* Botón Validar Gasto (beneficiario si está cerrada o completó recaudación) */}
           {(isOwner || isBeneficiary) &&
