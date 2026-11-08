@@ -82,7 +82,7 @@ export default function ProfileScreen({ navigation }) {
       } else if (result.error) {
         Alert.alert(
           'Aviso',
-          'No se pudo comprobar la versión en este momento. Revisa tu conexión a internet.'
+          typeof result.error === 'string' ? result.error : 'No se pudo comprobar la versión en este momento. Intenta de nuevo en unos instantes.'
         );
       } else {
         Alert.alert(

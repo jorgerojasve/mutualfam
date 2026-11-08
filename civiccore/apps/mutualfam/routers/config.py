@@ -38,11 +38,40 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Cache de releases de GitHub (v1.0.34-qa)
+# Cache de releases de GitHub (en memoria y persistente en disco)
 _github_releases_cache = {
     "timestamp": 0,
     "releases": []
 }
+
+def _get_releases_cache_path() -> str:
+    if os.path.isdir("/app/data"):
+        return "/app/data/github_releases_cache.json"
+    local_data = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "data"))
+    if os.path.isdir(local_data):
+        return os.path.join(local_data, "github_releases_cache.json")
+    return os.path.join(os.path.dirname(__file__), "github_releases_cache.json")
+
+def _load_disk_releases_cache() -> list:
+    cache_path = _get_releases_cache_path()
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+        except Exception as e:
+            logger.warning(f"Error leyendo cache de releases en disco: {e}")
+    return []
+
+def _save_disk_releases_cache(releases: list):
+    cache_path = _get_releases_cache_path()
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(releases, f, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Error guardando cache de releases en disco: {e}")
 
 def is_qa_environment() -> bool:
     """Detecta si el backend está ejecutándose en el entorno de QA/Sandbox."""
@@ -57,7 +86,7 @@ def is_qa_environment() -> bool:
     return False
 
 def fetch_github_releases():
-    """Obtiene el listado reciente de releases desde GitHub con cache de 90 segundos."""
+    """Obtiene el listado reciente de releases desde GitHub con cache en memoria y disco."""
     now = time.time()
     if _github_releases_cache["releases"] and (now - _github_releases_cache["timestamp"] < 90):
         return _github_releases_cache["releases"]
@@ -67,16 +96,26 @@ def fetch_github_releases():
             "https://api.github.com/repos/jorgerojasve/mutualfam/releases?per_page=10",
             headers={'User-Agent': 'MutualFam-Backend'}
         )
-        with urllib.request.urlopen(req, timeout=5.0) as response:
+        with urllib.request.urlopen(req, timeout=3.5) as response:
             releases = json.loads(response.read().decode())
-            if isinstance(releases, list):
+            if isinstance(releases, list) and len(releases) > 0:
                 _github_releases_cache["releases"] = releases
                 _github_releases_cache["timestamp"] = now
+                _save_disk_releases_cache(releases)
                 return releases
     except Exception as e:
-        logger.warning(f"No se pudo consultar GitHub Releases: {e}")
-        if _github_releases_cache["releases"]:
-            return _github_releases_cache["releases"]
+        logger.warning(f"No se pudo consultar GitHub Releases en vivo: {e}")
+
+    # Fallback 1: cache en memoria existente
+    if _github_releases_cache["releases"]:
+        return _github_releases_cache["releases"]
+
+    # Fallback 2: cache persistido en disco (sobrevive reinicios/suspensiones de Fly.io)
+    disk_cache = _load_disk_releases_cache()
+    if disk_cache:
+        _github_releases_cache["releases"] = disk_cache
+        _github_releases_cache["timestamp"] = now
+        return disk_cache
 
     return []
 
@@ -154,6 +193,8 @@ def get_latest_release_info():
             info["latest_version"] = tag_name
         if rel.get("body"):
             info["release_notes"] = rel.get("body").strip()
+    elif not info["is_compiling"]:
+        info["error"] = "No se pudo obtener información de releases en este momento."
 
     from services.limits import get_app_phase_summary
     phase_summary = get_app_phase_summary()
