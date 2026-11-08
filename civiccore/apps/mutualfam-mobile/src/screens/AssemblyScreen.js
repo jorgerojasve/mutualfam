@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -120,6 +120,9 @@ export default function AssemblyScreen({ embedded = false }) {
   const [commentStance, setCommentStance] = useState('opinión');
   const [commentAttachment, setCommentAttachment] = useState(null);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const commentInputRef = useRef(null);
+  const detailScrollRef = useRef(null);
 
   // Votación
   const [submittingVote, setSubmittingVote] = useState(false);
@@ -270,6 +273,86 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
+  // Cargar comentarios silenciosamente para polling en tiempo real
+  const fetchCommentsSilent = async (propId) => {
+    try {
+      const list = await governanceApi.getComentarios(propId);
+      if (Array.isArray(list)) {
+        setComments((prev) => {
+          if (
+            list.length !== prev.length ||
+            list.some((item, idx) => item.id !== prev[idx]?.id || item.content !== prev[idx]?.content)
+          ) {
+            return list;
+          }
+          return prev;
+        });
+      }
+    } catch (e) {
+      // Silencioso para polling continuo
+    }
+  };
+
+  // Polling silencioso en tiempo real mientras el detalle de la asamblea esté abierto
+  useEffect(() => {
+    let interval = null;
+    if (showDetailModal && proposalDetail?.id) {
+      interval = setInterval(() => {
+        fetchCommentsSilent(proposalDetail.id);
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showDetailModal, proposalDetail?.id]);
+
+  // Responder a un autor específico con mención @
+  const handleReplyToAuthor = (authorName) => {
+    if (!authorName) return;
+    const cleanName = authorName.trim();
+    const mention = `@${cleanName} `;
+    setReplyingTo(cleanName);
+    setCommentText((prev) => {
+      if (prev.includes(`@${cleanName}`)) return prev;
+      return prev ? `${mention}${prev}` : mention;
+    });
+    setTimeout(() => {
+      commentInputRef.current?.focus();
+      detailScrollRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+  };
+
+  // Renderizar contenido de comentario destacando menciones @
+  const renderCommentContent = (content) => {
+    if (!content) return null;
+    const authorNames = Array.from(new Set(comments.map((c) => c.author_name).filter(Boolean)));
+    const patterns = authorNames
+      .sort((a, b) => b.length - a.length)
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const patternStr = patterns.length > 0
+      ? `(@(?:${patterns.join('|')}|[A-Za-z0-9_]+))`
+      : '(@[A-Za-z0-9_]+)';
+    const regex = new RegExp(patternStr, 'g');
+    const parts = content.split(regex);
+    if (!parts || parts.length <= 1) {
+      return <Text style={styles.commentContent}>{content}</Text>;
+    }
+    return (
+      <Text style={styles.commentContent}>
+        {parts.map((part, idx) => {
+          if (part && part.startsWith('@')) {
+            return (
+              <Text key={idx} style={styles.mentionHighlight}>
+                {part}
+              </Text>
+            );
+          }
+          return part;
+        })}
+      </Text>
+    );
+  };
+
   // Publicar comentario o intervención en el foro
   const handleSendComment = async () => {
     if (!proposalDetail) return;
@@ -297,6 +380,7 @@ export default function AssemblyScreen({ embedded = false }) {
       });
 
       setCommentText('');
+      setReplyingTo(null);
       setCommentAttachment(null);
       await fetchComments(proposalDetail.id);
     } catch (e) {
@@ -355,6 +439,7 @@ export default function AssemblyScreen({ embedded = false }) {
     setShowDetailModal(true);
     setLoadingDetail(true);
     setCommentText('');
+    setReplyingTo(null);
     setCommentAttachment(null);
     try {
       const [full, commentList] = await Promise.all([
@@ -819,6 +904,7 @@ export default function AssemblyScreen({ embedded = false }) {
               </View>
             ) : (
               <ScrollView
+                ref={detailScrollRef}
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled={true}
                 showsVerticalScrollIndicator={false}
@@ -831,7 +917,10 @@ export default function AssemblyScreen({ embedded = false }) {
                       {proposalDetail.proposal_type === 'member_admission' ? '📥 Ingreso' : '⚠️ Expulsión'}
                     </Text>
                   </View>
-                  <TouchableOpacity onPress={() => setShowDetailModal(false)}>
+                  <TouchableOpacity onPress={() => {
+                    setShowDetailModal(false);
+                    setReplyingTo(null);
+                  }}>
                     <Text style={styles.closeButtonText}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -1021,7 +1110,19 @@ export default function AssemblyScreen({ embedded = false }) {
                 <View style={styles.sectionCard}>
                   <View style={styles.forumHeaderRow}>
                     <Text style={styles.sectionHeader}>💬 Foro de Debate ({comments.length})</Text>
-                    {loadingComments && <ActivityIndicator size="small" color="#38bdf8" />}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {loadingComments ? (
+                        <ActivityIndicator size="small" color="#38bdf8" />
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => fetchComments(proposalDetail.id)}
+                          style={styles.refreshForumBtn}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.refreshForumBtnText}>🔄 Actualizar</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
 
                   {proposalDetail.status === 'debate' && (
@@ -1061,17 +1162,26 @@ export default function AssemblyScreen({ embedded = false }) {
                       return (
                         <View key={c.id} style={[styles.commentCard, c.is_mine && styles.myCommentCard]}>
                           <View style={styles.commentHeader}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap', gap: 4 }}>
                               <Text style={styles.commentAuthor}>👤 {c.author_name}</Text>
                               {c.is_mine && <Text style={styles.myCommentBadge}> (Tú)</Text>}
                             </View>
-                            {c.stance ? (
-                              <View style={[styles.stanceBadge, { backgroundColor: stanceBg }]}>
-                                <Text style={[styles.stanceBadgeText, { color: stanceColor }]}>{stanceText}</Text>
-                              </View>
-                            ) : null}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <TouchableOpacity
+                                style={styles.replyCommentBtn}
+                                onPress={() => handleReplyToAuthor(c.author_name)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={styles.replyCommentBtnText}>@ Responder</Text>
+                              </TouchableOpacity>
+                              {c.stance ? (
+                                <View style={[styles.stanceBadge, { backgroundColor: stanceBg }]}>
+                                  <Text style={[styles.stanceBadgeText, { color: stanceColor }]}>{stanceText}</Text>
+                                </View>
+                              ) : null}
+                            </View>
                           </View>
-                          <Text style={styles.commentContent}>{c.content}</Text>
+                          {renderCommentContent(c.content)}
                           {c.attachment_url && c.attachment_type === 'image' && (
                             <TouchableOpacity
                               activeOpacity={0.85}
@@ -1131,13 +1241,36 @@ export default function AssemblyScreen({ embedded = false }) {
                         ))}
                       </View>
 
+                      {replyingTo && (
+                        <View style={styles.replyingBanner}>
+                          <Text style={styles.replyingText}>
+                            ↩️ Respondiendo a <Text style={styles.replyingAuthor}>@{replyingTo}</Text>
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setReplyingTo(null);
+                              setCommentText((prev) => prev.replace(`@${replyingTo} `, '').replace(`@${replyingTo}`, ''));
+                            }}
+                            style={styles.cancelReplyBtn}
+                          >
+                            <Text style={styles.cancelReplyText}>✕ Cancelar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
                       <TextInput
+                        ref={commentInputRef}
                         style={styles.commentTextInput}
-                        placeholder="Escribe tu argumento o pregunta para la asamblea..."
+                        placeholder={replyingTo ? `Responde a @${replyingTo}...` : "Escribe tu argumento o pregunta para la asamblea..."}
                         placeholderTextColor="#64748b"
                         multiline
                         value={commentText}
-                        onChangeText={setCommentText}
+                        onChangeText={(txt) => {
+                          setCommentText(txt);
+                          if (replyingTo && !txt.includes(`@${replyingTo}`)) {
+                            setReplyingTo(null);
+                          }
+                        }}
                       />
 
                       {commentAttachment && (
@@ -2580,6 +2713,66 @@ const styles = StyleSheet.create({
     color: '#93c5fd',
     fontSize: 11,
     fontWeight: '600',
+  },
+  replyCommentBtn: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  replyCommentBtnText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  replyingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  replyingText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    flex: 1,
+  },
+  replyingAuthor: {
+    color: '#38bdf8',
+    fontWeight: 'bold',
+  },
+  cancelReplyBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  cancelReplyText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  refreshForumBtn: {
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  refreshForumBtnText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mentionHighlight: {
+    color: '#38bdf8',
+    fontWeight: '700',
   },
   receiptModalOverlay: {
     flex: 1,
