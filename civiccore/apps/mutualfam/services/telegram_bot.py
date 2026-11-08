@@ -28,7 +28,7 @@ def send_telegram_notification(message: str):
             headers={'Content-Type': 'application/json'},
             method='POST'
         )
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             return response.status == 200
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
@@ -66,7 +66,7 @@ def send_telegram_photo(message: str, photo_path: str):
         body.extend(f'\r\n--{boundary}--\r\n'.encode('utf-8'))
         
         req = urllib.request.Request(url, data=bytes(body), headers=headers, method='POST')
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
                 try:
                     res_json = json.loads(response.read().decode('utf-8'))

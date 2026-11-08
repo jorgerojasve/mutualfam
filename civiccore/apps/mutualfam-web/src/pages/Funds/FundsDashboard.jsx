@@ -628,7 +628,7 @@ export default function FundsDashboard() {
                           🐮 {item.titulo}
                         </h3>
                         <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
-                          Para: <strong style={{ color: '#f1f5f9' }}>{item.beneficiario_nombre || 'Familiar'}</strong> • Propuesto por: {item.proponente_nombre || 'Familiar'}
+                          Gestionado por: <strong style={{ color: '#f1f5f9' }}>{item.beneficiario_nombre || 'Familiar'}</strong> • Propuesto por: {item.proponente_nombre || 'Familiar'}
                         </p>
                       </div>
 
@@ -1126,13 +1126,13 @@ export default function FundsDashboard() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Familiar Beneficiario (quien recibe los aportes)
+                  Responsable de gestionar la compra o pago
                 </label>
                 <input
                   type="text"
                   className="form-input"
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="Nombre de la persona beneficiaria"
+                  placeholder="Nombre de quien gestionará la compra o servicio"
                   value={beneficiarioNombre}
                   onChange={(e) => setBeneficiarioNombre(e.target.value)}
                 />
