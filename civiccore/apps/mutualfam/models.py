@@ -154,6 +154,7 @@ class EstadoCompromiso(str, enum.Enum):
     NOTIFICADO = "notificado"     # Notificado con monto en Bs
     PAGADO = "pagado"             # Pago confirmado con comprobante (En validación)
     VALIDADO = "validado"         # Pago verificado por el gestor de la colecta
+    DEVUELTO = "devuelto"         # Aporte devuelto al socio por cancelación/fuerza mayor
     CANCELADO = "cancelado"       # Cancelado antes del pago
 
 
@@ -202,6 +203,8 @@ class Colecta(Base):
 
     # Estado general
     estado = Column(Enum(EstadoColecta), default=EstadoColecta.PROPUESTA, nullable=False)
+    motivo_cancelacion = Column(Text, nullable=True)
+    fecha_cancelacion = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -244,6 +247,15 @@ class CompromisoColecta(Base):
     fecha_pago = Column(DateTime, nullable=True)
     fecha_validacion = Column(DateTime, nullable=True)
     fecha_cancelacion = Column(DateTime, nullable=True)
+
+    # Devolución por cancelación de colecta
+    fecha_devolucion = Column(DateTime, nullable=True)
+    monto_devuelto = Column(Float, nullable=True)
+    moneda_devolucion = Column(String(10), nullable=True)  # 'VES' | 'USD'
+    metodo_devolucion = Column(String(50), nullable=True)
+    referencia_devolucion = Column(String(100), nullable=True)
+    comprobante_devolucion_url = Column(String(500), nullable=True)
+    comision_descontada = Column(Float, default=0.0)
 
     # Relaciones
     colecta = relationship("Colecta", back_populates="compromisos")

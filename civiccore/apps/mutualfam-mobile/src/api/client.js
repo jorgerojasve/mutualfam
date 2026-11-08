@@ -344,11 +344,18 @@ export const colectasApi = {
     const { data } = await apiClient.post(`/colectas/${colectaId}/validar-gasto`, expenseData);
     return data;
   },
-  cancelColecta: async (colectaId) => {
+  cancelColecta: async (colectaId, payload = {}) => {
     if (!colectaId) {
       throw new Error('ID de colecta no válido');
     }
-    const { data } = await apiClient.patch(`/colectas/${colectaId}/cancelar`);
+    const { data } = await apiClient.patch(`/colectas/${colectaId}/cancelar`, payload);
+    return data;
+  },
+  refundCommitment: async (colectaId, compromisoId, refundData) => {
+    if (!colectaId || !compromisoId) {
+      throw new Error('Parámetros de devolución no válidos');
+    }
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/devolver`, refundData);
     return data;
   }
 };

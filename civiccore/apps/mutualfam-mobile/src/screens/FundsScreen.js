@@ -185,7 +185,24 @@ export default function FundsScreen() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
   const [targetColecta, setTargetColecta] = useState(null);
+  const [targetCompromiso, setTargetCompromiso] = useState(null);
+
+  // Cancelar Colecta por Fuerza Mayor
+  const [cancelMotive, setCancelMotive] = useState('');
+  const [canceling, setCanceling] = useState(false);
+
+  // Devolver Aporte
+  const [refundCompromiso, setRefundCompromiso] = useState(null);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundCurrency, setRefundCurrency] = useState('VES');
+  const [refundMethod, setRefundMethod] = useState('Pago Móvil');
+  const [refundRef, setRefundRef] = useState('');
+  const [refundCommission, setRefundCommission] = useState('0');
+  const [refundReceiptUri, setRefundReceiptUri] = useState(null);
+  const [refunding, setRefunding] = useState(false);
 
   // Formulario Crear Colecta
   const [titulo, setTitulo] = useState('');
@@ -732,7 +749,8 @@ export default function FundsScreen() {
 
   // Confirmar Pago de Aporte
   const handleConfirmPayment = async () => {
-    if (!targetColecta || !targetColecta.id || !targetColecta.mi_compromiso?.id) {
+    const activeComp = targetCompromiso || targetColecta?.mi_compromiso;
+    if (!targetColecta || !targetColecta.id || !activeComp?.id) {
       Alert.alert('Error', 'No se ha seleccionado un compromiso válido.');
       return;
     }
@@ -747,7 +765,7 @@ export default function FundsScreen() {
         setUploadingReceipt(false);
       }
 
-      const compromisoId = targetColecta.mi_compromiso.id;
+      const compromisoId = activeComp.id;
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
         payment_method: isBeneficiarySelf ? 'Aporte Propio' : paymentMethod,
         codigo_banco: undefined,
@@ -761,6 +779,7 @@ export default function FundsScreen() {
       setPaymentNote('');
       setReceiptUri(null);
       setTargetColecta(null);
+      setTargetCompromiso(null);
       setConnectionError(false);
       if (setIsOffline) setIsOffline(false);
       Alert.alert(
@@ -778,6 +797,98 @@ export default function FundsScreen() {
       Alert.alert('Error', getErrorMessage(e, 'Error al confirmar el pago'));
     } finally {
       setSubmitting(false);
+      setUploadingReceipt(false);
+    }
+  };
+
+  // Cancelar Colecta por Fuerza Mayor
+  const handleCancelColecta = (colecta) => {
+    setTargetColecta(colecta);
+    setCancelMotive('');
+    setShowCancelModal(true);
+  };
+
+  const handleConfirmCancelColecta = async () => {
+    if (!targetColecta || !targetColecta.id) return;
+    if (!cancelMotive.trim()) {
+      Alert.alert('Motivo requerido', 'Por favor ingresa la causa de fuerza mayor para cancelar la colecta.');
+      return;
+    }
+    setCanceling(true);
+    try {
+      await colectasApi.cancelColecta(targetColecta.id, { motivo: cancelMotive.trim() });
+      setShowCancelModal(false);
+      setCancelMotive('');
+      setTargetColecta(null);
+      Alert.alert(
+        'Colecta Cancelada por Fuerza Mayor',
+        'La colecta ha sido cancelada. Si existen aportes recaudados, procede a reintegrarlos a cada socio según su método original.'
+      );
+      fetchColectas();
+    } catch (e) {
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo cancelar la colecta'));
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  // Abrir Modal de Devolución de Aporte
+  const handleOpenRefund = (colecta, comp) => {
+    setTargetColecta(colecta);
+    setRefundCompromiso(comp);
+    const isBs = comp.payment_method === 'Pago Móvil' || comp.payment_method === 'Transferencia Bancaria';
+    const initialAmount = isBs
+      ? (comp.monto_bs || (comp.monto_usd * (colecta.tasa_actual || 1)))
+      : comp.monto_usd;
+    setRefundAmount(String(initialAmount ? Math.round(initialAmount * 100) / 100 : ''));
+    setRefundCurrency(isBs ? 'VES' : 'USD');
+    setRefundMethod(comp.payment_method || 'Pago Móvil');
+    setRefundRef('');
+    setRefundCommission('0');
+    setRefundReceiptUri(null);
+    setShowRefundModal(true);
+  };
+
+  // Confirmar Devolución de Aporte
+  const handleConfirmRefund = async () => {
+    if (!targetColecta || !refundCompromiso) return;
+    const parsedAmount = parseFloat(refundAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Monto inválido', 'El monto a devolver debe ser mayor a 0.');
+      return;
+    }
+    const parsedCommission = parseFloat(refundCommission) || 0;
+    setRefunding(true);
+    try {
+      let finalReceiptUrl = null;
+      if (refundReceiptUri) {
+        setUploadingReceipt(true);
+        const resUpload = await loansApi.uploadFile(refundReceiptUri);
+        finalReceiptUrl = resUpload.url || resUpload.file_url;
+        setUploadingReceipt(false);
+      }
+
+      await colectasApi.refundCommitment(targetColecta.id, refundCompromiso.id, {
+        monto_devuelto: parsedAmount,
+        moneda_devolucion: refundCurrency,
+        metodo_devolucion: refundMethod,
+        referencia_devolucion: refundRef.trim() || undefined,
+        comprobante_devolucion_url: finalReceiptUrl || undefined,
+        comision_descontada: parsedCommission,
+      });
+
+      setShowRefundModal(false);
+      setRefundCompromiso(null);
+      setTargetColecta(null);
+      Alert.alert(
+        'Devolución Exitosa',
+        `El aporte de ${refundCompromiso.socio_name} ha sido registrado como devuelto exitosamente.`
+      );
+      fetchColectas();
+    } catch (e) {
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo registrar la devolución del aporte'));
+    } finally {
+      setRefunding(false);
       setUploadingReceipt(false);
     }
   };
@@ -885,7 +996,7 @@ export default function FundsScreen() {
   };
 
   // Obtener estilo de badge de estado
-  const getStatusBadge = (estado) => {
+  const getStatusBadge = (estado, item = null) => {
     switch (estado) {
       case 'propuesta':
         return { label: '⏳ PROPUESTA', bg: '#fef3c7', text: '#d97706', border: '#fcd34d' };
@@ -896,6 +1007,9 @@ export default function FundsScreen() {
       case 'completada':
         return { label: '✅ COMPLETADA', bg: '#ede9fe', text: '#7c3aed', border: '#c4b5fd' };
       case 'cancelada':
+        if (item?.tiene_devoluciones_pendientes) {
+          return { label: '⚠️ CANCELADA (DEVOLVIENDO)', bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', border: '#ef4444' };
+        }
         return { label: '✖️ CANCELADA', bg: '#f1f5f9', text: '#64748b', border: '#cbd5e1' };
       default:
         return { label: estado?.toUpperCase(), bg: '#f1f5f9', text: '#64748b', border: '#cbd5e1' };
@@ -904,7 +1018,7 @@ export default function FundsScreen() {
 
   // Render Card de Colecta
   const renderColectaCard = ({ item }) => {
-    const badge = getStatusBadge(item.estado);
+    const badge = getStatusBadge(item.estado, item);
     const isOwner = currentUser && item.proponente_id === currentUser.id;
     const isBeneficiary = currentUser && item.beneficiario_id === currentUser.id;
     const isGestor = currentUser && (currentUser.id === (item.beneficiario_id || item.proponente_id));
@@ -1051,6 +1165,7 @@ export default function FundsScreen() {
                   paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
                   validado:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
                   verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+                  devuelto:      { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
                 };
                 const cs = csMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
                 const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
@@ -1117,7 +1232,45 @@ export default function FundsScreen() {
                       </TouchableOpacity>
                     ) : null}
 
-                    {/* Acciones de aporte (Homologado a Préstamos) */}
+                    {/* Información si fue devuelto */}
+                    {comp.estado === 'devuelto' && (
+                      <View style={styles.refundedInfoBox}>
+                        <Text style={styles.refundedInfoTitle}>🔄 Aporte Reintegrado al Socio:</Text>
+                        <Text style={styles.refundedInfoText}>
+                          Monto devuelto: <Text style={{ fontWeight: 'bold', color: '#10b981' }}>
+                            {comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}
+                            {formatVE(comp.monto_devuelto)}
+                          </Text>
+                          {comp.metodo_devolucion ? ` mediante ${comp.metodo_devolucion}` : ''}
+                        </Text>
+                        {comp.comision_descontada > 0 ? (
+                          <Text style={styles.refundedInfoSub}>
+                            Comisión bancaria deducida: Bs {formatVE(comp.comision_descontada)}
+                          </Text>
+                        ) : null}
+                        {comp.referencia_devolucion ? (
+                          <Text style={styles.refundedInfoSub}># Ref: {comp.referencia_devolucion}</Text>
+                        ) : null}
+                        {comp.comprobante_devolucion_url ? (
+                          <TouchableOpacity
+                            style={[styles.receiptLinkBtn, { marginTop: 6 }]}
+                            onPress={() => openReceiptViewer(
+                              comp.comprobante_devolucion_url,
+                              `Comprobante de Devolución - ${comp.socio_name}`,
+                              {
+                                method: comp.metodo_devolucion,
+                                reference: comp.referencia_devolucion,
+                                amount: `${comp.moneda_devolucion === 'VES' ? 'Bs ' : '$ '}${formatVE(comp.monto_devuelto)}`
+                              }
+                            )}
+                          >
+                            <Text style={styles.receiptLinkText}>🧾 Ver comprobante de devolución</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    )}
+
+                    {/* Acciones de aporte */}
                     {isGestor && comp.estado === 'pagado' && (
                       <View style={styles.contribActions}>
                         <TouchableOpacity
@@ -1128,6 +1281,42 @@ export default function FundsScreen() {
                         </TouchableOpacity>
                       </View>
                     )}
+
+                    {/* Botón Devolver Aporte (Gestor en colecta cancelada con aportes pagados o validados) */}
+                    {item.estado === 'cancelada' && isGestor && (comp.estado === 'pagado' || comp.estado === 'validado') && comp.payment_method !== 'Aporte Propio' && (
+                      <View style={styles.contribActions}>
+                        <TouchableOpacity
+                          style={[styles.contribActionPrimary, { backgroundColor: '#e11d48' }]}
+                          onPress={() => handleOpenRefund(item, comp)}
+                        >
+                          <Text style={styles.contribActionPrimaryText}>🔄 Devolver Aporte</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* Botón Pagar aporte individual si el socio tiene compromisos pendientes */}
+                    {comp.socio_id === currentUser?.id && (comp.estado === 'prometido' || comp.estado === 'notificado') && (item.estado === 'propuesta' || item.estado === 'activa') && (
+                      <View style={styles.contribActions}>
+                        <TouchableOpacity
+                          style={[styles.contribActionPrimary, { backgroundColor: '#10b981' }]}
+                          onPress={() => {
+                            setTargetColecta(item);
+                            setTargetCompromiso(comp);
+                            const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
+                            setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
+                            setShowPaymentModal(true);
+                          }}
+                        >
+                          <Text style={styles.contribActionPrimaryText}>💵 Pagar este aporte</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.contribActionPrimary, { backgroundColor: '#334155' }]}
+                          onPress={() => handleCancelCommitment(item, comp)}
+                        >
+                          <Text style={[styles.contribActionPrimaryText, { color: '#f87171' }]}>✕ Cancelar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -1135,11 +1324,26 @@ export default function FundsScreen() {
           );
         })()}
 
+        {/* Banner de Cancelación por Fuerza Mayor */}
+        {item.estado === 'cancelada' && (
+          <View style={styles.cancelledBanner}>
+            <Text style={styles.cancelledBannerTitle}>⚠️ Colecta Cancelada por Fuerza Mayor</Text>
+            {item.motivo_cancelacion ? (
+              <Text style={styles.cancelledBannerDesc}>Motivo: {item.motivo_cancelacion}</Text>
+            ) : null}
+            <Text style={styles.cancelledBannerSub}>
+              {item.tiene_devoluciones_pendientes
+                ? '⏳ Quien gestiona debe reintegrar los aportes recaudados a cada socio según su método original.'
+                : '✅ Todos los aportes recaudados han sido devueltos a los miembros.'}
+            </Text>
+          </View>
+        )}
+
         {/* Botones de acción */}
         <View style={styles.cardActions}>
 
-          {/* Botón Prometer Aporte */}
-          {(item.estado === 'propuesta' || item.estado === 'activa') && !myPledge && (
+          {/* Botón Aportar / Aportar más */}
+          {(item.estado === 'propuesta' || item.estado === 'activa') && (
             <TouchableOpacity
               style={styles.btnPrimary}
               onPress={() => {
@@ -1147,7 +1351,9 @@ export default function FundsScreen() {
                 setShowPledgeModal(true);
               }}
             >
-              <Text style={styles.btnPrimaryText}>🤝 Aportar</Text>
+              <Text style={styles.btnPrimaryText}>
+                {(item.mis_compromisos && item.mis_compromisos.length > 0) || myPledge ? '➕ Aportar más' : '🤝 Aportar'}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -1157,12 +1363,13 @@ export default function FundsScreen() {
               style={styles.btnSuccess}
               onPress={() => {
                 setTargetColecta(item);
+                setTargetCompromiso(myPledge);
                 const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
                 setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
                 setShowPaymentModal(true);
               }}
             >
-              <Text style={styles.btnPrimaryText}>💵 Pagar</Text>
+              <Text style={styles.btnPrimaryText}>💵 Pagar (${formatVE(myPledge.monto_usd)} USD)</Text>
             </TouchableOpacity>
           )}
 
@@ -1176,15 +1383,15 @@ export default function FundsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón Notificar Cobro (Ocultado a solicitud del usuario)
-          {isOwner && item.estado === 'activa' && (
+          {/* Botón Cancelar Colecta por Fuerza Mayor (Gestor o Proponente) */}
+          {isGestor && (item.estado === 'propuesta' || item.estado === 'activa' || item.estado === 'cerrada') && (
             <TouchableOpacity
-              style={styles.btnWarning}
-              onPress={() => handleNotifyPayment(item)}
+              style={[styles.btnDangerOutline, { borderColor: '#ef4444' }]}
+              onPress={() => handleCancelColecta(item)}
             >
-              <Text style={styles.btnPrimaryText}>🔔 Notificar Bs</Text>
+              <Text style={[styles.btnDangerOutlineText, { color: '#f87171' }]}>⚠️ Cancelar Colecta</Text>
             </TouchableOpacity>
-          )} */}
+          )}
 
           {/* Botón Validar Gasto (beneficiario si está cerrada o completó recaudación) */}
           {(isOwner || isBeneficiary) &&
@@ -1769,19 +1976,21 @@ export default function FundsScreen() {
               contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
               <Text style={styles.modalTitle}>💵 Confirmar Pago de Aporte</Text>
-              {targetColecta && (
+              {targetColecta && (() => {
+                const activeComp = targetCompromiso || targetColecta.mi_compromiso;
+                return (
                 <>
                   <Text style={styles.modalSubtitle}>
                     Colecta: "{targetColecta.titulo}" • Gestionado por: {targetColecta.beneficiario_nombre}
                   </Text>
 
-                  {targetColecta.mi_compromiso && (
+                  {activeComp && (
                     <View style={styles.paymentSummaryBox}>
                       <Text style={styles.paymentSummaryText}>
-                        Monto acordado: <Text style={{ fontWeight: 'bold' }}>${formatVE(targetColecta.mi_compromiso.monto_usd)} USD</Text>
+                        Monto acordado: <Text style={{ fontWeight: 'bold' }}>${formatVE(activeComp.monto_usd)} USD</Text>
                       </Text>
                       <Text style={styles.paymentSummaryBs}>
-                        Total a transferir: Bs {formatVE(targetColecta.mi_compromiso.monto_bs || (targetColecta.mi_compromiso.monto_usd * targetColecta.tasa_actual))}
+                        Total a transferir: Bs {formatVE(activeComp.monto_bs || (activeComp.monto_usd * targetColecta.tasa_actual))}
                       </Text>
                       <Text style={styles.paymentSummaryRate}>
                         Tasa aplicada ({targetColecta.tasa_label}): Bs. {formatVE(targetColecta.tasa_actual)}
@@ -1797,10 +2006,10 @@ export default function FundsScreen() {
                       </Text>
                       <View style={{ marginTop: 12, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
                         <Text style={{ color: '#10b981', fontWeight: 'bold', fontSize: 15, textAlign: 'center' }}>
-                          Monto a Acreditar: ${formatVE(targetColecta.mi_compromiso?.monto_usd)} USD
+                          Monto a Acreditar: ${formatVE(activeComp?.monto_usd)} USD
                         </Text>
                         <Text style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginTop: 4 }}>
-                          Equivalente: Bs {formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
+                          Equivalente: Bs {formatVE(activeComp?.monto_bs || ((activeComp?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
                         </Text>
                       </View>
                     </View>
@@ -1826,7 +2035,7 @@ export default function FundsScreen() {
                     const isTransferencia = selectedNormalized === 'Transferencia Bancaria';
                     const pmData = isPagoMovil ? getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Pago Móvil') : null;
                     const tbData = isTransferencia ? getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Transferencia Bancaria') : null;
-                    const rawMontoBs = targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1));
+                    const rawMontoBs = activeComp?.monto_bs || ((activeComp?.monto_usd || 0) * (targetColecta.tasa_actual || 1));
                     const montoBsStr = formatVE(rawMontoBs);
 
                     return (
@@ -2022,7 +2231,10 @@ export default function FundsScreen() {
                   <View style={styles.modalActions}>
                     <TouchableOpacity
                       style={styles.modalCancel}
-                      onPress={() => setShowPaymentModal(false)}
+                      onPress={() => {
+                        setShowPaymentModal(false);
+                        setTargetCompromiso(null);
+                      }}
                     >
                       <Text style={styles.modalCancelText}>Cancelar</Text>
                     </TouchableOpacity>
@@ -2043,7 +2255,8 @@ export default function FundsScreen() {
                     </TouchableOpacity>
                   </View>
                 </>
-              )}
+                );
+              })()}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -2151,6 +2364,240 @@ export default function FundsScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* ==================================================== */}
+      {/* MODAL 7: CANCELAR COLECTA POR FUERZA MAYOR           */}
+      {/* ==================================================== */}
+      <Modal visible={showCancelModal} animationType="slide" transparent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>⚠️ Cancelar por Fuerza Mayor</Text>
+              {targetColecta && (
+                <>
+                  <Text style={styles.modalSubtitle}>
+                    Colecta: "{targetColecta.titulo}"
+                  </Text>
+
+                  <View style={[styles.cancelledBanner, { marginTop: 4, marginBottom: 14 }]}>
+                    <Text style={styles.cancelledBannerTitle}>Importante sobre cancelaciones:</Text>
+                    <Text style={styles.cancelledBannerSub}>
+                      Si ya se han recaudado o validado aportes de los miembros, deberás reintegrar el dinero a cada socio según el método original que utilizó (Pago Móvil en Bs, o Efectivo).
+                    </Text>
+                  </View>
+
+                  <Text style={styles.inputLabel}>Causa o Motivo de Fuerza Mayor *</Text>
+                  <TextInput
+                    style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+                    value={cancelMotive}
+                    onChangeText={setCancelMotive}
+                    placeholder="Ej: El medicamento o equipo necesario no se encuentra disponible en ningún proveedor y se cancela la compra."
+                    placeholderTextColor="#64748b"
+                    multiline
+                  />
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={styles.modalCancel}
+                      onPress={() => {
+                        setShowCancelModal(false);
+                        setCancelMotive('');
+                      }}
+                    >
+                      <Text style={styles.modalCancelText}>Volver</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalSubmit, { backgroundColor: '#ef4444' }]}
+                      onPress={handleConfirmCancelColecta}
+                      disabled={canceling}
+                    >
+                      {canceling ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.modalSubmitText}>Confirmar Cancelación</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ==================================================== */}
+      {/* MODAL 8: DEVOLVER APORTE POR FUERZA MAYOR            */}
+      {/* ==================================================== */}
+      <Modal visible={showRefundModal} animationType="slide" transparent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.modalOverlay, keyboardVisible && styles.modalOverlayShifted]}
+        >
+          <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>🔄 Devolver Aporte a Socio</Text>
+              {targetColecta && refundCompromiso && (() => {
+                const isBs = refundCompromiso.payment_method === 'Pago Móvil' || refundCompromiso.payment_method === 'Transferencia Bancaria';
+                let socioPmData = null;
+                try {
+                  if (refundCompromiso.socio_payment_methods_json) {
+                    const parsed = JSON.parse(refundCompromiso.socio_payment_methods_json);
+                    socioPmData = parsed['Pago Móvil'] || parsed['pago_movil'] || parsed['Transferencia Bancaria'] || null;
+                  }
+                } catch (e) {}
+
+                const rawOriginalBs = refundCompromiso.monto_bs || (refundCompromiso.monto_usd * (targetColecta.tasa_actual || 1));
+                const estComision03 = isBs ? Math.round(rawOriginalBs * 0.003 * 100) / 100 : 0;
+
+                return (
+                  <>
+                    <Text style={styles.modalSubtitle}>
+                      Colecta: "{targetColecta.titulo}" • Aportante: {refundCompromiso.socio_name}
+                    </Text>
+
+                    {/* Resumen del Aporte Original */}
+                    <View style={styles.paymentSummaryBox}>
+                      <Text style={styles.paymentSummaryText}>
+                        Método original: <Text style={{ fontWeight: 'bold' }}>{refundCompromiso.payment_method || 'Aporte'}</Text>
+                      </Text>
+                      <Text style={styles.paymentSummaryBs}>
+                        {isBs
+                          ? `Monto original aportado: Bs ${formatVE(rawOriginalBs)}`
+                          : `Monto original aportado: $${formatVE(refundCompromiso.monto_usd)} USD en Efectivo`}
+                      </Text>
+                      <Text style={styles.paymentSummaryRate}>
+                        {isBs
+                          ? 'En cancelaciones por fuerza mayor, se reintegra el mismo monto en Bolívares.'
+                          : 'En cancelaciones por fuerza mayor, se reintegra el mismo efectivo recibido.'}
+                      </Text>
+                    </View>
+
+                    {/* Datos de Pago del Socio si están registrados */}
+                    {socioPmData && (
+                      <View style={styles.funderCardBox}>
+                        <Text style={styles.funderCardTitle}>📋 Datos registrados de {refundCompromiso.socio_name}:</Text>
+                        {socioPmData.banco ? (
+                          <View style={styles.funderDataRow}>
+                            <Text style={styles.funderDataLabel}>Banco:</Text>
+                            <TouchableOpacity onPress={() => copyField('f_banco', socioPmData.banco)}>
+                              <Text style={styles.funderDataVal}>{socioPmData.banco} {copiedField === 'f_banco' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                        {socioPmData.telefono ? (
+                          <View style={styles.funderDataRow}>
+                            <Text style={styles.funderDataLabel}>Teléfono:</Text>
+                            <TouchableOpacity onPress={() => copyField('f_tel', socioPmData.telefono)}>
+                              <Text style={styles.funderDataVal}>{socioPmData.telefono} {copiedField === 'f_tel' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                        {socioPmData.cedula ? (
+                          <View style={styles.funderDataRow}>
+                            <Text style={styles.funderDataLabel}>Documento:</Text>
+                            <TouchableOpacity onPress={() => copyField('f_ced', `${socioPmData.tipo_doc || 'V'}-${socioPmData.cedula}`)}>
+                              <Text style={styles.funderDataVal}>{socioPmData.tipo_doc || 'V'}-{socioPmData.cedula} {copiedField === 'f_ced' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                        {socioPmData.cuenta ? (
+                          <View style={styles.funderDataRow}>
+                            <Text style={styles.funderDataLabel}>Nro. Cuenta:</Text>
+                            <TouchableOpacity onPress={() => copyField('f_cta', socioPmData.cuenta)}>
+                              <Text style={styles.funderDataVal}>{socioPmData.cuenta} {copiedField === 'f_cta' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : null}
+                      </View>
+                    )}
+
+                    {/* Monto a Devolver */}
+                    <Text style={styles.inputLabel}>
+                      Monto a Devolver ({refundCurrency === 'VES' ? 'Bs' : 'USD'}) *
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      keyboardType="decimal-pad"
+                      value={refundAmount}
+                      onChangeText={setRefundAmount}
+                      placeholder="0.00"
+                      placeholderTextColor="#64748b"
+                    />
+
+                    {/* Descuento sugerido de comisión bancaria para Pago Móvil */}
+                    {isBs && estComision03 > 0 && (
+                      <TouchableOpacity
+                        style={styles.quickDeductBtn}
+                        onPress={() => {
+                          const net = Math.max(0, Math.round((rawOriginalBs - estComision03) * 100) / 100);
+                          setRefundAmount(String(net));
+                          setRefundCommission(String(estComision03));
+                        }}
+                      >
+                        <Text style={styles.quickDeductText}>
+                          ⚡ Descontar comisión bancaria estimada (~0.3%: Bs {formatVE(estComision03)})
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Referencia de Pago Móvil o Devolución */}
+                    <Text style={styles.inputLabel}>
+                      {isBs ? 'Nro. de Referencia de la Transferencia / Pago Móvil *' : 'Referencia o Nota de Entrega en Efectivo *'}
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={refundRef}
+                      onChangeText={setRefundRef}
+                      placeholder={isBs ? "Ej: 987654 (últimos dígitos)" : "Ej: Billete de $20 entregado en mano"}
+                      placeholderTextColor="#64748b"
+                    />
+
+                    {/* Comprobante Opcional */}
+                    <Text style={styles.inputLabel}>Comprobante de Devolución (Opcional)</Text>
+                    <TouchableOpacity
+                      style={styles.btnUpload}
+                      onPress={() => pickImage((uri) => setRefundReceiptUri(uri))}
+                    >
+                      <Text style={styles.btnUploadText}>
+                        {refundReceiptUri ? '📷 Cambiar Comprobante' : '📎 Adjuntar Captura de Devolución (Opcional)'}
+                      </Text>
+                    </TouchableOpacity>
+                    {refundReceiptUri && (
+                      <Image source={{ uri: refundReceiptUri }} style={styles.receiptPreviewImage} />
+                    )}
+
+                    <View style={styles.modalActions}>
+                      <TouchableOpacity
+                        style={styles.modalCancel}
+                        onPress={() => {
+                          setShowRefundModal(false);
+                          setRefundCompromiso(null);
+                        }}
+                      >
+                        <Text style={styles.modalCancelText}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.modalSubmit, { backgroundColor: '#10b981' }]}
+                        onPress={handleConfirmRefund}
+                        disabled={refunding || uploadingReceipt}
+                      >
+                        {refunding || uploadingReceipt ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <Text style={styles.modalSubmitText}>Registrar Devolución</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal Visor de Comprobantes */}
@@ -3329,4 +3776,100 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   contribActionPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  cancelledBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  cancelledBannerTitle: {
+    color: '#f87171',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  cancelledBannerDesc: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  cancelledBannerSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  refundedInfoBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 6,
+    gap: 2,
+  },
+  refundedInfoTitle: {
+    color: '#34d399',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  refundedInfoText: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  refundedInfoSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  funderCardBox: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    gap: 6,
+  },
+  funderCardTitle: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  funderDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  funderDataLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  funderDataVal: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  quickDeductBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  quickDeductText: {
+    color: '#f87171',
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });
