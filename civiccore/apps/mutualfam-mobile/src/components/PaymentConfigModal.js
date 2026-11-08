@@ -31,6 +31,42 @@ const AVAILABLE_PAYMENT_METHODS = [
   'Binance',
 ];
 
+export const DOCUMENT_TYPES = [
+  {
+    key: 'Persona',
+    prefix: 'V',
+    title: 'V - Venezolano (Persona Natural)',
+    subtitle: 'Cédula de identidad venezolana',
+  },
+  {
+    key: 'Extranjero',
+    prefix: 'E',
+    title: 'E - Extranjero',
+    subtitle: 'Cédula de extranjería',
+  },
+  {
+    key: 'Comercio',
+    prefix: 'J',
+    title: 'J - Jurídico / Comercio (RIF)',
+    subtitle: 'Empresas, comercios y firmas personales',
+  },
+  {
+    key: 'Comuna',
+    prefix: 'G',
+    title: 'G - Gubernamental / Comuna (RIF)',
+    subtitle: 'Instituciones públicas, comunas y consejos comunales',
+  },
+];
+
+export const getDocTypeInfo = (tipo) => {
+  const t = (tipo || 'Persona').toString().trim();
+  if (t === 'Persona' || t === 'V') return DOCUMENT_TYPES[0];
+  if (t === 'Extranjero' || t === 'E') return DOCUMENT_TYPES[1];
+  if (t === 'Comercio' || t === 'J') return DOCUMENT_TYPES[2];
+  if (t === 'Comuna' || t === 'G') return DOCUMENT_TYPES[3];
+  return DOCUMENT_TYPES[0];
+};
+
 export default function PaymentConfigModal({
   visible,
   onClose,
@@ -47,6 +83,8 @@ export default function PaymentConfigModal({
   const [pmErrors, setPmErrors] = useState({});
   const [tbErrors, setTbErrors] = useState({});
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isPmDocPickerOpen, setIsPmDocPickerOpen] = useState(false);
+  const [isTbDocPickerOpen, setIsTbDocPickerOpen] = useState(false);
   const configScrollRef = useRef(null);
 
   useEffect(() => {
@@ -290,10 +328,15 @@ export default function PaymentConfigModal({
   const handleRequestClose = () => {
     if (isPickingBank) {
       setIsPickingBank(false);
+    } else if (isTbDocPickerOpen || isPmDocPickerOpen) {
+      setIsTbDocPickerOpen(false);
+      setIsPmDocPickerOpen(false);
     } else if (selectedConfigMethod) {
       setSelectedConfigMethod(null);
       setPmErrors({});
       setTbErrors({});
+      setIsTbDocPickerOpen(false);
+      setIsPmDocPickerOpen(false);
     } else {
       if (onClose) onClose();
     }
@@ -601,46 +644,107 @@ export default function PaymentConfigModal({
                       <Text style={styles.errorText}>{pmErrors.banco}</Text>
                     )}
 
-                    <Text style={styles.label}>Tipo de documento</Text>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        marginBottom: 15,
-                      }}
+                    <Text style={styles.label}>Tipo de Documento</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.input,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                          borderColor: isPmDocPickerOpen ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                          marginBottom: isPmDocPickerOpen ? 6 : 15,
+                        },
+                      ]}
+                      onPress={() => setIsPmDocPickerOpen(!isPmDocPickerOpen)}
+                      activeOpacity={0.8}
                     >
-                      {['Persona', 'Comercio', 'Comuna'].map((tipo) => (
-                        <TouchableOpacity
-                          key={tipo}
-                          style={[
-                            styles.methodPill,
-                            (paymentConfig['Pago Móvil']?.tipo_doc || 'Persona') === tipo
-                              ? styles.methodPillActive
-                              : null,
-                            { flex: 1, marginHorizontal: 2 },
-                          ]}
-                          onPress={() =>
-                            setPaymentConfig({
-                              ...paymentConfig,
-                              'Pago Móvil': {
-                                ...(paymentConfig['Pago Móvil'] || {}),
-                                tipo_doc: tipo,
-                              },
-                            })
-                          }
-                        >
-                          <Text
-                            style={
-                              (paymentConfig['Pago Móvil']?.tipo_doc || 'Persona') === tipo
-                                ? styles.methodPillTextActive
-                                : styles.methodPillText
-                            }
-                          >
-                            {tipo}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                        <View style={styles.docBadge}>
+                          <Text style={styles.docBadgeText}>
+                            {getDocTypeInfo(paymentConfig['Pago Móvil']?.tipo_doc).prefix}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                        </View>
+                        <Text
+                          style={{
+                            color: '#fff',
+                            fontSize: 15,
+                            fontWeight: '500',
+                            marginLeft: 10,
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {getDocTypeInfo(paymentConfig['Pago Móvil']?.tipo_doc).title}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          color: '#60a5fa',
+                          fontSize: 13,
+                          fontWeight: '600',
+                          marginLeft: 8,
+                        }}
+                      >
+                        {isPmDocPickerOpen ? 'Cerrar ▲' : 'Elegir ▼'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {isPmDocPickerOpen && (
+                      <View style={styles.dropdownContainer}>
+                        {DOCUMENT_TYPES.map((doc, idx) => {
+                          const currentPmKey = getDocTypeInfo(paymentConfig['Pago Móvil']?.tipo_doc).key;
+                          const isSelected = currentPmKey === doc.key;
+                          return (
+                            <TouchableOpacity
+                              key={doc.key}
+                              style={[
+                                styles.dropdownItem,
+                                isSelected && styles.dropdownItemSelected,
+                                idx === DOCUMENT_TYPES.length - 1 && { borderBottomWidth: 0 },
+                              ]}
+                              onPress={() => {
+                                setPaymentConfig({
+                                  ...paymentConfig,
+                                  'Pago Móvil': {
+                                    ...(paymentConfig['Pago Móvil'] || {}),
+                                    tipo_doc: doc.key,
+                                  },
+                                });
+                                setIsPmDocPickerOpen(false);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.docBadge, isSelected && styles.docBadgeActive]}>
+                                <Text
+                                  style={[
+                                    styles.docBadgeText,
+                                    isSelected && styles.docBadgeTextActive,
+                                  ]}
+                                >
+                                  {doc.prefix}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
+                                <Text
+                                  style={[
+                                    styles.dropdownItemTitle,
+                                    isSelected && styles.dropdownItemTitleActive,
+                                  ]}
+                                >
+                                  {doc.title}
+                                </Text>
+                                <Text style={styles.dropdownItemSubtitle}>
+                                  {doc.subtitle}
+                                </Text>
+                              </View>
+                              {isSelected && <Text style={styles.dropdownCheckmark}>✓</Text>}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
 
                     <Text style={styles.label}>Número de documento</Text>
                     <TextInput
@@ -878,50 +982,106 @@ export default function PaymentConfigModal({
                     )}
 
                     <Text style={styles.label}>Tipo de Documento</Text>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        marginBottom: 15,
-                      }}
+                    <TouchableOpacity
+                      style={[
+                        styles.input,
+                        {
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                          borderColor: isTbDocPickerOpen ? '#3b82f6' : 'rgba(255,255,255,0.1)',
+                          marginBottom: isTbDocPickerOpen ? 6 : 15,
+                        },
+                      ]}
+                      onPress={() => setIsTbDocPickerOpen(!isTbDocPickerOpen)}
+                      activeOpacity={0.8}
                     >
-                      {[
-                        { key: 'Persona', label: 'V' },
-                        { key: 'Comercio', label: 'J' },
-                        { key: 'Extranjero', label: 'E' },
-                        { key: 'Comuna', label: 'G' },
-                      ].map((item) => (
-                        <TouchableOpacity
-                          key={item.key}
-                          style={[
-                            styles.methodPill,
-                            (paymentConfig['Transferencia Bancaria']?.tipo_doc || 'Persona') === item.key
-                              ? styles.methodPillActive
-                              : null,
-                            { flex: 1, marginHorizontal: 2 },
-                          ]}
-                          onPress={() =>
-                            setPaymentConfig({
-                              ...paymentConfig,
-                              'Transferencia Bancaria': {
-                                ...(paymentConfig['Transferencia Bancaria'] || {}),
-                                tipo_doc: item.key,
-                              },
-                            })
-                          }
-                        >
-                          <Text
-                            style={
-                              (paymentConfig['Transferencia Bancaria']?.tipo_doc || 'Persona') === item.key
-                                ? styles.methodPillTextActive
-                                : styles.methodPillText
-                            }
-                          >
-                            {item.label} - {item.key}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                        <View style={styles.docBadge}>
+                          <Text style={styles.docBadgeText}>
+                            {getDocTypeInfo(paymentConfig['Transferencia Bancaria']?.tipo_doc).prefix}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                        </View>
+                        <Text
+                          style={{
+                            color: '#fff',
+                            fontSize: 15,
+                            fontWeight: '500',
+                            marginLeft: 10,
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {getDocTypeInfo(paymentConfig['Transferencia Bancaria']?.tipo_doc).title}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          color: '#60a5fa',
+                          fontSize: 13,
+                          fontWeight: '600',
+                          marginLeft: 8,
+                        }}
+                      >
+                        {isTbDocPickerOpen ? 'Cerrar ▲' : 'Elegir ▼'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {isTbDocPickerOpen && (
+                      <View style={styles.dropdownContainer}>
+                        {DOCUMENT_TYPES.map((doc, idx) => {
+                          const currentTbKey = getDocTypeInfo(paymentConfig['Transferencia Bancaria']?.tipo_doc).key;
+                          const isSelected = currentTbKey === doc.key;
+                          return (
+                            <TouchableOpacity
+                              key={doc.key}
+                              style={[
+                                styles.dropdownItem,
+                                isSelected && styles.dropdownItemSelected,
+                                idx === DOCUMENT_TYPES.length - 1 && { borderBottomWidth: 0 },
+                              ]}
+                              onPress={() => {
+                                setPaymentConfig({
+                                  ...paymentConfig,
+                                  'Transferencia Bancaria': {
+                                    ...(paymentConfig['Transferencia Bancaria'] || {}),
+                                    tipo_doc: doc.key,
+                                  },
+                                });
+                                setIsTbDocPickerOpen(false);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.docBadge, isSelected && styles.docBadgeActive]}>
+                                <Text
+                                  style={[
+                                    styles.docBadgeText,
+                                    isSelected && styles.docBadgeTextActive,
+                                  ]}
+                                >
+                                  {doc.prefix}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
+                                <Text
+                                  style={[
+                                    styles.dropdownItemTitle,
+                                    isSelected && styles.dropdownItemTitleActive,
+                                  ]}
+                                >
+                                  {doc.title}
+                                </Text>
+                                <Text style={styles.dropdownItemSubtitle}>
+                                  {doc.subtitle}
+                                </Text>
+                              </View>
+                              {isSelected && <Text style={styles.dropdownCheckmark}>✓</Text>}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
 
                     <Text style={styles.label}>Número de Documento (Cédula / RIF)</Text>
                     <TextInput
@@ -1125,5 +1285,68 @@ const styles = StyleSheet.create({
   modalSubmitText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  docBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(59, 130, 246, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docBadgeActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
+    borderColor: '#10b981',
+  },
+  docBadgeText: {
+    color: '#93c5fd',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  docBadgeTextActive: {
+    color: '#34d399',
+  },
+  dropdownContainer: {
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    marginTop: -8,
+    marginBottom: 15,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#0f172a',
+  },
+  dropdownItemSelected: {
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+  },
+  dropdownItemTitle: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dropdownItemTitleActive: {
+    color: '#60a5fa',
+    fontWeight: '700',
+  },
+  dropdownItemSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dropdownCheckmark: {
+    color: '#38bdf8',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });

@@ -1326,10 +1326,10 @@ export default function LoansScreen() {
                       }
                       if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
                         const getPrefix = (tipo) => {
-                          if (!tipo) return 'V';
-                          if (tipo === 'Persona') return 'V';
-                          if (tipo === 'Comercio') return 'J';
-                          if (tipo === 'Comuna') return 'G';
+                          if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+                          if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                          if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                          if (tipo === 'Comuna' || tipo === 'G') return 'G';
                           return tipo[0] || 'V';
                         };
                         const docPrefix = getPrefix(config.tipo_doc);
@@ -1503,10 +1503,10 @@ export default function LoansScreen() {
                       }
                       if (notifyMethod === 'Pago Móvil' && typeof config === 'object') {
                         const getPrefix = (tipo) => {
-                          if (!tipo) return 'V';
-                          if (tipo === 'Persona') return 'V';
-                          if (tipo === 'Comercio') return 'J';
-                          if (tipo === 'Comuna') return 'G';
+                          if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+                          if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                          if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                          if (tipo === 'Comuna' || tipo === 'G') return 'G';
                           return tipo[0] || 'V';
                         };
                         const docPrefix = getPrefix(config.tipo_doc);

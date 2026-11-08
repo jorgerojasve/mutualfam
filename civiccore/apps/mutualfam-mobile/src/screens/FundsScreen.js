@@ -243,9 +243,10 @@ export default function FundsScreen() {
     if (!pmData) return;
     try {
       const getPrefix = (tipo) => {
-        if (!tipo || tipo === 'Persona') return 'V';
-        if (tipo === 'Comercio') return 'J';
-        if (tipo === 'Comuna') return 'G';
+        if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+        if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+        if (tipo === 'Comercio' || tipo === 'J') return 'J';
+        if (tipo === 'Comuna' || tipo === 'G') return 'G';
         return tipo[0] || 'V';
       };
       const docPrefix = getPrefix(pmData.tipo_doc);
@@ -1837,9 +1838,10 @@ export default function FundsScreen() {
                             {/* Documento / Cédula */}
                             {(() => {
                               const getPrefix = (tipo) => {
-                                if (!tipo || tipo === 'Persona') return 'V';
-                                if (tipo === 'Comercio') return 'J';
-                                if (tipo === 'Comuna') return 'G';
+                                if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+                                if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                                if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                                if (tipo === 'Comuna' || tipo === 'G') return 'G';
                                 return tipo[0] || 'V';
                               };
                               const docPrefix = getPrefix(pmData.tipo_doc);
