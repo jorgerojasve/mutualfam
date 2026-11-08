@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { VENEZUELAN_BANKS, getBankLabel, formatAccountNumber, cleanAccountNumber } from '../utils/banks';
 
@@ -72,7 +73,10 @@ export default function BankTransferCard({
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>🏛️ Datos de Transferencia Bancaria</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="swap-horizontal" size={18} color="#818cf8" />
+            <Text style={styles.cardTitle}>Datos de Transferencia Bancaria</Text>
+          </View>
           {recipientName ? (
             <Text style={styles.cardSubtitle}>Destinatario: {recipientName}</Text>
           ) : null}
