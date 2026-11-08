@@ -753,6 +753,50 @@ export default function LoansScreen() {
     }
   };
 
+  const renderPaymentMethodBadge = (method) => {
+    if (!method) return null;
+    const m = String(method).trim();
+    let icon = '💳';
+    let label = m;
+    let bg = 'rgba(148, 163, 184, 0.12)';
+    let border = 'rgba(148, 163, 184, 0.3)';
+    let textColor = '#cbd5e1';
+
+    const lower = m.toLowerCase();
+    if (lower.includes('pago móvil') || lower.includes('pago movil')) {
+      icon = '📱';
+      label = 'Pago Móvil';
+      bg = 'rgba(2, 132, 199, 0.14)';
+      border = 'rgba(56, 189, 248, 0.35)';
+      textColor = '#38bdf8';
+    } else if (lower.includes('transferencia')) {
+      icon = '🏛️';
+      label = 'Transferencia';
+      bg = 'rgba(99, 102, 241, 0.14)';
+      border = 'rgba(129, 140, 248, 0.35)';
+      textColor = '#a5b4fc';
+    } else if (lower.includes('efectivo')) {
+      icon = '💵';
+      label = 'Efectivo';
+      bg = 'rgba(16, 185, 129, 0.14)';
+      border = 'rgba(52, 211, 153, 0.35)';
+      textColor = '#34d399';
+    } else if (lower.includes('propio') || lower.includes('gestor') || lower.includes('beneficiario')) {
+      icon = '🤝';
+      label = 'Aporte Propio';
+      bg = 'rgba(245, 158, 11, 0.14)';
+      border = 'rgba(251, 191, 36, 0.35)';
+      textColor = '#fbbf24';
+    }
+
+    return (
+      <View key={m} style={[styles.methodBadge, { backgroundColor: bg, borderColor: border }]}>
+        <Text style={styles.methodBadgeIcon}>{icon}</Text>
+        <Text style={[styles.methodBadgeText, { color: textColor }]}>{label}</Text>
+      </View>
+    );
+  };
+
   const renderLoanCard = ({ item }) => {
     const isMine = user && user.id === item.requester_id;
     const canRepay = isMine && (item.status === 'funded' || item.status === 'partial');
@@ -797,9 +841,14 @@ export default function LoansScreen() {
         )}
 
         {item.accepted_payment_methods && item.accepted_payment_methods.length > 0 && (
-          <Text style={styles.methodsText}>
-            💳 Acepta: {item.accepted_payment_methods.join(", ")}
-          </Text>
+          <View style={styles.acceptedMethodsWrap}>
+            <Text style={styles.acceptedMethodsLabel}>Acepta:</Text>
+            {item.accepted_payment_methods.map((method, idx) => (
+              <React.Fragment key={idx}>
+                {renderPaymentMethodBadge(method)}
+              </React.Fragment>
+            ))}
+          </View>
         )}
 
         <View style={styles.progressContainer}>
@@ -845,12 +894,7 @@ export default function LoansScreen() {
                   {/* Detalles de pago */}
                   {(c.payment_method || c.reference_text) && (
                     <View style={styles.contribMeta}>
-                      {c.payment_method ? (
-                        <View style={styles.contribMetaRow}>
-                          <Text style={styles.contribMetaIcon}>💳</Text>
-                          <Text style={styles.contribMetaText}>{c.payment_method}</Text>
-                        </View>
-                      ) : null}
+                      {c.payment_method ? renderPaymentMethodBadge(c.payment_method) : null}
                       {c.reference_text ? (
                         <View style={styles.contribMetaRow}>
                           <Text style={styles.contribMetaIcon}>#</Text>
@@ -892,7 +936,7 @@ export default function LoansScreen() {
                                 </Text>
                               </View>
                             </View>
-                            {r.payment_method ? (<Text style={styles.contribMetaText}>💳 {r.payment_method}</Text>) : null}
+                            {r.payment_method ? renderPaymentMethodBadge(r.payment_method) : null}
                             {r.reference_text ? (<Text style={styles.contribMetaText}># {r.reference_text}</Text>) : null}
                             {r.receipt_url ? (
                               <TouchableOpacity 
@@ -1785,6 +1829,18 @@ const styles = StyleSheet.create({
   motiveText: { color: '#94a3b8', fontSize: 14, marginBottom: 10 },
   dateText: { color: '#8b5cf6', fontSize: 13, fontWeight: 'bold', marginBottom: 5 },
   methodsText: { color: '#cbd5e1', fontSize: 12, marginBottom: 10, fontStyle: 'italic' },
+  acceptedMethodsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  acceptedMethodsLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   progressContainer: { backgroundColor: 'rgba(0,0,0,0.2)', padding: 10, borderRadius: 8, marginBottom: 10 },
   progressText: { color: '#cbd5e1', fontSize: 13, marginBottom: 2 },
   contribsList: { marginTop: 12, gap: 8 },
@@ -1841,6 +1897,24 @@ const styles = StyleSheet.create({
   contribMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   contribMetaIcon: { fontSize: 12, width: 16 },
   contribMetaText: { color: '#94a3b8', fontSize: 12 },
+  methodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginVertical: 2,
+  },
+  methodBadgeIcon: {
+    fontSize: 13,
+  },
+  methodBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   contribActions: {
     flexDirection: 'row',
     gap: 8,
