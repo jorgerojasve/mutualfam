@@ -77,6 +77,7 @@ class CompromisoResponse(BaseModel):
     fecha_compromiso: datetime
     fecha_notificacion: Optional[datetime] = None
     fecha_pago: Optional[datetime] = None
+    fecha_validacion: Optional[datetime] = None
     fecha_cancelacion: Optional[datetime] = None
 
     class Config:
@@ -94,6 +95,10 @@ class ColectaResponse(BaseModel):
     monto_meta_bs: float
     monto_prometido_usd: float
     monto_prometido_bs: float
+    monto_pagado_usd: float = 0.0
+    monto_pagado_bs: float = 0.0
+    monto_validado_usd: float = 0.0
+    monto_validado_bs: float = 0.0
     monto_recaudado_usd: float
     monto_recaudado_bs: float = 0.0
     moneda_origen: str = "USD"
@@ -147,6 +152,7 @@ def _serialize_compromiso(comp: CompromisoColecta) -> CompromisoResponse:
         fecha_compromiso=comp.fecha_compromiso,
         fecha_notificacion=comp.fecha_notificacion,
         fecha_pago=comp.fecha_pago,
+        fecha_validacion=comp.fecha_validacion,
         fecha_cancelacion=comp.fecha_cancelacion
     )
 
@@ -161,9 +167,16 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
     current_rate = tasa_cambio.get_rate(tasa_tipo_str, colecta.tasa_fija_valor)
     tasa_label = tasa_cambio.LABELS.get(tasa_tipo_str, "USDT / Binance P2P" if tasa_tipo_str == "paralelo" else tasa_tipo_str.upper())
 
+    # Cálculos financieros homologados: Prometido, Pagado (en validación) y Validado
+    amt_pledged = sum(c.monto_usd for c in colecta.compromisos if c.estado in [EstadoCompromiso.PROMETIDO, EstadoCompromiso.NOTIFICADO])
+    amt_paid = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.PAGADO)
+    amt_verified = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.VALIDADO)
+
     monto_meta_bs = round(colecta.monto_meta_usd * current_rate, 2)
-    monto_prometido_bs = round(colecta.monto_prometido_usd * current_rate, 2)
-    monto_recaudado_bs = round(colecta.monto_recaudado_usd * current_rate, 2)
+    monto_prometido_bs = round(amt_pledged * current_rate, 2)
+    monto_pagado_bs = round(amt_paid * current_rate, 2)
+    monto_validado_bs = round(amt_verified * current_rate, 2)
+    monto_recaudado_bs = round(amt_verified * current_rate, 2)
 
     # Beneficiario y datos de pago
     beneficiario_name = colecta.beneficiario_nombre or proponente_name
@@ -202,11 +215,12 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
             mi_compromiso = c_ser
 
     # Cálculos porcentuales
-    porc_prometido = round((colecta.monto_prometido_usd / colecta.monto_meta_usd * 100), 1) if colecta.monto_meta_usd > 0 else 0.0
-    porc_recaudado = round((colecta.monto_recaudado_usd / colecta.monto_meta_usd * 100), 1) if colecta.monto_meta_usd > 0 else 0.0
+    total_committed = amt_pledged + amt_paid + amt_verified
+    porc_prometido = round((total_committed / colecta.monto_meta_usd * 100), 1) if colecta.monto_meta_usd > 0 else 0.0
+    porc_recaudado = round((amt_verified / colecta.monto_meta_usd * 100), 1) if colecta.monto_meta_usd > 0 else 0.0
 
     estado_str = colecta.estado.value if hasattr(colecta.estado, "value") else str(colecta.estado)
-    is_active = (colecta.monto_prometido_usd >= colecta.monto_meta_usd) or (estado_str in ["activa", "cerrada", "completada"])
+    is_active = (total_committed >= colecta.monto_meta_usd) or (estado_str in ["activa", "cerrada", "completada"])
 
     return ColectaResponse(
         id=colecta.id,
@@ -216,8 +230,13 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         titulo=colecta.titulo,
         proposito=colecta.proposito,
         monto_meta_usd=colecta.monto_meta_usd,
-        monto_prometido_usd=round(colecta.monto_prometido_usd, 2),
-        monto_recaudado_usd=round(colecta.monto_recaudado_usd, 2),
+        monto_prometido_usd=round(amt_pledged, 2),
+        monto_prometido_bs=monto_prometido_bs,
+        monto_pagado_usd=round(amt_paid, 2),
+        monto_pagado_bs=monto_pagado_bs,
+        monto_validado_usd=round(amt_verified, 2),
+        monto_validado_bs=monto_validado_bs,
+        monto_recaudado_usd=round(amt_verified, 2),
         monto_recaudado_bs=monto_recaudado_bs,
         moneda_origen=getattr(colecta, "moneda_origen", "USD") or "USD",
         tipo_tasa=tasa_tipo_str,
@@ -225,7 +244,6 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         tasa_actual=current_rate,
         tasa_label=tasa_label,
         monto_meta_bs=monto_meta_bs,
-        monto_prometido_bs=monto_prometido_bs,
         beneficiario_id=colecta.beneficiario_id or colecta.proponente_id,
         beneficiario_nombre=beneficiario_name,
         beneficiario_datos_pago=beneficiario_datos,
@@ -544,8 +562,8 @@ def cancel_commitment(
     if compromiso.socio_id != org_member["user"].id:
         raise HTTPException(status_code=403, detail="Solo puedes cancelar tu propio compromiso.")
 
-    if compromiso.estado == EstadoCompromiso.PAGADO:
-        raise HTTPException(status_code=400, detail="No se puede cancelar un aporte que ya ha sido pagado.")
+    if compromiso.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]:
+        raise HTTPException(status_code=400, detail="No se puede cancelar un aporte que ya ha sido pagado o validado.")
 
     if compromiso.estado == EstadoCompromiso.CANCELADO:
         raise HTTPException(status_code=400, detail="El compromiso ya se encuentra cancelado.")
@@ -682,13 +700,22 @@ def confirm_commitment_payment(
     if compromiso.socio_id != org_member["user"].id:
         raise HTTPException(status_code=403, detail="Solo puedes confirmar tu propio pago.")
 
-    if compromiso.estado == EstadoCompromiso.PAGADO:
+    if compromiso.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]:
         raise HTTPException(status_code=400, detail="Este aporte ya fue confirmado como pagado.")
 
     tasa_tipo_str = colecta.tipo_tasa.value if hasattr(colecta.tipo_tasa, "value") else str(colecta.tipo_tasa)
     rate_usada = compromiso.tasa_usada or tasa_cambio.get_rate(tasa_tipo_str, colecta.tasa_fija_valor)
 
-    compromiso.estado = EstadoCompromiso.PAGADO
+    gestor_id = colecta.beneficiario_id or colecta.proponente_id
+    is_self = (org_member["user"].id == gestor_id)
+
+    # Si quien paga es quien gestiona la colecta (aporte propio), se valida de inmediato
+    if is_self:
+        compromiso.estado = EstadoCompromiso.VALIDADO
+        compromiso.fecha_validacion = utcnow()
+    else:
+        compromiso.estado = EstadoCompromiso.PAGADO
+
     compromiso.fecha_pago = utcnow()
     compromiso.payment_method = req.payment_method
     compromiso.referencia_pago = req.referencia_pago
@@ -699,36 +726,45 @@ def confirm_commitment_payment(
     if not compromiso.monto_bs:
         compromiso.monto_bs = round(compromiso.monto_usd * rate_usada, 2)
 
-    # Sumar al recaudado
-    colecta.monto_recaudado_usd += compromiso.monto_usd
+    # Recalcular monto validado
+    amt_verified = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.VALIDADO)
+    colecta.monto_recaudado_usd = amt_verified
 
-    # Verificar si todos los compromisos activos ya están pagados y meta alcanzada
+    # Verificar si todos los compromisos activos ya están validados y meta alcanzada
     activos = [c for c in colecta.compromisos if c.estado != EstadoCompromiso.CANCELADO]
-    todos_pagados = all(c.estado == EstadoCompromiso.PAGADO for c in activos)
+    todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
 
-    if todos_pagados and colecta.monto_recaudado_usd >= colecta.monto_meta_usd:
+    if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
         colecta.estado = EstadoColecta.CERRADA  # Esperando validación de gasto por el beneficiario
 
     db.commit()
     db.refresh(colecta)
 
-    # Notificar al beneficiario/proponente
-    beneficiario_id = colecta.beneficiario_id or colecta.proponente_id
-    if beneficiario_id != org_member["user"].id:
+    # Notificar al beneficiario/proponente si es pago de otro socio
+    if not is_self and gestor_id:
         notify_users(
             db,
-            [beneficiario_id],
-            "💰 Aporte Confirmado",
-            f"{org_member['user'].first_name} confirmó el pago de ${compromiso.monto_usd:,.2f} USD para '{colecta.titulo}'."
+            [gestor_id],
+            "🕐 Pago Notificado",
+            f"{org_member['user'].first_name} notificó el pago de ${compromiso.monto_usd:,.2f} USD para '{colecta.titulo}'. Pendiente de validación."
         )
 
-    msg_pago = (
-        f"💰 <b>Aporte Confirmado en Colecta</b>\n\n"
-        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
-        f"👤 {org_member['user'].first_name} confirmó su pago de <b>${compromiso.monto_usd:,.2f} USD</b>.\n"
-        f"Ref: <code>{req.referencia_pago or 'N/A'}</code>\n"
-        f"Total recaudado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
-    )
+    if is_self:
+        msg_pago = (
+            f"💰 <b>Aporte Propio Confirmado y Validado</b>\n\n"
+            f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+            f"👤 {org_member['user'].first_name} registró su propio aporte de <b>${compromiso.monto_usd:,.2f} USD</b>.\n"
+            f"Total validado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
+        )
+    else:
+        msg_pago = (
+            f"🕐 <b>Pago Notificado en Colecta (En Validación)</b>\n\n"
+            f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+            f"👤 {org_member['user'].first_name} notificó su pago de <b>${compromiso.monto_usd:,.2f} USD</b>.\n"
+            f"Ref: <code>{req.referencia_pago or 'N/A'}</code>\n"
+            f"Total validado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
+        )
+
     if compromiso.comprobante_url:
         import os
         from routers.upload import UPLOADS_DIR
@@ -744,6 +780,78 @@ def confirm_commitment_payment(
         send_telegram_notification(msg_pago)
 
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
+    return _serialize_colecta(colecta, org_member["user"].id)
+
+
+@router.post("/{colecta_id}/compromisos/{compromiso_id}/validar-pago", response_model=ColectaResponse)
+def verify_commitment_payment(
+    colecta_id: int,
+    compromiso_id: int,
+    org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    El responsable (Gestionado por / Beneficiario) de la colecta confirma que recibió el pago.
+    El estado del compromiso pasa de PAGADO (en validación) a VALIDADO.
+    """
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    colecta = db.query(Colecta).filter(
+        Colecta.id == colecta_id,
+        Colecta.organization_id == org_member["organization"].id
+    ).first()
+    if not colecta:
+        raise HTTPException(status_code=404, detail="Colecta no encontrada.")
+
+    gestor_id = colecta.beneficiario_id or colecta.proponente_id
+    if gestor_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el responsable de la colecta puede validar los pagos.")
+
+    compromiso = db.query(CompromisoColecta).filter(
+        CompromisoColecta.id == compromiso_id,
+        CompromisoColecta.colecta_id == colecta.id
+    ).first()
+    if not compromiso:
+        raise HTTPException(status_code=404, detail="Compromiso no encontrado.")
+
+    if compromiso.estado != EstadoCompromiso.PAGADO:
+        raise HTTPException(status_code=400, detail="Solo se pueden validar aportes con pago notificado.")
+
+    compromiso.estado = EstadoCompromiso.VALIDADO
+    compromiso.fecha_validacion = utcnow()
+
+    # Recalcular recaudado validado
+    amt_verified = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.VALIDADO)
+    colecta.monto_recaudado_usd = amt_verified
+
+    # Verificar si todos los compromisos activos ya están validados y meta alcanzada
+    activos = [c for c in colecta.compromisos if c.estado != EstadoCompromiso.CANCELADO]
+    todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
+    if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
+        colecta.estado = EstadoColecta.CERRADA
+
+    db.commit()
+    db.refresh(colecta)
+
+    socio_name = f"{compromiso.socio.first_name} {compromiso.socio.last_name or ''}".strip() if compromiso.socio else "Socio"
+    msg_val = (
+        f"👍 <b>¡Pago Verificado en Colecta!</b>\n\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"👤 {org_member['user'].first_name} confirmó recibir el aporte de <b>${compromiso.monto_usd:,.2f} USD</b> de <b>{socio_name}</b>.\n"
+        f"Total validado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
+    )
+    send_telegram_notification(msg_val)
+
+    notify_users(
+        db,
+        [compromiso.socio_id],
+        "Pago verificado",
+        f"{org_member['user'].first_name} confirmó recibir tu aporte de ${compromiso.monto_usd:,.2f} USD para '{colecta.titulo}'."
+    )
+
+    notify_org(colecta.organization_id, "COLECTAS_CHANGED")
+    return _serialize_colecta(colecta, org_member["user"].id)
     return _serialize_colecta(colecta, org_member["user"].id)
 
 

@@ -14,6 +14,7 @@ def ensure_colectas_columns_exist(engine):
         ("compromisos_colecta", "monto_bs", "FLOAT"),
         ("compromisos_colecta", "tasa_usada", "FLOAT"),
         ("compromisos_colecta", "tipo_tasa_usada", "VARCHAR(50)"),
+        ("compromisos_colecta", "fecha_validacion", "TIMESTAMP"),
         ("comments", "stance", "VARCHAR(20)"),
         ("comments", "attachment_url", "VARCHAR(500)"),
         ("comments", "attachment_type", "VARCHAR(50)"),
@@ -28,3 +29,10 @@ def ensure_colectas_columns_exist(engine):
             except Exception:
                 # La columna ya existe o la tabla no requiere alteración
                 pass
+
+        # Si el motor es PostgreSQL, asegurar que el tipo enum incluya 'validado'
+        try:
+            conn.execute(text("ALTER TYPE estadocompromiso ADD VALUE IF NOT EXISTS 'validado'"))
+            conn.commit()
+        except Exception:
+            pass

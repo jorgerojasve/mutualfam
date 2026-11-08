@@ -152,7 +152,8 @@ class TipoTasaColecta(str, enum.Enum):
 class EstadoCompromiso(str, enum.Enum):
     PROMETIDO = "prometido"       # Socio prometió aportar
     NOTIFICADO = "notificado"     # Notificado con monto en Bs
-    PAGADO = "pagado"             # Pago confirmado con comprobante
+    PAGADO = "pagado"             # Pago confirmado con comprobante (En validación)
+    VALIDADO = "validado"         # Pago verificado por el gestor de la colecta
     CANCELADO = "cancelado"       # Cancelado antes del pago
 
 
@@ -241,6 +242,7 @@ class CompromisoColecta(Base):
     fecha_compromiso = Column(DateTime, default=utcnow)
     fecha_notificacion = Column(DateTime, nullable=True)
     fecha_pago = Column(DateTime, nullable=True)
+    fecha_validacion = Column(DateTime, nullable=True)
     fecha_cancelacion = Column(DateTime, nullable=True)
 
     # Relaciones

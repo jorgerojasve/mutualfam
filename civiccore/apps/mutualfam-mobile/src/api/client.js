@@ -330,6 +330,13 @@ export const colectasApi = {
     const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, paymentData);
     return data;
   },
+  verifyPayment: async (colectaId, compromisoId) => {
+    if (!colectaId || !compromisoId) {
+      throw new Error('Parámetros de compromiso no válidos');
+    }
+    const { data } = await apiClient.post(`/colectas/${colectaId}/compromisos/${compromisoId}/validar-pago`);
+    return data;
+  },
   validateExpense: async (colectaId, expenseData) => {
     if (!colectaId) {
       throw new Error('ID de colecta no válido');
