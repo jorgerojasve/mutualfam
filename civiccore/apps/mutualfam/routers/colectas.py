@@ -61,10 +61,25 @@ class ValidateExpenseRequest(BaseModel):
     comprobante_gasto_url: Optional[str] = None  # Opcional
 
 
+class CancelColectaRequest(BaseModel):
+    motivo: Optional[str] = "Cancelada por fuerza mayor"
+
+
+class DevolverAporteRequest(BaseModel):
+    monto_devuelto: float
+    moneda_devolucion: str = "VES"  # "VES" | "USD"
+    metodo_devolucion: Optional[str] = "Pago Móvil"
+    referencia_devolucion: Optional[str] = None
+    comprobante_devolucion_url: Optional[str] = None
+    comision_descontada: Optional[float] = 0.0
+    nota: Optional[str] = None
+
+
 class CompromisoResponse(BaseModel):
     id: int
     socio_id: int
     socio_name: str
+    socio_payment_methods_json: Optional[str] = "{}"
     monto_usd: float
     monto_bs: Optional[float] = None
     tasa_usada: Optional[float] = None
@@ -79,6 +94,13 @@ class CompromisoResponse(BaseModel):
     fecha_pago: Optional[datetime] = None
     fecha_validacion: Optional[datetime] = None
     fecha_cancelacion: Optional[datetime] = None
+    fecha_devolucion: Optional[datetime] = None
+    monto_devuelto: Optional[float] = None
+    moneda_devolucion: Optional[str] = None
+    metodo_devolucion: Optional[str] = None
+    referencia_devolucion: Optional[str] = None
+    comprobante_devolucion_url: Optional[str] = None
+    comision_descontada: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
@@ -115,12 +137,16 @@ class ColectaResponse(BaseModel):
     fecha_pago: date
     fecha_limite_aportes: Optional[date] = None
     estado: str
+    motivo_cancelacion: Optional[str] = None
+    fecha_cancelacion: Optional[datetime] = None
+    tiene_devoluciones_pendientes: bool = False
     created_at: datetime
     is_active: bool
     porcentaje_prometido: float
     porcentaje_recaudado: float
     total_aportantes: int
     mi_compromiso: Optional[CompromisoResponse] = None
+    mis_compromisos: List[CompromisoResponse] = []
     compromisos: List[CompromisoResponse] = []
 
     class Config:
@@ -131,15 +157,31 @@ class ColectaResponse(BaseModel):
 # FUNCIONES AUXILIARES DE SERIALIZACIÓN
 # ==========================================
 
-def _serialize_compromiso(comp: CompromisoColecta) -> CompromisoResponse:
+def _serialize_compromiso(comp: CompromisoColecta, db: Optional[Session] = None) -> CompromisoResponse:
     socio_name = "Socio"
     if comp.socio:
         socio_name = f"{comp.socio.first_name} {comp.socio.last_name or ''}".strip() or comp.socio.email
+
+    socio_pm_json = "{}"
+    session = db
+    if not session:
+        try:
+            session = object_session(comp)
+        except Exception:
+            session = None
+    if session:
+        try:
+            cfg = session.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == comp.socio_id).first()
+            if cfg and cfg.payment_methods_json:
+                socio_pm_json = cfg.payment_methods_json
+        except Exception:
+            pass
 
     return CompromisoResponse(
         id=comp.id,
         socio_id=comp.socio_id,
         socio_name=socio_name,
+        socio_payment_methods_json=socio_pm_json,
         monto_usd=comp.monto_usd,
         monto_bs=comp.monto_bs,
         tasa_usada=comp.tasa_usada,
@@ -153,11 +195,18 @@ def _serialize_compromiso(comp: CompromisoColecta) -> CompromisoResponse:
         fecha_notificacion=comp.fecha_notificacion,
         fecha_pago=comp.fecha_pago,
         fecha_validacion=comp.fecha_validacion,
-        fecha_cancelacion=comp.fecha_cancelacion
+        fecha_cancelacion=comp.fecha_cancelacion,
+        fecha_devolucion=getattr(comp, "fecha_devolucion", None),
+        monto_devuelto=getattr(comp, "monto_devuelto", None),
+        moneda_devolucion=getattr(comp, "moneda_devolucion", None),
+        metodo_devolucion=getattr(comp, "metodo_devolucion", None),
+        referencia_devolucion=getattr(comp, "referencia_devolucion", None),
+        comprobante_devolucion_url=getattr(comp, "comprobante_devolucion_url", None),
+        comision_descontada=getattr(comp, "comision_descontada", 0.0) or 0.0,
     )
 
 
-def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaResponse:
+def _serialize_colecta(colecta: Colecta, current_user_id: int, db: Optional[Session] = None) -> ColectaResponse:
     proponente_name = "Proponente"
     if colecta.proponente:
         proponente_name = f"{colecta.proponente.first_name} {colecta.proponente.last_name or ''}".strip() or colecta.proponente.email
@@ -190,7 +239,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
     # Si la colecta no tiene métodos configurados directamente, buscar en UserPaymentConfig del beneficiario o proponente
     if not beneficiario_datos or beneficiario_datos == {}:
         try:
-            sess = object_session(colecta)
+            sess = db or object_session(colecta)
             target_uid = colecta.beneficiario_id or colecta.proponente_id
             if sess and target_uid:
                 u_cfg = sess.query(UserPaymentConfig).filter(UserPaymentConfig.user_id == target_uid).first()
@@ -203,16 +252,36 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
 
     # Compromisos y aportantes activos
     compromisos_list = []
+    mis_compromisos_list = []
     mi_compromiso = None
     aportantes_ids = set()
 
+    session = db
+    if not session:
+        try:
+            session = object_session(colecta)
+        except Exception:
+            session = None
+
     for comp in colecta.compromisos:
-        c_ser = _serialize_compromiso(comp)
+        c_ser = _serialize_compromiso(comp, db=session)
         compromisos_list.append(c_ser)
         if comp.estado != EstadoCompromiso.CANCELADO:
             aportantes_ids.add(comp.socio_id)
         if comp.socio_id == current_user_id and comp.estado != EstadoCompromiso.CANCELADO:
-            mi_compromiso = c_ser
+            mis_compromisos_list.append(c_ser)
+
+    # mi_compromiso: priorizar el que requiera acción (prometido/notificado), luego pagado, luego último válido
+    if mis_compromisos_list:
+        pending_action = [c for c in mis_compromisos_list if c.estado in ["prometido", "notificado"]]
+        if pending_action:
+            mi_compromiso = pending_action[0]
+        else:
+            in_val = [c for c in mis_compromisos_list if c.estado == "pagado"]
+            if in_val:
+                mi_compromiso = in_val[0]
+            else:
+                mi_compromiso = mis_compromisos_list[-1]
 
     # Cálculos porcentuales
     total_committed = amt_pledged + amt_paid + amt_verified
@@ -222,6 +291,16 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
     estado_str = colecta.estado.value if hasattr(colecta.estado, "value") else str(colecta.estado)
     is_active = (total_committed >= colecta.monto_meta_usd) or (estado_str in ["activa", "cerrada", "completada"])
 
+    # Verificar si tiene devoluciones pendientes cuando está cancelada
+    tiene_devoluciones_pendientes = False
+    if estado_str == "cancelada":
+        pendientes = [
+            c for c in colecta.compromisos
+            if c.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]
+            and c.payment_method != "Aporte Propio"
+        ]
+        tiene_devoluciones_pendientes = len(pendientes) > 0
+
     return ColectaResponse(
         id=colecta.id,
         organization_id=colecta.organization_id,
@@ -230,6 +309,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         titulo=colecta.titulo,
         proposito=colecta.proposito,
         monto_meta_usd=colecta.monto_meta_usd,
+        monto_meta_bs=monto_meta_bs,
         monto_prometido_usd=round(amt_pledged, 2),
         monto_prometido_bs=monto_prometido_bs,
         monto_pagado_usd=round(amt_paid, 2),
@@ -243,7 +323,6 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         tasa_fija_valor=colecta.tasa_fija_valor,
         tasa_actual=current_rate,
         tasa_label=tasa_label,
-        monto_meta_bs=monto_meta_bs,
         beneficiario_id=colecta.beneficiario_id or colecta.proponente_id,
         beneficiario_nombre=beneficiario_name,
         beneficiario_datos_pago=beneficiario_datos,
@@ -253,12 +332,16 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int) -> ColectaRespons
         fecha_pago=colecta.fecha_pago,
         fecha_limite_aportes=colecta.fecha_limite_aportes,
         estado=estado_str,
+        motivo_cancelacion=getattr(colecta, "motivo_cancelacion", None),
+        fecha_cancelacion=getattr(colecta, "fecha_cancelacion", None),
+        tiene_devoluciones_pendientes=tiene_devoluciones_pendientes,
         created_at=colecta.created_at,
         is_active=is_active,
         porcentaje_prometido=porc_prometido,
         porcentaje_recaudado=porc_recaudado,
         total_aportantes=len(aportantes_ids),
         mi_compromiso=mi_compromiso,
+        mis_compromisos=mis_compromisos_list,
         compromisos=compromisos_list
     )
 
@@ -935,10 +1018,11 @@ def validate_expense(
 @router.patch("/{colecta_id}/cancelar", response_model=ColectaResponse)
 def cancel_colecta(
     colecta_id: int,
+    req: Optional[CancelColectaRequest] = None,
     org_member: dict = Depends(get_current_org_member),
     db: Session = Depends(get_db)
 ):
-    """Cancela una colecta antes de completarse."""
+    """Cancela una colecta por fuerza mayor y permite devolver los fondos recaudados."""
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
 
@@ -950,15 +1034,142 @@ def cancel_colecta(
     if not colecta:
         raise HTTPException(status_code=404, detail="Colecta no encontrada.")
 
-    if colecta.proponente_id != org_member["user"].id and org_member["membership"].role != "founder":
-        raise HTTPException(status_code=403, detail="Solo el proponente o fundador puede cancelar la colecta.")
+    gestor_ids = [colecta.proponente_id]
+    if colecta.beneficiario_id:
+        gestor_ids.append(colecta.beneficiario_id)
+
+    if org_member["user"].id not in gestor_ids and org_member["membership"].role != "founder":
+        raise HTTPException(status_code=403, detail="Solo quien gestiona o el fundador puede cancelar la colecta.")
 
     if colecta.estado == EstadoColecta.COMPLETADA:
-        raise HTTPException(status_code=400, detail="No se puede cancelar una colecta ya completada.")
+        raise HTTPException(status_code=400, detail="No se puede cancelar una colecta ya completada (gasto ya ejecutado).")
 
+    motivo = req.motivo.strip() if req and req.motivo else "Cancelada por fuerza mayor"
     colecta.estado = EstadoColecta.CANCELADA
+    colecta.motivo_cancelacion = motivo
+    colecta.fecha_cancelacion = utcnow()
+
+    # Cancelar compromisos que aún no habían sido pagados
+    for comp in colecta.compromisos:
+        if comp.estado in [EstadoCompromiso.PROMETIDO, EstadoCompromiso.NOTIFICADO]:
+            comp.estado = EstadoCompromiso.CANCELADO
+            comp.fecha_cancelacion = utcnow()
+
     db.commit()
     db.refresh(colecta)
 
+    # Notificar a los miembros
+    all_members = db.query(OrganizationMembership).filter(
+        OrganizationMembership.organization_id == colecta.organization_id
+    ).all()
+    member_ids = [m.user_id for m in all_members]
+
+    hay_pagados = any(
+        c.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO] and c.payment_method != "Aporte Propio"
+        for c in colecta.compromisos
+    )
+    detalle_devolucion = " Quien gestiona procederá a devolver los fondos recaudados a cada aportante según el método de pago original." if hay_pagados else ""
+
+    notify_users(
+        db,
+        member_ids,
+        "⚠️ Colecta Cancelada por Fuerza Mayor",
+        f"La colecta '{colecta.titulo}' fue cancelada. Motivo: {motivo}.{detalle_devolucion}"
+    )
+
+    msg_cancel = (
+        f"⚠️ <b>Colecta Cancelada por Fuerza Mayor</b>\n\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"📝 Motivo: <i>{motivo}</i>\n"
+        f"{detalle_devolucion}\n"
+    )
+    send_telegram_notification(msg_cancel)
+
     notify_org(colecta.organization_id, "COLECTAS_CHANGED")
-    return _serialize_colecta(colecta, org_member["user"].id)
+    return _serialize_colecta(colecta, org_member["user"].id, db=db)
+
+
+@router.post("/{colecta_id}/compromisos/{compromiso_id}/devolver", response_model=ColectaResponse)
+def refund_commitment(
+    colecta_id: int,
+    compromiso_id: int,
+    req: DevolverAporteRequest,
+    org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    Registra la devolución de un aporte por fuerza mayor.
+    En este caso no aplica la contabilidad en dólares, sino que se devuelve de acuerdo al método de pago usado:
+    - Pago Móvil / Transferencia: mismo monto en Bs (descontando comisiones asociadas si aplica).
+    - Efectivo: mismo efectivo.
+    """
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    colecta = db.query(Colecta).filter(
+        Colecta.id == colecta_id,
+        Colecta.organization_id == org_member["organization"].id
+    ).first()
+
+    if not colecta:
+        raise HTTPException(status_code=404, detail="Colecta no encontrada.")
+
+    gestor_ids = [colecta.proponente_id]
+    if colecta.beneficiario_id:
+        gestor_ids.append(colecta.beneficiario_id)
+
+    if org_member["user"].id not in gestor_ids and org_member["membership"].role != "founder":
+        raise HTTPException(status_code=403, detail="Solo quien gestiona la colecta o el fundador puede registrar devoluciones.")
+
+    compromiso = db.query(CompromisoColecta).filter(
+        CompromisoColecta.id == compromiso_id,
+        CompromisoColecta.colecta_id == colecta.id
+    ).first()
+
+    if not compromiso:
+        raise HTTPException(status_code=404, detail="Aporte no encontrado.")
+
+    if compromiso.estado not in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]:
+        raise HTTPException(status_code=400, detail=f"No se puede devolver un aporte en estado '{compromiso.estado.value}'. Solo aportes pagados o validados.")
+
+    if req.monto_devuelto <= 0:
+        raise HTTPException(status_code=400, detail="El monto devuelto debe ser mayor a 0.")
+
+    compromiso.estado = EstadoCompromiso.DEVUELTO
+    compromiso.fecha_devolucion = utcnow()
+    compromiso.monto_devuelto = req.monto_devuelto
+    compromiso.moneda_devolucion = (req.moneda_devolucion or "VES").upper()
+    compromiso.metodo_devolucion = req.metodo_devolucion or compromiso.payment_method or "Pago Móvil"
+    compromiso.referencia_devolucion = req.referencia_devolucion.strip() if req.referencia_devolucion else None
+    compromiso.comprobante_devolucion_url = req.comprobante_devolucion_url
+    compromiso.comision_descontada = req.comision_descontada or 0.0
+
+    db.commit()
+    db.refresh(colecta)
+
+    socio_name = "Socio"
+    if compromiso.socio:
+        socio_name = f"{compromiso.socio.first_name} {compromiso.socio.last_name or ''}".strip() or compromiso.socio.email
+
+    moneda_simbolo = "Bs" if compromiso.moneda_devolucion == "VES" else "$"
+    monto_fmt = f"{moneda_simbolo} {compromiso.monto_devuelto:,.2f}"
+
+    # Notificar al socio aportante
+    notify_users(
+        db,
+        [compromiso.socio_id],
+        "🔄 Aporte Devuelto",
+        f"Se te ha devuelto tu aporte de {monto_fmt} para '{colecta.titulo}' mediante {compromiso.metodo_devolucion} (Ref: {compromiso.referencia_devolucion or 'N/A'})."
+    )
+
+    msg_tel = (
+        f"🔄 <b>Aporte Devuelto por Cancelación</b>\n\n"
+        f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
+        f"👤 Aportante: <b>{socio_name}</b>\n"
+        f"💵 Monto Devuelto: <b>{monto_fmt}</b> ({compromiso.metodo_devolucion})\n"
+        f"🔢 Ref: <code>{compromiso.referencia_devolucion or 'Efectivo/Directo'}</code>\n"
+    )
+    send_telegram_notification(msg_tel)
+
+    notify_org(colecta.organization_id, "COLECTAS_CHANGED")
+    return _serialize_colecta(colecta, org_member["user"].id, db=db)

@@ -197,7 +197,117 @@ def run_tests():
         assert colecta["estado"] == "completada"
         print(f"✅ Gasto validado. Colecta finalizada con éxito en estado COMPLETADA.")
 
-        print("\n🎉 ¡TODOS LOS TESTS DEL CICLO DE VIDA DE COLECTAS PASARON EXITOSAMENTE!")
+        print("\n--- TEST 11: Múltiples aportes de un mismo socio ('Aportar más') ---")
+        colecta_2_payload = {
+            "titulo": "Medicamentos de Emergencia Abuela",
+            "proposito": "Adquisición de tratamiento de soporte",
+            "monto_meta_usd": 80.0,
+            "tipo_tasa": "bcv",
+            "fecha_pago": str(date.today() + timedelta(days=5)),
+            "beneficiario_nombre": "Ana Pérez"
+        }
+        res = client.post("/api/v1/colectas/", json=colecta_2_payload, headers=headers_ana)
+        assert res.status_code == 200
+        c2 = res.json()
+        c2_id = c2["id"]
+
+        # Carlos hace su primer aporte de $20
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos", json={"monto_usd": 20.0}, headers=headers_carlos)
+        assert res.status_code == 200
+        c2 = res.json()
+        comp_carlos_1_id = c2["mi_compromiso"]["id"]
+        carlos_monto_bs_1 = c2["mi_compromiso"]["monto_bs"]
+
+        # Carlos paga su primer aporte vía Pago Móvil
+        pago_pm = {
+            "payment_method": "Pago Móvil",
+            "referencia_pago": "PM-112233",
+            "nota_pago": "Pago móvil transferido"
+        }
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_1_id}/confirmar-pago", json=pago_pm, headers=headers_carlos)
+        assert res.status_code == 200
+
+        # Ana valida el primer aporte
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_1_id}/validar-pago", headers=headers_ana)
+        assert res.status_code == 200
+
+        # Carlos decide aportar más ("Aportar más") con un segundo compromiso de $15 en Efectivo
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos", json={"monto_usd": 15.0}, headers=headers_carlos)
+        assert res.status_code == 200
+        c2 = res.json()
+        comp_carlos_2_id = c2["mi_compromiso"]["id"]
+        assert comp_carlos_2_id != comp_carlos_1_id
+        assert len(c2["mis_compromisos"]) == 2
+        print(f"✅ Carlos pudo aportar más: 2 compromisos registrados (${c2['mis_compromisos'][0]['monto_usd']} y ${c2['mis_compromisos'][1]['monto_usd']}).")
+
+        # Carlos paga su segundo aporte en Efectivo
+        pago_ef = {
+            "payment_method": "Efectivo",
+            "referencia_pago": "EF-DIRECTO",
+            "nota_pago": "Entregado en efectivo $15"
+        }
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_2_id}/confirmar-pago", json=pago_ef, headers=headers_carlos)
+        assert res.status_code == 200
+
+        # Ana valida el segundo aporte
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_2_id}/validar-pago", headers=headers_ana)
+        assert res.status_code == 200
+        c2 = res.json()
+        assert c2["monto_validado_usd"] == 35.0
+        print(f"✅ Ambos aportes validados exitosamente en la colecta (Total: ${c2['monto_validado_usd']}).")
+
+        print("\n--- TEST 12: Cancelación por fuerza mayor y devolución según método original ---")
+        # Cancelar colecta por fuerza mayor
+        cancel_payload = {
+            "motivo": "Fuerza mayor: medicamento agotado a nivel nacional en droguerías"
+        }
+        res = client.patch(f"/api/v1/colectas/{c2_id}/cancelar", json=cancel_payload, headers=headers_ana)
+        assert res.status_code == 200
+        c2 = res.json()
+        assert c2["estado"] == "cancelada"
+        assert c2["motivo_cancelacion"] == cancel_payload["motivo"]
+        assert c2["tiene_devoluciones_pendientes"] is True
+        print(f"✅ Colecta cancelada por fuerza mayor. Pendiente por devolver aportes.")
+
+        # Devolución 1: Aporte Pago Móvil devuelto en Bolívares descontando comisión bancaria
+        comision_bs = round(carlos_monto_bs_1 * 0.003, 2)
+        monto_neto_bs = round(carlos_monto_bs_1 - comision_bs, 2)
+        devolucion_pm = {
+            "monto_devuelto": monto_neto_bs,
+            "moneda_devolucion": "VES",
+            "metodo_devolucion": "Pago Móvil",
+            "referencia_devolucion": "DEV-PM-778899",
+            "comision_descontada": comision_bs
+        }
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_1_id}/devolver", json=devolucion_pm, headers=headers_ana)
+        assert res.status_code == 200
+        c2 = res.json()
+        c_dev_1 = next(c for c in c2["compromisos"] if c["id"] == comp_carlos_1_id)
+        assert c_dev_1["estado"] == "devuelto"
+        assert c_dev_1["moneda_devolucion"] == "VES"
+        assert c_dev_1["monto_devuelto"] == monto_neto_bs
+        assert c_dev_1["comision_descontada"] == comision_bs
+        print(f"✅ Aporte #1 devuelto a Carlos en Bs ({monto_neto_bs} Bs, comisión descontada: {comision_bs} Bs).")
+
+        # Devolución 2: Aporte en Efectivo devuelto en el mismo Efectivo ($15 USD)
+        devolucion_ef = {
+            "monto_devuelto": 15.0,
+            "moneda_devolucion": "USD",
+            "metodo_devolucion": "Efectivo",
+            "referencia_devolucion": "Entrega en mano billete de $15",
+            "comision_descontada": 0.0
+        }
+        res = client.post(f"/api/v1/colectas/{c2_id}/compromisos/{comp_carlos_2_id}/devolver", json=devolucion_ef, headers=headers_ana)
+        assert res.status_code == 200
+        c2 = res.json()
+        c_dev_2 = next(c for c in c2["compromisos"] if c["id"] == comp_carlos_2_id)
+        assert c_dev_2["estado"] == "devuelto"
+        assert c_dev_2["moneda_devolucion"] == "USD"
+        assert c_dev_2["monto_devuelto"] == 15.0
+        assert c2["tiene_devoluciones_pendientes"] is False
+        print(f"✅ Aporte #2 devuelto a Carlos en el mismo efectivo ($15 USD). Todas las devoluciones completadas.")
+
+        print("\n🎉 ¡TODOS LOS TESTS DEL CICLO DE VIDA DE COLECTAS (INCLUYENDO APORTAR MÁS Y DEVOLUCIONES) PASARON EXITOSAMENTE!")
     finally:
         db.close()
 
