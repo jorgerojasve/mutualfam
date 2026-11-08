@@ -21,10 +21,10 @@ export default function BankTransferCard({
   }
 
   const getPrefix = (tipo) => {
-    if (!tipo || tipo === 'Persona') return 'V';
-    if (tipo === 'Comercio') return 'J';
-    if (tipo === 'Extranjero') return 'E';
-    if (tipo === 'Comuna') return 'G';
+    if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+    if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+    if (tipo === 'Comercio' || tipo === 'J') return 'J';
+    if (tipo === 'Comuna' || tipo === 'G') return 'G';
     return tipo[0] || 'V';
   };
 
@@ -284,3 +284,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
+
