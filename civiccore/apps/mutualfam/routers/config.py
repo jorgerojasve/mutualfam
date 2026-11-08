@@ -181,7 +181,9 @@ def get_latest_release_info():
         "pending_version": None,
     }
 
-    rel, _, latest_matching_rel = get_target_release_and_apk(is_qa)
+    target_info = get_target_release_and_apk(is_qa)
+    rel = target_info[0] if (target_info and len(target_info) > 0) else None
+    latest_matching_rel = target_info[2] if (target_info and len(target_info) > 2) else None
     if latest_matching_rel and (not rel or latest_matching_rel.get("tag_name") != rel.get("tag_name")):
         # Hay un tag más nuevo cuyo APK aún se está compilando o subiendo en GitHub Actions
         info["is_compiling"] = True
@@ -407,7 +409,8 @@ def download_latest_apk(request: Request, redirect: bool = False):
     fallback_url = "https://github.com/jorgerojasve/mutualfam/releases"
     try:
         is_qa = is_qa_environment()
-        _, asset = get_target_release_and_apk(is_qa)
+        target_info = get_target_release_and_apk(is_qa)
+        asset = target_info[1] if (target_info and len(target_info) > 1) else None
         if asset and asset.get("browser_download_url"):
             target_url = asset["browser_download_url"]
             if redirect:
