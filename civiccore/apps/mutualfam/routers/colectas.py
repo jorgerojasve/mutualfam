@@ -880,7 +880,7 @@ def validate_expense(
 
     # Solo el proponente o beneficiario puede validar el gasto
     if org_member["user"].id not in [colecta.proponente_id, colecta.beneficiario_id]:
-        raise HTTPException(status_code=403, detail="Solo el beneficiario o proponente puede validar el gasto.")
+        raise HTTPException(status_code=403, detail="Solo el responsable de la gestión o proponente puede validar el gasto.")
 
     if not req.descripcion_gasto or not req.descripcion_gasto.strip():
         raise HTTPException(status_code=400, detail="Debe ingresar una descripción de cómo se ejecutó el gasto.")
@@ -910,7 +910,7 @@ def validate_expense(
     msg_gasto = (
         f"✅ <b>¡Gasto Validado y Colecta Completada!</b>\n\n"
         f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
-        f"👤 Beneficiario: {beneficiario_name}\n"
+        f"👤 Gestionado por: {beneficiario_name}\n"
         f"📝 Detalle del gasto: <i>{colecta.descripcion_gasto}</i>\n"
         f"¡Objetivo solidario cumplido exitosamente!"
     )

@@ -958,7 +958,7 @@ export default function FundsScreen() {
             </Text>
             <Text style={[styles.progressStatusHint, { color: item.is_active ? '#4ade80' : '#f59e0b' }]}>
               {item.is_active
-                ? '🎉 Quorum alcanzado'
+                ? '🎉 ¡Meta alcanzada!'
                 : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - ((item.monto_prometido_usd || 0) + (item.monto_pagado_usd || 0) + (item.monto_validado_usd || 0))))} USD`}
             </Text>
           </View>
@@ -1091,7 +1091,9 @@ export default function FundsScreen() {
                         {comp.referencia_pago ? (
                           <View style={styles.contribMetaRow}>
                             <Text style={styles.contribMetaIcon}>#</Text>
-                            <Text style={styles.contribMetaText}>{comp.referencia_pago}</Text>
+                            <Text style={styles.contribMetaText}>
+                              {comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona')}
+                            </Text>
                           </View>
                         ) : null}
                       </View>
@@ -1106,7 +1108,7 @@ export default function FundsScreen() {
                           `Comprobante de Aporte - ${comp.socio_name}`,
                           {
                             method: comp.payment_method,
-                            reference: comp.referencia_pago,
+                            reference: comp.referencia_pago ? comp.referencia_pago.replace(/beneficiario/gi, 'quien gestiona') : undefined,
                             amount: `$${formatVE(comp.monto_usd)} USD (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * item.tasa_actual))})`
                           }
                         )}
