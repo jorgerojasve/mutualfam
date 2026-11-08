@@ -72,7 +72,12 @@ export default function ProfileScreen({ navigation }) {
     setCheckingUpdate(true);
     try {
       const result = await checkForAppUpdate();
-      if (result.hasUpdate) {
+      if (result.isCompiling) {
+        Alert.alert(
+          'Compilación en progreso ⏳',
+          `Se detectó la nueva versión ${result.pendingVersion ? 'v' + result.pendingVersion : ''}, pero el instalador (APK) se está compilando en GitHub Actions. Estará disponible para descargar en unos minutos.`
+        );
+      } else if (result.hasUpdate) {
         setUpdateInfo(result);
       } else if (result.error) {
         Alert.alert(

@@ -57,9 +57,9 @@ def is_qa_environment() -> bool:
     return False
 
 def fetch_github_releases():
-    """Obtiene el listado reciente de releases desde GitHub con cache de 5 minutos."""
+    """Obtiene el listado reciente de releases desde GitHub con cache de 90 segundos."""
     now = time.time()
-    if _github_releases_cache["releases"] and (now - _github_releases_cache["timestamp"] < 300):
+    if _github_releases_cache["releases"] and (now - _github_releases_cache["timestamp"] < 90):
         return _github_releases_cache["releases"]
 
     try:
@@ -83,11 +83,24 @@ def fetch_github_releases():
 def get_target_release_and_apk(is_qa: bool = None):
     """
     Encuentra el release y el asset APK correspondiente según el entorno (QA o Producción).
+    Retorna (rel_con_apk, apk_asset, latest_matching_rel).
     """
     if is_qa is None:
         is_qa = is_qa_environment()
 
     releases = fetch_github_releases()
+    latest_matching_rel = None
+    for rel in releases:
+        tag = rel.get("tag_name", "").lower()
+        if is_qa:
+            if "-qa" in tag:
+                latest_matching_rel = rel
+                break
+        else:
+            if "-qa" not in tag:
+                latest_matching_rel = rel
+                break
+
     for rel in releases:
         tag = rel.get("tag_name", "").lower()
         assets = rel.get("assets", [])
@@ -97,18 +110,18 @@ def get_target_release_and_apk(is_qa: bool = None):
                 # Priorizar asset con prefijo mutualfam-qa que termine en .apk
                 for a in assets:
                     if a.get("name", "").startswith("mutualfam-qa") and a.get("name", "").endswith(".apk"):
-                        return rel, a
+                        return rel, a, latest_matching_rel
                 for a in assets:
                     if a.get("name", "").endswith(".apk"):
-                        return rel, a
+                        return rel, a, latest_matching_rel
         else:
             # En Producción aseguramos que ni el tag ni el asset contengan -qa
             if "-qa" not in tag:
                 for a in assets:
                     name = a.get("name", "")
                     if name.endswith(".apk") and "-qa" not in name:
-                        return rel, a
-    return None, None
+                        return rel, a, latest_matching_rel
+    return None, None, latest_matching_rel
 
 def get_latest_release_info():
     """
@@ -124,10 +137,17 @@ def get_latest_release_info():
         "latest_version": os.getenv("LATEST_APP_VERSION", "1.0.18"),
         "min_version": os.getenv("MIN_APP_VERSION", "1.0.0"),
         "download_url": download_url,
-        "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones."
+        "release_notes": "Mejoras de rendimiento, estabilidad y nuevas funciones.",
+        "is_compiling": False,
+        "pending_version": None,
     }
 
-    rel, _ = get_target_release_and_apk(is_qa)
+    rel, _, latest_matching_rel = get_target_release_and_apk(is_qa)
+    if latest_matching_rel and (not rel or latest_matching_rel.get("tag_name") != rel.get("tag_name")):
+        # Hay un tag más nuevo cuyo APK aún se está compilando o subiendo en GitHub Actions
+        info["is_compiling"] = True
+        info["pending_version"] = latest_matching_rel.get("tag_name", "").lstrip("v")
+
     if rel:
         tag_name = rel.get("tag_name", "").lstrip("v")
         if tag_name:
