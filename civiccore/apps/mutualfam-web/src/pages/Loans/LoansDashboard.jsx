@@ -1508,8 +1508,18 @@ export default function LoansDashboard() {
                     );
                   }
                   const safeBanco = getBankLabel(pm.banco);
-                  const docPrefix = pm.tipo_doc || (pm.cedula?.startsWith('V-') || pm.cedula?.startsWith('J-') ? '' : 'V-');
-                  const safeDoc = `${docPrefix}${pm.cedula}`;
+                  const getPmPrefix = (tipo) => {
+                    if (!tipo) return 'V';
+                    if (tipo === 'Persona' || tipo === 'V') return 'V';
+                    if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                    if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                    if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+                    if (tipo === 'Comuna' || tipo === 'C') return 'C';
+                    return tipo.replace('-', '') || 'V';
+                  };
+                  const docPrefix = pm.tipo_doc ? getPmPrefix(pm.tipo_doc) : (pm.cedula?.startsWith('V-') || pm.cedula?.startsWith('J-') ? '' : 'V');
+                  const cleanCedula = pm.cedula?.replace(/^[VJEGC]-?/i, '') || '';
+                  const safeDoc = `${docPrefix}-${cleanCedula}`;
                   const safeTel = pm.telefono || '';
                   const montoBsStr = bcvRate ? (selectedContrib.amount_usd * parseFloat(bcvRate)).toFixed(2) : '';
 
@@ -1870,13 +1880,15 @@ export default function LoansDashboard() {
                     if (repayMethod === 'Pago Móvil' && typeof config === 'object') {
                       const getPrefix = (tipo) => {
                         if (!tipo) return 'V';
-                        if (tipo === 'Persona') return 'V';
-                        if (tipo === 'Comercio') return 'J';
-                        if (tipo === 'Comuna') return 'G';
+                        if (tipo === 'Persona' || tipo === 'V') return 'V';
+                        if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                        if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                        if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+                        if (tipo === 'Comuna' || tipo === 'C') return 'C';
                         return tipo.replace('-', '') || 'V';
                       };
                       const docPrefix = config.tipo_doc ? getPrefix(config.tipo_doc) : (config.cedula?.startsWith('V-') || config.cedula?.startsWith('J-') ? '' : 'V');
-                      const cleanCedula = config.cedula?.replace(/^[VJEG]-?/i, '') || '';
+                      const cleanCedula = config.cedula?.replace(/^[VJEGC]-?/i, '') || '';
                       const safeDoc = `${docPrefix}-${cleanCedula}`;
                       const safeBanco = getBankLabel(config.banco);
                       const safeTelefono = config.telefono || '';
