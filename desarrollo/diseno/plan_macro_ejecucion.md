@@ -84,3 +84,40 @@ Este documento centraliza todos los frentes de trabajo, sub-planes y estrategias
 3. **Puntos de Votación:** Implementar el plan de la Sección 5.
 4. **Panel de Aprobación de Créditos:** Crear la interfaz para el comité revisor.
 5. **Módulo de Mercado Solidario:** Conectar el frontend a los endpoints del mercado interno.
+6. **Buscador en Historiales (Fase 1 - Fechas):** Implementación de búsqueda por rango de fechas en historiales de préstamos y colectas (Sección 9.1).
+7. **Buscador en Historiales (Fase 2 - Multicriterio):** Incorporación de filtros por participantes, roles, texto libre y montos (Sección 9.2).
+
+---
+
+## 9. Sistema de Búsqueda y Filtrado Avanzado en Historiales (Préstamos y Colectas)
+*Mecanismo de consulta y auditoría histórica multicriterio para socios y gestores*
+
+**Objetivo:** Permitir a los miembros y gestores de la mutual localizar rápidamente operaciones pasadas tanto en el historial de Préstamos (`LoansScreen.js` / `LoansDashboard.jsx`) como en el historial de Colectas solidarias (`FundsScreen.js` / `FundsDashboard.jsx`), con una experiencia ágil, colapsable y no invasiva que no sobrecargue la interfaz móvil.
+
+### 9.1 Fase 1: Búsqueda por Rango de Fechas (Prioridad Inicial)
+- **Selectores de Fecha:**
+  - *Mobile:* Integración con `@react-native-community/datetimepicker` mediante campos táctiles de `Fecha Desde` y `Fecha Hasta`.
+  - *Web:* Selectores estándar tipo `date` con validación de coherencia (`fecha_inicio <= fecha_fin`).
+- **Atajos Rápidos de Rango:**
+  - Botones de un toque: `Último mes`, `Últimos 3 meses`, `Este año`, `Todo`.
+- **Criterio Temporal:**
+  - *En Préstamos:* Filtrado por fecha de desembolso (`created_at`) o fecha de liquidación total (`repaid_at` / `cancelled_at`).
+  - *En Colectas:* Filtrado por fecha de creación, fecha de liquidación/ejecución de gasto (`gasto_validado_at`) o fecha de cierre/cancelación.
+
+### 9.2 Fase 2: Filtrado Multicriterio Avanzado
+- **Filtro por Participantes y Roles:**
+  - *Beneficiario:* Socio receptor del crédito o destinatario del gasto de la colecta.
+  - *Gestor / Proponente:* Socio organizador de la colecta o solicitante del préstamo.
+  - *Aportador / Financiador:* Socios que prometieron, pagaron o fondearon participaciones.
+- **Búsqueda Textual Libre:**
+  - Título de la colecta / Motivo del crédito.
+  - Descripción, propósito detallado o notas de validación de gasto.
+- **Filtros Facetados Adicionales:**
+  - *Rango de montos:* Mínimo y máximo (USD y Bs según tasa aplicada).
+  - *Método de pago:* Pago Móvil, Transferencia Bancaria, Efectivo, Zelle, etc.
+  - *Motivo de finalización:* Completado exitosamente vs Cancelado por fuerza mayor.
+
+### 9.3 Experiencia de Usuario (UI/UX Móvil y Web)
+- **Barra de Búsqueda Colapsable:** Botón flotante o icono de lupa (`🔍`) en la cabecera del historial que despliega el panel de filtros sin invadir la vista principal.
+- **Badges de Filtros Activos:** Pills compactas que indican los filtros aplicados (ej. `📅 Oct-Nov 2026 ✕`, `👤 Jorge R. ✕`) con botón para limpiar todos los filtros en un toque.
+- **Rendimiento y Caching:** Ejecución reactiva en memoria/caché local (`useMemo`) para respuestas instantáneas sin latencia de red, con soporte para consultas parametrizadas en backend si el historial excede el volumen de paginación local.
