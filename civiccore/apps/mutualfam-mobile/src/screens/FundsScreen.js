@@ -1276,6 +1276,23 @@ export default function FundsScreen() {
     }
   };
 
+  // Helper para verificar si la fecha planificada de cobro ha llegado o pasado
+  const isPlannedDateReached = (fechaPago) => {
+    if (!fechaPago) return false;
+    try {
+      const cleanDateStr = String(fechaPago).split('T')[0].replace(/\//g, '-').trim();
+      if (!cleanDateStr) return false;
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const todayStr = `${y}-${m}-${d}`;
+      return todayStr >= cleanDateStr;
+    } catch {
+      return false;
+    }
+  };
+
   const contribStatusMap = {
     prometido:     { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
     notificado:    { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
@@ -1550,7 +1567,7 @@ export default function FundsScreen() {
               style={[styles.contribActionPrimary, { backgroundColor: '#334155' }]}
               onPress={() => handleCancelCommitment(colectaItem, comp)}
             >
-              <Text style={[styles.contribActionPrimaryText, { color: '#f87171' }]}>✕ Cancelar</Text>
+              <Text style={[styles.contribActionPrimaryText, { color: '#f87171' }]}>✕ Cancelar aporte</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1970,7 +1987,7 @@ export default function FundsScreen() {
               style={styles.btnDangerOutline}
               onPress={() => handleCancelCommitment(item, myPledge)}
             >
-              <Text style={styles.btnDangerOutlineText}>Cancelar</Text>
+              <Text style={styles.btnDangerOutlineText}>Cancelar aporte</Text>
             </TouchableOpacity>
           )}
 
@@ -1984,8 +2001,11 @@ export default function FundsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón Recordatorio de Pago para el Gestor */}
-          {isGestor && (item.estado === 'activa' || item.estado === 'propuesta') && item.compromisos?.some(c => c.estado === 'prometido' || c.estado === 'notificado') && (
+          {/* Botón Recordatorio de Pago para el Gestor (solo a partir de la fecha planificada) */}
+          {isGestor &&
+            (item.estado === 'activa' || item.estado === 'propuesta') &&
+            isPlannedDateReached(item.fecha_pago) &&
+            item.compromisos?.some(c => c.estado === 'prometido' || c.estado === 'notificado') && (
             <TouchableOpacity
               style={styles.btnReminder}
               onPress={() => handleRemindPending(item)}
