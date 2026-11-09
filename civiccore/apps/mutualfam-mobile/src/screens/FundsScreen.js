@@ -145,8 +145,8 @@ export default function FundsScreen() {
   const [loadingColectas, setLoadingColectas] = useState(true);
   const [colectasFilter, setColectasFilter] = useState('active'); // 'active' | 'history'
 
-  const activeColectas = colectas.filter((c) => !['completada', 'cancelada'].includes(c.estado));
-  const historyColectas = colectas.filter((c) => ['completada', 'cancelada'].includes(c.estado));
+  const activeColectas = colectas.filter((c) => !c.gasto_validado && !['completada', 'cancelada'].includes(c.estado));
+  const historyColectas = colectas.filter((c) => c.gasto_validado || ['completada', 'cancelada'].includes(c.estado));
   const displayedColectas = colectasFilter === 'active' ? activeColectas : historyColectas;
 
   // Visor de Comprobantes de Pago / Gastos
@@ -1031,7 +1031,7 @@ export default function FundsScreen() {
       setTargetColecta(null);
       setConnectionError(false);
       if (setIsOffline) setIsOffline(false);
-      Alert.alert('¡Colecta Completada!', 'El gasto fue validado y se notificó a todos los miembros de la mutual.');
+      Alert.alert('¡Colecta Culminada!', 'La rendición de cuentas fue registrada y se notificó a todos los miembros de la mutual.');
       fetchColectas();
     } catch (e) {
       if (isNetworkError(e)) {
@@ -1142,6 +1142,9 @@ export default function FundsScreen() {
 
   // Obtener estilo de badge de estado
   const getStatusBadge = (estado, item = null) => {
+    if (item?.gasto_validado || estado === 'completada') {
+      return { label: '✅ CULMINADA', bg: '#ede9fe', text: '#7c3aed', border: '#c4b5fd' };
+    }
     switch (estado) {
       case 'propuesta':
         return { label: '⏳ PROPUESTA', bg: '#fef3c7', text: '#d97706', border: '#fcd34d' };
@@ -1150,7 +1153,7 @@ export default function FundsScreen() {
       case 'cerrada':
         return { label: '📥 RECAUDADA', bg: '#dbeafe', text: '#2563eb', border: '#93c5fd' };
       case 'completada':
-        return { label: '✅ COMPLETADA', bg: '#ede9fe', text: '#7c3aed', border: '#c4b5fd' };
+        return { label: '✅ CULMINADA', bg: '#ede9fe', text: '#7c3aed', border: '#c4b5fd' };
       case 'cancelada':
         if (item?.tiene_devoluciones_pendientes) {
           return { label: '⚠️ CANCELADA (DEVOLVIENDO)', bg: 'rgba(239, 68, 68, 0.15)', text: '#f87171', border: '#ef4444' };
@@ -1819,7 +1822,7 @@ export default function FundsScreen() {
           )}
 
           {/* Botón Cancelar Colecta por Fuerza Mayor (Gestor o Proponente) */}
-          {isGestor && (item.estado === 'propuesta' || item.estado === 'activa' || item.estado === 'cerrada') && (
+          {isGestor && (item.estado === 'propuesta' || item.estado === 'activa' || item.estado === 'cerrada') && !item.gasto_validado && (
             <TouchableOpacity
               style={[styles.btnDangerOutline, { borderColor: '#ef4444' }]}
               onPress={() => handleCancelColecta(item)}

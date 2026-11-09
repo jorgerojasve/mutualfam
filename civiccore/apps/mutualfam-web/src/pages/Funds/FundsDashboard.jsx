@@ -18,8 +18,8 @@ export default function FundsDashboard() {
   const [loadingColectas, setLoadingColectas] = useState(true);
   const [colectasFilter, setColectasFilter] = useState('active'); // 'active' | 'history'
 
-  const activeColectas = colectas.filter((c) => !['completada', 'cancelada'].includes(c.estado));
-  const historyColectas = colectas.filter((c) => ['completada', 'cancelada'].includes(c.estado));
+  const activeColectas = colectas.filter((c) => !c.gasto_validado && !['completada', 'cancelada'].includes(c.estado));
+  const historyColectas = colectas.filter((c) => c.gasto_validado || ['completada', 'cancelada'].includes(c.estado));
   const displayedColectas = colectasFilter === 'active' ? activeColectas : historyColectas;
 
   // Fondos comunes state
@@ -701,11 +701,41 @@ export default function FundsDashboard() {
                         fontSize: '0.75rem',
                         fontWeight: '700',
                         textTransform: 'uppercase',
-                        backgroundColor: item.estado === 'abierta' ? 'rgba(16, 185, 129, 0.2)' : item.estado === 'cerrada' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                        color: item.estado === 'abierta' ? '#34d399' : item.estado === 'cerrada' ? '#60a5fa' : '#f87171',
-                        border: `1px solid ${item.estado === 'abierta' ? 'rgba(16, 185, 129, 0.3)' : item.estado === 'cerrada' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                        backgroundColor: (item.gasto_validado || item.estado === 'completada')
+                          ? 'rgba(168, 85, 247, 0.2)'
+                          : item.estado === 'abierta' || item.estado === 'activa'
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : item.estado === 'cerrada'
+                          ? 'rgba(59, 130, 246, 0.2)'
+                          : item.estado === 'propuesta'
+                          ? 'rgba(245, 158, 11, 0.2)'
+                          : 'rgba(239, 68, 68, 0.2)',
+                        color: (item.gasto_validado || item.estado === 'completada')
+                          ? '#c084fc'
+                          : item.estado === 'abierta' || item.estado === 'activa'
+                          ? '#34d399'
+                          : item.estado === 'cerrada'
+                          ? '#60a5fa'
+                          : item.estado === 'propuesta'
+                          ? '#fbbf24'
+                          : '#f87171',
+                        border: `1px solid ${
+                          (item.gasto_validado || item.estado === 'completada')
+                            ? 'rgba(168, 85, 247, 0.3)'
+                            : item.estado === 'abierta' || item.estado === 'activa'
+                            ? 'rgba(16, 185, 129, 0.3)'
+                            : item.estado === 'cerrada'
+                            ? 'rgba(59, 130, 246, 0.3)'
+                            : item.estado === 'propuesta'
+                            ? 'rgba(245, 158, 11, 0.3)'
+                            : 'rgba(239, 68, 68, 0.3)'
+                        }`,
                       }}>
-                        {item.estado}
+                        {(item.gasto_validado || item.estado === 'completada')
+                          ? '✅ Culminada'
+                          : item.estado === 'cerrada'
+                          ? '📥 Recaudada'
+                          : item.estado}
                       </span>
                     </div>
 

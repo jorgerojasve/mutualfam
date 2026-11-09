@@ -299,6 +299,8 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int, db: Optional[Sess
     porc_recaudado = round((amt_verified / colecta.monto_meta_usd * 100), 1) if colecta.monto_meta_usd > 0 else 0.0
 
     estado_str = colecta.estado.value if hasattr(colecta.estado, "value") else str(colecta.estado)
+    if colecta.gasto_validado and estado_str != "cancelada":
+        estado_str = "completada"
     is_active = (total_committed >= colecta.monto_meta_usd) or (estado_str in ["activa", "cerrada", "completada"])
 
     # Verificar si tiene devoluciones pendientes cuando está cancelada
@@ -844,7 +846,10 @@ def confirm_commitment_payment(
     todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
 
     if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
-        colecta.estado = EstadoColecta.CERRADA  # Esperando validación de gasto por el beneficiario
+        if not colecta.gasto_validado and colecta.estado != EstadoColecta.COMPLETADA:
+            colecta.estado = EstadoColecta.CERRADA  # Esperando rendición de cuentas por el beneficiario
+        elif colecta.gasto_validado:
+            colecta.estado = EstadoColecta.COMPLETADA
 
     db.commit()
     db.refresh(colecta)
@@ -938,7 +943,10 @@ def verify_commitment_payment(
     activos = [c for c in colecta.compromisos if c.estado != EstadoCompromiso.CANCELADO]
     todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
     if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
-        colecta.estado = EstadoColecta.CERRADA
+        if not colecta.gasto_validado and colecta.estado != EstadoColecta.COMPLETADA:
+            colecta.estado = EstadoColecta.CERRADA  # Esperando rendición de cuentas por el beneficiario
+        elif colecta.gasto_validado:
+            colecta.estado = EstadoColecta.COMPLETADA
 
     db.commit()
     db.refresh(colecta)
