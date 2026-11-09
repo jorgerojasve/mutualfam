@@ -143,6 +143,11 @@ export default function FundsScreen() {
   const [colectas, setColectas] = useState([]);
   const [rates, setRates] = useState({});
   const [loadingColectas, setLoadingColectas] = useState(true);
+  const [colectasFilter, setColectasFilter] = useState('active'); // 'active' | 'history'
+
+  const activeColectas = colectas.filter((c) => !['completada', 'cancelada'].includes(c.estado));
+  const historyColectas = colectas.filter((c) => ['completada', 'cancelada'].includes(c.estado));
+  const displayedColectas = colectasFilter === 'active' ? activeColectas : historyColectas;
 
   // Visor de Comprobantes de Pago / Gastos
   const [receiptViewerVisible, setReceiptViewerVisible] = useState(false);
@@ -1942,9 +1947,9 @@ export default function FundsScreen() {
             onPress={() => setActiveTab('colectas')}
           >
             <Text style={[styles.segmentBtnText, activeTab === 'colectas' && styles.segmentBtnTextActive]}>
-              {(isOffline || connectionError) && colectas.length === 0
+              {(isOffline || connectionError) && activeColectas.length === 0
                 ? '🐮 Colectas (Sin conexión)'
-                : `🐮 Colectas (Vacas)${colectas.length > 0 ? ` (${colectas.length})` : ''}`}
+                : `🐮 Colectas (Vacas)${activeColectas.length > 0 ? ` (${activeColectas.length})` : ''}`}
             </Text>
           </TouchableOpacity>
 
@@ -1957,6 +1962,29 @@ export default function FundsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Sub-pestañas homologadas a Préstamos: Vigentes / Historial */}
+        {activeTab === 'colectas' && (
+          <View style={styles.colectasSubTabs}>
+            <TouchableOpacity
+              style={[styles.colectasSubTab, colectasFilter === 'active' && styles.colectasSubTabActive]}
+              onPress={() => setColectasFilter('active')}
+            >
+              <Text style={[styles.colectasSubTabText, colectasFilter === 'active' && styles.colectasSubTabTextActive]}>
+                Vigentes{activeColectas.length > 0 ? ` (${activeColectas.length})` : ''}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.colectasSubTab, colectasFilter === 'history' && styles.colectasSubTabActive]}
+              onPress={() => setColectasFilter('history')}
+            >
+              <Text style={[styles.colectasSubTabText, colectasFilter === 'history' && styles.colectasSubTabTextActive]}>
+                Historial{historyColectas.length > 0 ? ` (${historyColectas.length})` : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {!hasConfiguredPaymentMethods(userPaymentConfig) && (
@@ -1992,7 +2020,7 @@ export default function FundsScreen() {
           <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
         ) : (
           <FlatList
-            data={colectas}
+            data={displayedColectas}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderColectaCard}
             contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
@@ -2004,10 +2032,18 @@ export default function FundsScreen() {
                   onRetry={handleRetryFunds}
                   loading={retryingFunds}
                 />
+              ) : colectasFilter === 'history' ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyEmoji}>📜</Text>
+                  <Text style={styles.emptyTitle}>Sin colectas en el historial</Text>
+                  <Text style={styles.emptyText}>
+                    Aquí se archivarán automáticamente las colectas familiares que hayan sido completadas (con gasto validado) o canceladas.
+                  </Text>
+                </View>
               ) : (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyEmoji}>🐮</Text>
-                  <Text style={styles.emptyTitle}>No hay colectas activas</Text>
+                  <Text style={styles.emptyTitle}>No hay colectas vigentes</Text>
                   <Text style={styles.emptyText}>
                     Las colectas ("hacer una vaca") permiten financiar gastos familiares específicos con aportes voluntarios.
                   </Text>
@@ -3351,6 +3387,30 @@ const styles = StyleSheet.create({
   },
   segmentBtnTextActive: {
     color: '#ffffff',
+    fontWeight: '700',
+  },
+  colectasSubTabs: {
+    flexDirection: 'row',
+    marginTop: 10,
+    marginBottom: 2,
+    gap: 16,
+  },
+  colectasSubTab: {
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  colectasSubTabActive: {
+    borderBottomColor: '#3b82f6',
+  },
+  colectasSubTabText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  colectasSubTabTextActive: {
+    color: '#3b82f6',
     fontWeight: '700',
   },
   card: {

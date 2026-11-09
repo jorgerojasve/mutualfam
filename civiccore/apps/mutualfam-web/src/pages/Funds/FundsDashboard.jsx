@@ -16,6 +16,11 @@ export default function FundsDashboard() {
   const [colectas, setColectas] = useState([]);
   const [rates, setRates] = useState({});
   const [loadingColectas, setLoadingColectas] = useState(true);
+  const [colectasFilter, setColectasFilter] = useState('active'); // 'active' | 'history'
+
+  const activeColectas = colectas.filter((c) => !['completada', 'cancelada'].includes(c.estado));
+  const historyColectas = colectas.filter((c) => ['completada', 'cancelada'].includes(c.estado));
+  const displayedColectas = colectasFilter === 'active' ? activeColectas : historyColectas;
 
   // Fondos comunes state
   const [funds, setFunds] = useState([]);
@@ -520,7 +525,7 @@ export default function FundsDashboard() {
             transition: 'all 0.2s ease',
           }}
         >
-          🐮 Colectas (Vacas) {colectas.length > 0 ? `(${colectas.length})` : ''}
+          🐮 Colectas (Vacas) {activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
         </button>
         <button
           type="button"
@@ -555,17 +560,74 @@ export default function FundsDashboard() {
       {/* ========================================================= */}
       {activeTab === 'colectas' && (
         <div>
+          {/* Sub-pestañas homologadas a Préstamos: Vigentes / Historial */}
+          <div style={{
+            display: 'flex',
+            gap: '1.5rem',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: '1.25rem',
+          }}>
+            <button
+              type="button"
+              onClick={() => setColectasFilter('active')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderBottom: colectasFilter === 'active' ? '2px solid #10b981' : '2px solid transparent',
+                color: colectasFilter === 'active' ? '#10b981' : '#94a3b8',
+                fontWeight: '700',
+                fontSize: '1rem',
+                padding: '0.5rem 0.25rem',
+                cursor: 'pointer',
+              }}
+            >
+              Vigentes {activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => setColectasFilter('history')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderBottom: colectasFilter === 'history' ? '2px solid #10b981' : '2px solid transparent',
+                color: colectasFilter === 'history' ? '#10b981' : '#94a3b8',
+                fontWeight: '700',
+                fontSize: '1rem',
+                padding: '0.5rem 0.25rem',
+                cursor: 'pointer',
+              }}
+            >
+              Historial {historyColectas.length > 0 ? `(${historyColectas.length})` : ''}
+            </button>
+          </div>
+
           {loadingColectas ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '14rem' }}>
               <div className="loader" />
             </div>
-          ) : colectas.length === 0 ? (
+          ) : displayedColectas.length === 0 ? (
             (isOffline || connectionError) ? (
               <OfflineEmptyState
                 title="Sin conexión de red"
                 message="No se pudieron cargar las colectas familiares. Tus datos están seguros. Por favor reintenta al conectar."
                 onRetry={handleRetryAll}
               />
+            ) : colectasFilter === 'history' ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '4rem 1.5rem',
+                background: 'rgba(30, 41, 59, 0.4)',
+                borderRadius: '16px',
+                border: '1px dashed rgba(255, 255, 255, 0.1)',
+              }}>
+                <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>📜</span>
+                <h3 style={{ color: '#f8fafc', fontSize: '1.25rem', fontWeight: '700', margin: '0 0 0.5rem 0' }}>
+                  Sin colectas en el historial
+                </h3>
+                <p style={{ color: '#94a3b8', maxWidth: '440px', margin: '0 auto', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  Aquí se archivarán automáticamente las colectas familiares que hayan sido completadas (con gasto validado) o canceladas.
+                </p>
+              </div>
             ) : (
               <div style={{
                 textAlign: 'center',
@@ -576,7 +638,7 @@ export default function FundsDashboard() {
               }}>
                 <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>🐮</span>
                 <h3 style={{ color: '#f8fafc', fontSize: '1.25rem', fontWeight: '700', margin: '0 0 0.5rem 0' }}>
-                  No hay colectas familiares activas
+                  No hay colectas familiares vigentes
                 </h3>
                 <p style={{ color: '#94a3b8', maxWidth: '440px', margin: '0 auto 1.5rem auto', fontSize: '0.9rem', lineHeight: '1.5' }}>
                   Las colectas ("hacer una vaca") permiten financiar gastos médicos, reparaciones, eventos o emergencias de cualquier familiar mediante aportes solidarios directos.
@@ -601,7 +663,7 @@ export default function FundsDashboard() {
             )
           ) : (
             <div className="dashboard-grid">
-              {colectas.map((item) => {
+              {displayedColectas.map((item) => {
                 const isOwner = user && item.proponente_id === user.id;
                 const isBeneficiary = user && (item.beneficiario_id === user.id || item.beneficiario_nombre === `${user.first_name || ''} ${user.last_name || ''}`.trim());
                 const myPledge = item.mi_compromiso;
