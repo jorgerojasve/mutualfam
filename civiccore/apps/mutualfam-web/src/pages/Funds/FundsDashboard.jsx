@@ -771,7 +771,7 @@ export default function FundsDashboard() {
                         color: '#34d399',
                       }}>
                         <ShieldCheck size={16} />
-                        <span><strong>Gasto Familiar Validado:</strong> {item.gasto_descripcion || 'Comprobante y factura presentados ante la familia'}</span>
+                        <span><strong>Rendición de cuentas:</strong> {item.gasto_descripcion || 'Comprobante y soporte presentados ante la familia'}</span>
                       </div>
                     ) : item.estado === 'cerrada' || progressPct >= 100 ? (
                       <div style={{

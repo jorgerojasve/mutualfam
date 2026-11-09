@@ -1573,10 +1573,10 @@ export default function FundsScreen() {
           );
         })()}
 
-        {/* Validación de gasto si está completada */}
+        {/* Rendición de cuentas si está completada */}
         {item.gasto_validado && (
           <View style={styles.expenseValidatedBox}>
-            <Text style={styles.expenseValidatedTitle}>✅ Gasto Validado por quien gestiona:</Text>
+            <Text style={styles.expenseValidatedTitle}>✅ Rendición de cuentas:</Text>
             <Text style={styles.expenseValidatedDesc}>{item.descripcion_gasto}</Text>
             {item.comprobante_gasto_url ? (
               <TouchableOpacity
