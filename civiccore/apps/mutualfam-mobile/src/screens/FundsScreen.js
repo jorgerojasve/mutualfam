@@ -303,7 +303,7 @@ export default function FundsScreen() {
     }
   };
 
-  const copyAllPagoMovil = async (pmData, montoBs) => {
+  const copyAllPagoMovil = async (pmData, montoBs, fieldKey = 'all') => {
     if (!pmData) return;
     try {
       const getPrefix = (tipo) => {
@@ -321,7 +321,7 @@ export default function FundsScreen() {
       const montoText = montoBs ? ` | Monto: ${montoBs} Bs` : '';
       const text = `Banco: ${safeBanco} | ${safeDoc} | ${safeTelefono}${montoText}`;
       await Clipboard.setStringAsync(text);
-      setCopiedField('all');
+      setCopiedField(fieldKey);
       setTimeout(() => setCopiedField(null), 2000);
     } catch (e) {
       console.warn('Error copying all to clipboard', e);
@@ -2973,15 +2973,21 @@ export default function FundsScreen() {
               {targetColecta && refundCompromiso && (() => {
                 const isBs = refundCompromiso.payment_method === 'Pago Móvil' || refundCompromiso.payment_method === 'Transferencia Bancaria';
                 let socioPmData = null;
+                let socioTbData = null;
                 try {
                   if (refundCompromiso.socio_payment_methods_json) {
-                    const parsed = JSON.parse(refundCompromiso.socio_payment_methods_json);
-                    socioPmData = parsed['Pago Móvil'] || parsed['pago_movil'] || parsed['Transferencia Bancaria'] || null;
+                    socioPmData = getBeneficiaryMethodData(refundCompromiso.socio_payment_methods_json, 'Pago Móvil');
+                    socioTbData = getBeneficiaryMethodData(refundCompromiso.socio_payment_methods_json, 'Transferencia Bancaria');
+                    if (!socioPmData && !socioTbData) {
+                      const parsed = JSON.parse(refundCompromiso.socio_payment_methods_json);
+                      socioPmData = parsed['Pago Móvil'] || parsed['pago_movil'] || parsed['Transferencia Bancaria'] || null;
+                    }
                   }
                 } catch (e) {}
 
                 const rawOriginalBs = refundCompromiso.monto_bs || (refundCompromiso.monto_usd * (targetColecta.tasa_actual || 1));
                 const estComision03 = isBs ? Math.round(rawOriginalBs * 0.003 * 100) / 100 : 0;
+                const montoDevolverStr = refundAmount || (isBs ? formatVE(rawOriginalBs) : formatVE(refundCompromiso.monto_usd));
 
                 return (
                   <>
@@ -3006,44 +3012,136 @@ export default function FundsScreen() {
                       </Text>
                     </View>
 
-                    {/* Datos de Pago del Socio si están registrados */}
-                    {socioPmData && (
-                      <View style={styles.funderCardBox}>
-                        <Text style={styles.funderCardTitle}>📋 Datos registrados de {refundCompromiso.socio_name}:</Text>
-                        {socioPmData.banco ? (
-                          <View style={styles.funderDataRow}>
-                            <Text style={styles.funderDataLabel}>Banco:</Text>
-                            <TouchableOpacity onPress={() => copyField('f_banco', socioPmData.banco)}>
-                              <Text style={styles.funderDataVal}>{socioPmData.banco} {copiedField === 'f_banco' ? '✓' : '📋'}</Text>
-                            </TouchableOpacity>
+                    {/* Datos de Pago del Socio Homologados al Modal de Aporte */}
+                    {(() => {
+                      const isTransferencia = normalizePaymentMethodName(refundCompromiso.payment_method) === 'Transferencia Bancaria';
+                      if (isTransferencia && socioTbData && (socioTbData.numero_cuenta || socioTbData.cuenta)) {
+                        return (
+                          <BankTransferCard
+                            data={socioTbData}
+                            montoBs={isBs ? montoDevolverStr : null}
+                            recipientName={refundCompromiso.socio_name}
+                            tasaLabel="Devolución de aporte"
+                            banks={VENEZUELAN_BANKS}
+                          />
+                        );
+                      }
+
+                      if (!socioPmData && !socioTbData) {
+                        return (
+                          <View style={styles.noPmBanner}>
+                            <Text style={styles.noPmText}>
+                              El aportante ({refundCompromiso.socio_name}) no tiene datos de pago registrados en el sistema.
+                              Por favor coordina directamente para acordar la vía de reintegro.
+                            </Text>
                           </View>
-                        ) : null}
-                        {socioPmData.telefono ? (
-                          <View style={styles.funderDataRow}>
-                            <Text style={styles.funderDataLabel}>Teléfono:</Text>
-                            <TouchableOpacity onPress={() => copyField('f_tel', socioPmData.telefono)}>
-                              <Text style={styles.funderDataVal}>{socioPmData.telefono} {copiedField === 'f_tel' ? '✓' : '📋'}</Text>
+                        );
+                      }
+
+                      const activeData = socioPmData || socioTbData;
+                      const getPrefix = (tipo) => {
+                        if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
+                        if (tipo === 'Extranjero' || tipo === 'E') return 'E';
+                        if (tipo === 'Comercio' || tipo === 'J') return 'J';
+                        if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+                        if (tipo === 'Comuna' || tipo === 'C') return 'C';
+                        return tipo[0] || 'V';
+                      };
+                      const docPrefix = getPrefix(activeData.tipo_doc);
+                      const safeDoc = activeData.cedula ? `${docPrefix}-${activeData.cedula}` : '';
+
+                      return (
+                        <View style={styles.pmCard}>
+                          <Text style={styles.pmCardTitle}>📲 Datos para Pago Móvil / Reintegro</Text>
+
+                          {/* Monto sugerido a devolver */}
+                          {isBs && (
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('f_monto', montoDevolverStr)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Monto a transferir / devolver</Text>
+                                <Text style={[styles.copyDataValue, { color: '#10b981' }]}>Bs {montoDevolverStr}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'f_monto' ? '✓' : '📋'}</Text>
                             </TouchableOpacity>
-                          </View>
-                        ) : null}
-                        {socioPmData.cedula ? (
-                          <View style={styles.funderDataRow}>
-                            <Text style={styles.funderDataLabel}>Documento:</Text>
-                            <TouchableOpacity onPress={() => copyField('f_ced', `${socioPmData.tipo_doc || 'V'}-${socioPmData.cedula}`)}>
-                              <Text style={styles.funderDataVal}>{socioPmData.tipo_doc || 'V'}-{socioPmData.cedula} {copiedField === 'f_ced' ? '✓' : '📋'}</Text>
+                          )}
+
+                          {/* Banco Destino */}
+                          {activeData.banco ? (
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('f_banco', activeData.banco)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={styles.copyDataLabel}>Banco Destino</Text>
+                                <Text style={styles.copyDataValue}>{getBankLabel(activeData.banco)}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'f_banco' ? '✓' : '📋'}</Text>
                             </TouchableOpacity>
-                          </View>
-                        ) : null}
-                        {socioPmData.cuenta ? (
-                          <View style={styles.funderDataRow}>
-                            <Text style={styles.funderDataLabel}>Nro. Cuenta:</Text>
-                            <TouchableOpacity onPress={() => copyField('f_cta', socioPmData.cuenta)}>
-                              <Text style={styles.funderDataVal}>{socioPmData.cuenta} {copiedField === 'f_cta' ? '✓' : '📋'}</Text>
+                          ) : null}
+
+                          {/* Documento / Cédula */}
+                          {safeDoc ? (
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('f_doc', safeDoc)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Cédula / Documento</Text>
+                                <Text style={styles.copyDataValue}>{safeDoc}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'f_doc' ? '✓' : '📋'}</Text>
                             </TouchableOpacity>
-                          </View>
-                        ) : null}
-                      </View>
-                    )}
+                          ) : null}
+
+                          {/* Teléfono */}
+                          {activeData.telefono ? (
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('f_tel', activeData.telefono)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Teléfono</Text>
+                                <Text style={styles.copyDataValue}>{activeData.telefono}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'f_tel' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          ) : null}
+
+                          {/* Nro. de Cuenta si aplica */}
+                          {(activeData.cuenta || activeData.numero_cuenta) ? (
+                            <TouchableOpacity
+                              style={styles.copyDataRow}
+                              onPress={() => copyField('f_cta', activeData.cuenta || activeData.numero_cuenta)}
+                              activeOpacity={0.7}
+                            >
+                              <View>
+                                <Text style={styles.copyDataLabel}>Nro. de Cuenta</Text>
+                                <Text style={styles.copyDataValue}>{activeData.cuenta || activeData.numero_cuenta}</Text>
+                              </View>
+                              <Text style={styles.copyIcon}>{copiedField === 'f_cta' ? '✓' : '📋'}</Text>
+                            </TouchableOpacity>
+                          ) : null}
+
+                          {/* Botón Copiar Todo para el Banco */}
+                          <TouchableOpacity
+                            style={styles.copyAllButton}
+                            onPress={() => copyAllPagoMovil(activeData, isBs ? montoDevolverStr : null, 'f_all')}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.copyAllButtonText}>
+                              {copiedField === 'f_all' ? '✅ ¡Copiado!' : '📋  Copiar todo para el banco'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })()}
 
                     {/* Monto a Devolver */}
                     <Text style={styles.inputLabel}>
