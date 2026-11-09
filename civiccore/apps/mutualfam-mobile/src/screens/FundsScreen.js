@@ -1838,7 +1838,7 @@ export default function FundsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón Validar Gasto (beneficiario si está cerrada o completó recaudación) */}
+          {/* Botón Rendir Cuentas (beneficiario si está cerrada o completó recaudación) */}
           {(isOwner || isBeneficiary) &&
             (item.estado === 'cerrada' || item.monto_recaudado_usd >= item.monto_meta_usd) &&
             !item.gasto_validado && (
@@ -1849,7 +1849,7 @@ export default function FundsScreen() {
                   setShowExpenseModal(true);
                 }}
               >
-                <Text style={styles.btnPrimaryText}>✅ Validar Gasto</Text>
+                <Text style={styles.btnPrimaryText}>✅ Rendir Cuentas</Text>
               </TouchableOpacity>
             )}
         </View>
@@ -2804,7 +2804,7 @@ export default function FundsScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardVisible ? 35 : 15 }}
             >
-              <Text style={styles.modalTitle}>✅ Validar Gasto Realizado</Text>
+              <Text style={styles.modalTitle}>📋 Rendición de Cuentas del Gasto</Text>
               <Text style={styles.modalSubtitle}>
                 Como responsable de la gestión, confirma a la mutual cómo se utilizaron los fondos recaudados.
               </Text>
@@ -2848,7 +2848,7 @@ export default function FundsScreen() {
                   {submitting || uploadingReceipt ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.modalSubmitText}>Validar y Completar</Text>
+                    <Text style={styles.modalSubmitText}>Rendir Cuentas y Completar</Text>
                   )}
                 </TouchableOpacity>
               </View>
