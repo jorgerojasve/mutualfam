@@ -218,6 +218,7 @@ export default function FundsScreen() {
 
   // Devolver Aporte
   const [refundCompromiso, setRefundCompromiso] = useState(null);
+  const [refundCompromisos, setRefundCompromisos] = useState([]);
   const [refundAmount, setRefundAmount] = useState('');
   const [refundCurrency, setRefundCurrency] = useState('VES');
   const [refundMethod, setRefundMethod] = useState('Pago Móvil');
@@ -939,24 +940,52 @@ export default function FundsScreen() {
     }
   };
 
-  // Abrir Modal de Devolución de Aporte
-  const handleOpenRefund = (colecta, comp) => {
+  // Abrir Modal de Devolución de Aporte (combina aportes del mismo socio con el mismo método de pago)
+  const handleOpenRefund = (colecta, compOrList) => {
     setTargetColecta(colecta);
-    setRefundCompromiso(comp);
-    const isBs = comp.payment_method === 'Pago Móvil' || comp.payment_method === 'Transferencia Bancaria';
-    const initialAmount = isBs
-      ? (comp.monto_bs || (comp.monto_usd * (colecta.tasa_actual || 1)))
-      : comp.monto_usd;
+    let comps = [];
+    if (Array.isArray(compOrList)) {
+      comps = compOrList;
+    } else if (compOrList) {
+      // Buscar automáticamente si el mismo socio tiene otros aportes pendientes con el mismo método de pago
+      const normMethod = normalizePaymentMethodName(compOrList.payment_method);
+      const sameSocioMethodComps = (colecta.compromisos || []).filter(
+        (c) =>
+          c.socio_id === compOrList.socio_id &&
+          (c.estado === 'pagado' || c.estado === 'validado') &&
+          c.payment_method !== 'Aporte Propio' &&
+          normalizePaymentMethodName(c.payment_method) === normMethod
+      );
+      comps = sameSocioMethodComps.length > 0 ? sameSocioMethodComps : [compOrList];
+    }
+
+    setRefundCompromisos(comps);
+    const primary = comps[0] || compOrList;
+    setRefundCompromiso(primary);
+
+    const isBs = comps.some(
+      (c) => c.payment_method === 'Pago Móvil' || c.payment_method === 'Transferencia Bancaria'
+    );
+    const totalOriginalBs = comps.reduce(
+      (acc, c) => acc + (c.monto_bs || (c.monto_usd * (colecta.tasa_actual || 1))),
+      0
+    );
+    const totalOriginalUsd = comps.reduce(
+      (acc, c) => acc + (Number(c.monto_usd) || 0),
+      0
+    );
+
+    const initialAmount = isBs ? totalOriginalBs : totalOriginalUsd;
     setRefundAmount(String(initialAmount ? Math.round(initialAmount * 100) / 100 : ''));
     setRefundCurrency(isBs ? 'VES' : 'USD');
-    setRefundMethod(comp.payment_method || 'Pago Móvil');
+    setRefundMethod(primary?.payment_method || 'Pago Móvil');
     setRefundRef('');
     setRefundCommission('0');
     setRefundReceiptUri(null);
     setShowRefundModal(true);
   };
 
-  // Confirmar Devolución de Aporte
+  // Confirmar Devolución de Aporte (Individual o Combinado)
   const handleConfirmRefund = async () => {
     if (!targetColecta || !refundCompromiso) return;
     const parsedAmount = parseFloat(refundAmount);
@@ -975,6 +1004,10 @@ export default function FundsScreen() {
         setUploadingReceipt(false);
       }
 
+      const compIds = (refundCompromisos && refundCompromisos.length > 0)
+        ? refundCompromisos.map((c) => c.id)
+        : [refundCompromiso.id];
+
       await colectasApi.refundCommitment(targetColecta.id, refundCompromiso.id, {
         monto_devuelto: parsedAmount,
         moneda_devolucion: refundCurrency,
@@ -982,14 +1015,18 @@ export default function FundsScreen() {
         referencia_devolucion: refundRef.trim() || undefined,
         comprobante_devolucion_url: finalReceiptUrl || undefined,
         comision_descontada: parsedCommission,
+        compromiso_ids: compIds,
       });
 
       setShowRefundModal(false);
       setRefundCompromiso(null);
+      setRefundCompromisos([]);
       setTargetColecta(null);
       Alert.alert(
         'Devolución Exitosa',
-        `El aporte de ${refundCompromiso.socio_name} ha sido registrado como devuelto exitosamente.`
+        compIds.length > 1
+          ? `Los ${compIds.length} aportes combinados de ${refundCompromiso.socio_name} han sido registrados como devueltos exitosamente.`
+          : `El aporte de ${refundCompromiso.socio_name} ha sido registrado como devuelto exitosamente.`
       );
       fetchColectas();
     } catch (e) {
@@ -1733,6 +1770,56 @@ export default function FundsScreen() {
                           {/* Resumen de estados */}
                           {renderGroupStatusBadges(group.compromisos)}
                         </View>
+
+                        {/* Botón(es) de Devolución Agrupados por Método de Pago en Colecta Cancelada */}
+                        {(() => {
+                          if (item.estado !== 'cancelada' || !isGestor) return null;
+                          const refundable = group.compromisos.filter(
+                            (c) => (c.estado === 'pagado' || c.estado === 'validado') && c.payment_method !== 'Aporte Propio'
+                          );
+                          if (refundable.length === 0) return null;
+
+                          const methodGroups = new Map();
+                          for (const c of refundable) {
+                            const mKey = normalizePaymentMethodName(c.payment_method) || 'Otro';
+                            if (!methodGroups.has(mKey)) {
+                              methodGroups.set(mKey, []);
+                            }
+                            methodGroups.get(mKey).push(c);
+                          }
+
+                          return (
+                            <View style={{ marginTop: 8, gap: 6 }}>
+                              {Array.from(methodGroups.entries()).map(([methodName, compsInMethod]) => {
+                                const isBs = compsInMethod.some(
+                                  (c) => c.payment_method === 'Pago Móvil' || c.payment_method === 'Transferencia Bancaria'
+                                );
+                                const totalBs = compsInMethod.reduce(
+                                  (acc, c) => acc + (c.monto_bs || (c.monto_usd * (item.tasa_actual || 1))),
+                                  0
+                                );
+                                const totalUsd = compsInMethod.reduce(
+                                  (acc, c) => acc + (Number(c.monto_usd) || 0),
+                                  0
+                                );
+                                const isCombined = compsInMethod.length > 1;
+
+                                return (
+                                  <TouchableOpacity
+                                    key={methodName}
+                                    style={[styles.contribActionPrimary, { backgroundColor: '#e11d48', marginTop: 4 }]}
+                                    onPress={() => handleOpenRefund(item, compsInMethod)}
+                                  >
+                                    <Text style={styles.contribActionPrimaryText}>
+                                      🔄 Devolver {isCombined ? `${compsInMethod.length} Aportes Combinados (${methodName}): ` : `Aporte (${methodName}): `}
+                                      {isBs ? `Bs ${formatVE(totalBs)}` : `$${formatVE(totalUsd)} USD`}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          );
+                        })()}
 
                         {/* Botón para expandir/colapsar desglose */}
                         <TouchableOpacity
@@ -2969,9 +3056,12 @@ export default function FundsScreen() {
         >
           <View style={[styles.modalContent, { maxHeight: keyboardVisible ? (Platform.OS === 'android' ? '70%' : '80%') : '90%' }]}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>🔄 Devolver Aporte a Socio</Text>
+              <Text style={styles.modalTitle}>
+                🔄 Devolver Aporte{refundCompromisos.length > 1 ? 's Combinados' : ''} a Socio
+              </Text>
               {targetColecta && refundCompromiso && (() => {
-                const isBs = refundCompromiso.payment_method === 'Pago Móvil' || refundCompromiso.payment_method === 'Transferencia Bancaria';
+                const compsToRefund = (refundCompromisos && refundCompromisos.length > 0) ? refundCompromisos : [refundCompromiso];
+                const isBs = compsToRefund.some((c) => c.payment_method === 'Pago Móvil' || c.payment_method === 'Transferencia Bancaria');
                 let socioPmData = null;
                 let socioTbData = null;
                 try {
@@ -2985,9 +3075,16 @@ export default function FundsScreen() {
                   }
                 } catch (e) {}
 
-                const rawOriginalBs = refundCompromiso.monto_bs || (refundCompromiso.monto_usd * (targetColecta.tasa_actual || 1));
+                const rawOriginalBs = compsToRefund.reduce(
+                  (acc, c) => acc + (c.monto_bs || (c.monto_usd * (targetColecta.tasa_actual || 1))),
+                  0
+                );
+                const rawOriginalUsd = compsToRefund.reduce(
+                  (acc, c) => acc + (Number(c.monto_usd) || 0),
+                  0
+                );
                 const estComision03 = isBs ? Math.round(rawOriginalBs * 0.003 * 100) / 100 : 0;
-                const montoDevolverStr = refundAmount || (isBs ? formatVE(rawOriginalBs) : formatVE(refundCompromiso.monto_usd));
+                const montoDevolverStr = refundAmount || (isBs ? formatVE(rawOriginalBs) : formatVE(rawOriginalUsd));
 
                 return (
                   <>
@@ -2995,21 +3092,42 @@ export default function FundsScreen() {
                       Colecta: "{targetColecta.titulo}" • Aportante: {refundCompromiso.socio_name}
                     </Text>
 
-                    {/* Resumen del Aporte Original */}
+                    {/* Resumen del Aporte Original o Aportes Combinados */}
                     <View style={styles.paymentSummaryBox}>
                       <Text style={styles.paymentSummaryText}>
-                        Método original: <Text style={{ fontWeight: 'bold' }}>{refundCompromiso.payment_method || 'Aporte'}</Text>
+                        Método original: <Text style={{ fontWeight: 'bold' }}>{refundMethod}</Text>
+                        {compsToRefund.length > 1 && (
+                          <Text style={{ color: '#38bdf8', fontWeight: 'bold' }}>
+                            {` (${compsToRefund.length} aportes combinados)`}
+                          </Text>
+                        )}
                       </Text>
                       <Text style={styles.paymentSummaryBs}>
                         {isBs
-                          ? `Monto original aportado: Bs ${formatVE(rawOriginalBs)}`
-                          : `Monto original aportado: $${formatVE(refundCompromiso.monto_usd)} USD en Efectivo`}
+                          ? `Monto original total a devolver: Bs ${formatVE(rawOriginalBs)}`
+                          : `Monto original total a devolver: $${formatVE(rawOriginalUsd)} USD en Efectivo`}
                       </Text>
                       <Text style={styles.paymentSummaryRate}>
                         {isBs
                           ? 'En cancelaciones por fuerza mayor, se reintegra el mismo monto en Bolívares.'
                           : 'En cancelaciones por fuerza mayor, se reintegra el mismo efectivo recibido.'}
                       </Text>
+
+                      {/* Desglose de aportes combinados */}
+                      {compsToRefund.length > 1 && (
+                        <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.1)' }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', marginBottom: 4 }}>
+                            Aportes incluidos en este reintegro:
+                          </Text>
+                          {compsToRefund.map((c, idx) => (
+                            <Text key={c.id || idx} style={{ fontSize: 11, color: '#cbd5e1', marginLeft: 4, marginVertical: 1 }}>
+                              • Aporte #{idx + 1}: ${formatVE(c.monto_usd)} USD
+                              {c.monto_bs ? ` (~Bs ${formatVE(c.monto_bs)})` : ` (~Bs ${formatVE(c.monto_usd * (targetColecta.tasa_actual || 1))})`}
+                              {c.fecha_validacion ? ` — Validado el ${formatDateTime(c.fecha_validacion)}` : ''}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
                     </View>
 
                     {/* Datos de Pago del Socio Homologados al Modal de Aporte */}

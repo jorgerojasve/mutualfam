@@ -78,6 +78,7 @@ class DevolverAporteRequest(BaseModel):
     comprobante_devolucion_url: Optional[str] = None
     comision_descontada: Optional[float] = 0.0
     nota: Optional[str] = None
+    compromiso_ids: Optional[List[int]] = None
 
 
 class CompromisoResponse(BaseModel):
@@ -1233,53 +1234,79 @@ def refund_commitment(
     if org_member["user"].id not in gestor_ids and org_member["membership"].role != "founder":
         raise HTTPException(status_code=403, detail="Solo quien gestiona la colecta o el fundador puede registrar devoluciones.")
 
-    compromiso = db.query(CompromisoColecta).filter(
-        CompromisoColecta.id == compromiso_id,
+    target_ids = list(set(req.compromiso_ids)) if req.compromiso_ids and len(req.compromiso_ids) > 0 else [compromiso_id]
+    compromisos_a_devolver = db.query(CompromisoColecta).filter(
+        CompromisoColecta.id.in_(target_ids),
         CompromisoColecta.colecta_id == colecta.id
-    ).first()
+    ).all()
 
-    if not compromiso:
-        raise HTTPException(status_code=404, detail="Aporte no encontrado.")
+    if not compromisos_a_devolver:
+        raise HTTPException(status_code=404, detail="Aporte(s) no encontrado(s).")
 
-    if compromiso.estado not in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]:
-        raise HTTPException(status_code=400, detail=f"No se puede devolver un aporte en estado '{compromiso.estado.value}'. Solo aportes pagados o validados.")
+    for comp in compromisos_a_devolver:
+        if comp.estado not in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]:
+            raise HTTPException(status_code=400, detail=f"No se puede devolver un aporte en estado '{comp.estado.value}'. Solo aportes pagados o validados.")
 
     if req.monto_devuelto <= 0:
         raise HTTPException(status_code=400, detail="El monto devuelto debe ser mayor a 0.")
 
-    compromiso.estado = EstadoCompromiso.DEVUELTO
-    compromiso.fecha_devolucion = utcnow()
-    compromiso.monto_devuelto = req.monto_devuelto
-    compromiso.moneda_devolucion = (req.moneda_devolucion or "VES").upper()
-    compromiso.metodo_devolucion = req.metodo_devolucion or compromiso.payment_method or "Pago Móvil"
-    compromiso.referencia_devolucion = req.referencia_devolucion.strip() if req.referencia_devolucion else None
-    compromiso.comprobante_devolucion_url = req.comprobante_devolucion_url
-    compromiso.comision_descontada = req.comision_descontada or 0.0
+    now_dt = utcnow()
+    moneda_upper = (req.moneda_devolucion or "VES").upper()
+    metodo_str = req.metodo_devolucion or compromisos_a_devolver[0].payment_method or "Pago Móvil"
+    ref_str = req.referencia_devolucion.strip() if req.referencia_devolucion else None
+    receipt_url = req.comprobante_devolucion_url
+    total_comision = req.comision_descontada or 0.0
+
+    # Prorratear monto devuelto y comisión si hay varios compromisos
+    total_orig_monto = sum(
+        (c.monto_bs or (c.monto_usd * (colecta.tasa_fija_valor or colecta.tasa_actual or 1)))
+        if moneda_upper == "VES" else c.monto_usd
+        for c in compromisos_a_devolver
+    )
+
+    for comp in compromisos_a_devolver:
+        comp.estado = EstadoCompromiso.DEVUELTO
+        comp.fecha_devolucion = now_dt
+        comp.moneda_devolucion = moneda_upper
+        comp.metodo_devolucion = metodo_str
+        comp.referencia_devolucion = ref_str
+        comp.comprobante_devolucion_url = receipt_url
+
+        if len(compromisos_a_devolver) == 1:
+            comp.monto_devuelto = req.monto_devuelto
+            comp.comision_descontada = total_comision
+        else:
+            comp_orig = (comp.monto_bs or (comp.monto_usd * (colecta.tasa_fija_valor or colecta.tasa_actual or 1))) if moneda_upper == "VES" else comp.monto_usd
+            weight = (comp_orig / total_orig_monto) if total_orig_monto > 0 else (1.0 / len(compromisos_a_devolver))
+            comp.monto_devuelto = round(req.monto_devuelto * weight, 2)
+            comp.comision_descontada = round(total_comision * weight, 2)
 
     db.commit()
     db.refresh(colecta)
 
+    primero = compromisos_a_devolver[0]
     socio_name = "Socio"
-    if compromiso.socio:
-        socio_name = f"{compromiso.socio.first_name} {compromiso.socio.last_name or ''}".strip() or compromiso.socio.email
+    if primero.socio:
+        socio_name = f"{primero.socio.first_name} {primero.socio.last_name or ''}".strip() or primero.socio.email
 
-    moneda_simbolo = "Bs" if compromiso.moneda_devolucion == "VES" else "$"
-    monto_fmt = f"{moneda_simbolo} {compromiso.monto_devuelto:,.2f}"
+    moneda_simbolo = "Bs" if moneda_upper == "VES" else "$"
+    monto_fmt = f"{moneda_simbolo} {req.monto_devuelto:,.2f}"
+    count_str = f" ({len(compromisos_a_devolver)} aportes combinados)" if len(compromisos_a_devolver) > 1 else ""
 
     # Notificar al socio aportante
     notify_users(
         db,
-        [compromiso.socio_id],
-        "🔄 Aporte Devuelto",
-        f"Se te ha devuelto tu aporte de {monto_fmt} para '{colecta.titulo}' mediante {compromiso.metodo_devolucion} (Ref: {compromiso.referencia_devolucion or 'N/A'})."
+        [primero.socio_id],
+        "🔄 Aporte(s) Devuelto(s)",
+        f"Se te ha devuelto tu aporte de {monto_fmt}{count_str} para '{colecta.titulo}' mediante {metodo_str} (Ref: {ref_str or 'N/A'})."
     )
 
     msg_tel = (
         f"🔄 <b>Aporte Devuelto por Cancelación</b>\n\n"
         f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
         f"👤 Aportante: <b>{socio_name}</b>\n"
-        f"💵 Monto Devuelto: <b>{monto_fmt}</b> ({compromiso.metodo_devolucion})\n"
-        f"🔢 Ref: <code>{compromiso.referencia_devolucion or 'Efectivo/Directo'}</code>\n"
+        f"💵 Monto Devuelto: <b>{monto_fmt}</b>{count_str} ({metodo_str})\n"
+        f"🔢 Ref: <code>{ref_str or 'Efectivo/Directo'}</code>\n"
     )
     send_telegram_notification(msg_tel)
 
