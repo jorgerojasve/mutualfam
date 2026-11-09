@@ -46,6 +46,14 @@ const normalizePaymentMethodName = (method) => {
   return method;
 };
 
+const AVAILABLE_PAYMENT_METHODS = [
+  'Pago Móvil',
+  'Efectivo USD',
+  'Efectivo Bolívares',
+  'Transferencia Bancaria',
+  'Binance',
+];
+
 const getBeneficiaryMethodData = (datosPago, method) => {
   if (!datosPago) return null;
   let obj = datosPago;
@@ -235,6 +243,13 @@ export default function FundsScreen() {
   const [tipoTasa, setTipoTasa] = useState('bcv');
   const [tasaFijaValor, setTasaFijaValor] = useState('');
   const [fechaPago, setFechaPago] = useState('');
+  const [showRateInfo, setShowRateInfo] = useState(false);
+  const [showRulesInfo, setShowRulesInfo] = useState(false);
+  const [showPmInfo, setShowPmInfo] = useState(false);
+  const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([
+    'Pago Móvil',
+    'Transferencia Bancaria',
+  ]);
   const [dateObj, setDateObj] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
@@ -673,7 +688,32 @@ export default function FundsScreen() {
       );
       return;
     }
+    const userAvail = getAvailablePaymentMethods(latestConfig);
+    setColectaAcceptedMethods(userAvail.length > 0 ? userAvail : ['Pago Móvil']);
+    if (currentUser && !beneficiarioNombre) {
+      setBeneficiarioNombre(currentUser.nombre || currentUser.name || `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim());
+    }
+    setShowRateInfo(false);
+    setShowRulesInfo(false);
+    setShowPmInfo(false);
     setShowCreateModal(true);
+  };
+
+  const toggleColectaMethod = (method) => {
+    if (!userPaymentConfig || !userPaymentConfig[method]) {
+      Alert.alert(
+        'Método no configurado',
+        `No has registrado tus datos para ${method}. ¿Deseas configurarlos ahora?`,
+        [
+          { text: 'Configurar', onPress: handleOpenConfig },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+    setColectaAcceptedMethods((prev) =>
+      prev.includes(method) ? prev.filter((m) => m !== method) : [...prev, method]
+    );
   };
 
   // Crear Colecta
@@ -691,6 +731,10 @@ export default function FundsScreen() {
       Alert.alert('Tasa fija requerida', 'Ingresa el valor numérico para la tasa fija.');
       return;
     }
+    if (colectaAcceptedMethods.length === 0) {
+      Alert.alert('Método de pago requerido', 'Debes seleccionar al menos un método de pago que aceptas para la colecta.');
+      return;
+    }
 
     const latestConfig = await fetchUserPaymentConfig();
     if (!hasConfiguredPaymentMethods(latestConfig)) {
@@ -703,6 +747,15 @@ export default function FundsScreen() {
         ]
       );
       return;
+    }
+
+    const filteredDatosPago = {};
+    for (const m of colectaAcceptedMethods) {
+      if (latestConfig && latestConfig[m]) {
+        filteredDatosPago[m] = latestConfig[m];
+      } else if (userPaymentConfig && userPaymentConfig[m]) {
+        filteredDatosPago[m] = userPaymentConfig[m];
+      }
     }
 
     setSubmitting(true);
@@ -722,7 +775,7 @@ export default function FundsScreen() {
         fecha_pago: fechaPago,
         hora_pago: horaPago || '12:00',
         beneficiario_nombre: beneficiarioNombre.trim() || undefined,
-        beneficiario_datos_pago: (userPaymentConfig && Object.keys(userPaymentConfig).length > 0) ? userPaymentConfig : undefined,
+        beneficiario_datos_pago: (Object.keys(filteredDatosPago).length > 0) ? filteredDatosPago : undefined,
       });
 
       setShowCreateModal(false);
@@ -2319,13 +2372,32 @@ export default function FundsScreen() {
                   />
                 </View>
               ) : (
-                <Text style={styles.rateExplanation}>
-                  Tasa de referencia actual:{' '}
-                  <Text style={{ fontWeight: 'bold', color: '#38bdf8' }}>
-                    Bs {rates[tipoTasa]?.rate?.toFixed(2) || 'Cargando...'}
-                  </Text>
-                  . El monto exacto en Bs se calculará el día del pago.
-                </Text>
+                <View style={{ marginTop: 4 }}>
+                  <View style={styles.rateHeaderCompactRow}>
+                    <Text style={styles.rateExplanationCompact}>
+                      Tasa de referencia:{' '}
+                      <Text style={{ fontWeight: 'bold', color: '#38bdf8' }}>
+                        Bs {rates[tipoTasa]?.rate?.toFixed(2) || 'Cargando...'}
+                      </Text>
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.infoToggleBtn}
+                      onPress={() => setShowRateInfo(!showRateInfo)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text style={styles.infoToggleBtnText}>
+                        ℹ️ {showRateInfo ? 'Ocultar ▲' : 'Más info ▼'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {showRateInfo && (
+                    <View style={styles.infoCollapsedCard}>
+                      <Text style={styles.infoCollapsedText}>
+                        💡 El monto exacto en Bolívares se calculará el día del pago/liquidación a la tasa oficial de esa fecha.
+                      </Text>
+                    </View>
+                  )}
+                </View>
               )}
 
               <Text style={styles.inputLabel}>Fecha de Pago / Liquidación</Text>
@@ -2389,16 +2461,31 @@ export default function FundsScreen() {
                 </View>
               )}
 
-              {/* Caja Explicativa de Regla de Monedas */}
-              <View style={styles.paymentRuleCard}>
-                <Text style={styles.paymentRuleTitle}>ℹ️ Regla de Aportes y Liquidación</Text>
-                <Text style={styles.paymentRuleText}>
-                  • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan exactamente el día de pago/liquidación a la tasa de ese día.
+              {/* Botón Desplegable para Regla de Monedas */}
+              <TouchableOpacity
+                style={styles.collapsibleHeaderRow}
+                onPress={() => setShowRulesInfo(!showRulesInfo)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Text style={styles.collapsibleHeaderIcon}>ℹ️</Text>
+                  <Text style={styles.collapsibleHeaderTitle}>Regla de Aportes y Liquidación</Text>
+                </View>
+                <Text style={styles.collapsibleHeaderToggle}>
+                  {showRulesInfo ? 'Ocultar ▲' : 'Ver regla ▼'}
                 </Text>
-                <Text style={styles.paymentRuleText}>
-                  • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden pagarse o entregarse con anticipación.
-                </Text>
-              </View>
+              </TouchableOpacity>
+
+              {showRulesInfo && (
+                <View style={styles.collapsibleBodyCard}>
+                  <Text style={styles.paymentRuleText}>
+                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan exactamente el día de pago/liquidación a la tasa oficial de ese día.
+                  </Text>
+                  <Text style={styles.paymentRuleText}>
+                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD efectivo / USDT):</Text> Pueden pagarse o entregarse con anticipación.
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.inputLabel}>Responsable de gestionar la compra o pago</Text>
               <TextInput
@@ -2409,32 +2496,66 @@ export default function FundsScreen() {
                 placeholderTextColor="#64748b"
               />
 
-              {/* Información sobre Métodos de Pago de quien gestiona */}
-              {userPaymentConfig && hasConfiguredPaymentMethods(userPaymentConfig) ? (
-                <View style={styles.pmConfiguredInfoCard}>
-                  <Text style={styles.pmConfiguredInfoTitle}>
-                    💳 Métodos de Pago asociados automáticamente:
+              {/* Métodos de Pago que Aceptas (Homologado a Préstamos) */}
+              <View style={{ marginTop: 10, marginBottom: 15 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={[styles.inputLabel, { marginTop: 0, marginBottom: 0 }]}>
+                    Métodos de Pago que Aceptas *
                   </Text>
-                  <Text style={styles.pmConfiguredInfoList}>
-                    {getAvailablePaymentMethods(userPaymentConfig).join(' • ')}
-                  </Text>
-                  <Text style={styles.pmConfiguredInfoSub}>
-                    Los miembros que aporten verán estos datos para transferir directamente a tu cuenta o Pago Móvil para que gestiones la compra o servicio.
-                  </Text>
+                  <TouchableOpacity
+                    style={styles.infoToggleBtn}
+                    onPress={() => setShowPmInfo(!showPmInfo)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={styles.infoToggleBtnText}>
+                      ℹ️ {showPmInfo ? 'Ocultar ▲' : '¿Cómo funciona? ▼'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.pmWarningInfoCard, { borderColor: '#ef4444' }]}
-                  onPress={handleOpenConfig}
-                >
-                  <Text style={[styles.pmWarningInfoTitle, { color: '#ef4444' }]}>
-                    ⚠️ Datos de Pago requeridos
-                  </Text>
-                  <Text style={styles.pmWarningInfoSub}>
-                    Debes configurar tus datos de pago para proponer la colecta. Toca aquí para configurarlos ahora mismo.
-                  </Text>
-                </TouchableOpacity>
-              )}
+
+                {showPmInfo && (
+                  <View style={[styles.infoCollapsedCard, { marginBottom: 10 }]}>
+                    <Text style={styles.infoCollapsedText}>
+                      💡 Los miembros que aporten verán estos datos para transferir directamente a tu cuenta o Pago Móvil para que gestiones la compra o servicio.
+                    </Text>
+                  </View>
+                )}
+
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                  {AVAILABLE_PAYMENT_METHODS.map((method) => {
+                    const isSelected = colectaAcceptedMethods.includes(method);
+                    const isDisabled = method !== 'Pago Móvil' && method !== 'Transferencia Bancaria';
+                    return (
+                      <TouchableOpacity
+                        key={method}
+                        style={[
+                          styles.methodChip,
+                          isSelected && styles.methodChipSelected,
+                          isDisabled && { opacity: 0.5, backgroundColor: '#334155', borderColor: 'transparent' },
+                        ]}
+                        onPress={() => {
+                          if (isDisabled) {
+                            Alert.alert('En desarrollo', 'Esta opción de pago aún no está implementada.');
+                            return;
+                          }
+                          toggleColectaMethod(method);
+                        }}
+                        activeOpacity={isDisabled ? 1 : 0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.methodChipText,
+                            isSelected && { color: '#fff' },
+                            isDisabled && { color: '#94a3b8' },
+                          ]}
+                        >
+                          {method}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
@@ -4945,5 +5066,89 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 10,
     fontWeight: '700',
+  },
+  methodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.accent,
+    backgroundColor: 'transparent',
+  },
+  methodChipSelected: {
+    backgroundColor: theme.accent,
+  },
+  methodChipText: {
+    color: theme.accent,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  collapsibleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginVertical: 8,
+  },
+  collapsibleHeaderIcon: {
+    fontSize: 14,
+  },
+  collapsibleHeaderTitle: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  collapsibleHeaderToggle: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  collapsibleBodyCard: {
+    backgroundColor: 'rgba(14, 165, 233, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.15)',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: -4,
+    marginBottom: 8,
+    gap: 4,
+  },
+  rateHeaderCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  rateExplanationCompact: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  infoToggleBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  infoToggleBtnText: {
+    color: '#38bdf8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  infoCollapsedCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#38bdf8',
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  infoCollapsedText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    lineHeight: 16,
   },
 });
