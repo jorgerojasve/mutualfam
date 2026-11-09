@@ -861,7 +861,7 @@ export default function FundsDashboard() {
                         </button>
                       )}
 
-                      {/* Validar Gasto (Beneficiario / Proponente) */}
+                      {/* Rendir Cuentas (Beneficiario / Proponente) */}
                       {(isOwner || isBeneficiary) && (item.estado === 'cerrada' || progressPct >= 100) && !item.gasto_validado && (
                         <button
                           type="button"
@@ -872,7 +872,7 @@ export default function FundsDashboard() {
                             setShowExpenseModal(true);
                           }}
                         >
-                          🧾 Validar Factura/Gasto
+                          📋 Rendir Cuentas
                         </button>
                       )}
 
@@ -1576,7 +1576,7 @@ export default function FundsDashboard() {
             color: '#f8fafc',
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>🧾 Validar Gasto Familiar</h3>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>📋 Rendición de Cuentas del Gasto</h3>
               <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => setShowExpenseModal(false)}>
                 <X size={20} />
               </button>
@@ -1630,7 +1630,7 @@ export default function FundsDashboard() {
                   style={{ backgroundColor: '#8b5cf6', border: 'none' }}
                   disabled={submittingExpense}
                 >
-                  {submittingExpense ? 'Validando...' : 'Certificar Gasto'}
+                  {submittingExpense ? 'Rindiendo cuentas...' : 'Rendir Cuentas y Completar'}
                 </button>
               </div>
             </form>
