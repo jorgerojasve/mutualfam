@@ -1316,11 +1316,9 @@ export default function FundsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.contribName}>{comp.socio_name}</Text>
-                <Text style={styles.contribAmountLine}>
-                  ${formatVE(comp.monto_usd)} USD
-                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
-                    {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))})`}
-                  </Text>
+                <Text style={styles.contribAmountLine}>${formatVE(comp.monto_usd)} USD</Text>
+                <Text style={styles.contribAmountBs}>
+                  ~Bs {formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))}
                 </Text>
                 {comp.fecha_compromiso ? (
                   <Text style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
@@ -1341,9 +1339,9 @@ export default function FundsScreen() {
           <View style={{ marginBottom: 4 }}>
             <Text style={[styles.contribAmountLine, { fontSize: 13, fontWeight: '700', color: '#f1f5f9' }]}>
               ${formatVE(comp.monto_usd)} USD
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
-                {` (~Bs ${formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))})`}
-              </Text>
+            </Text>
+            <Text style={styles.contribAmountBs}>
+              ~Bs {formatVE(comp.monto_bs || (comp.monto_usd * colectaItem.tasa_actual))}
             </Text>
           </View>
         )}
@@ -1550,17 +1548,27 @@ export default function FundsScreen() {
         {/* Barra de Progreso Financiero (Homologada a Préstamos) */}
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressHeaderMeta}>
-              🎯 Meta: ${formatVE(item.monto_meta_usd)} USD{' '}
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
-                (~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * item.tasa_actual))})
+            <View style={styles.progressHeaderMetaCol}>
+              <Text style={styles.progressHeaderMeta} numberOfLines={1}>
+                🎯 Meta: ${formatVE(item.monto_meta_usd)} USD
               </Text>
-            </Text>
-            <Text style={[styles.progressStatusHint, { color: item.is_active ? '#4ade80' : '#f59e0b' }]}>
-              {item.is_active
-                ? '🎉 ¡Meta alcanzada!'
-                : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - ((item.monto_prometido_usd || 0) + (item.monto_pagado_usd || 0) + (item.monto_validado_usd || 0))))} USD`}
-            </Text>
+              <Text style={styles.progressMetaBs} numberOfLines={1}>
+                ~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * item.tasa_actual))}
+              </Text>
+            </View>
+            <View style={[
+              styles.progressStatusBadge,
+              {
+                backgroundColor: item.is_active ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                borderColor: item.is_active ? 'rgba(34, 197, 94, 0.4)' : 'rgba(245, 158, 11, 0.4)',
+              }
+            ]}>
+              <Text style={[styles.progressStatusHint, { color: item.is_active ? '#4ade80' : '#f59e0b' }]}>
+                {item.is_active
+                  ? '🎉 ¡Meta alcanzada!'
+                  : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - ((item.monto_prometido_usd || 0) + (item.monto_pagado_usd || 0) + (item.monto_validado_usd || 0))))} USD`}
+              </Text>
+            </View>
           </View>
 
           <Text style={styles.progressText}>📢 Prometido: ${formatVE(item.monto_prometido_usd || 0)} USD</Text>
@@ -1595,13 +1603,11 @@ export default function FundsScreen() {
 
           return (
             <View style={[styles.myPledgeBox, { backgroundColor: myCfg.bg, borderColor: myCfg.border }]}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={[styles.myPledgeTitle, { color: myCfg.border }]}>Mi compromiso voluntario:</Text>
-                <Text style={styles.myPledgeAmount}>
-                  ${formatVE(myPledge.monto_usd)} USD
-                  <Text style={{ color: '#cbd5e1', fontWeight: 'normal' }}>
-                    {` (~Bs ${formatVE(myPledge.monto_bs || (myPledge.monto_usd * item.tasa_actual))})`}
-                  </Text>
+                <Text style={styles.myPledgeAmount}>${formatVE(myPledge.monto_usd)} USD</Text>
+                <Text style={styles.myPledgeAmountBs}>
+                  ~Bs {formatVE(myPledge.monto_bs || (myPledge.monto_usd * item.tasa_actual))}
                 </Text>
               </View>
               <View style={[styles.pledgeStatePill, { backgroundColor: myCfg.badgeBg }]}>
@@ -1754,15 +1760,15 @@ export default function FundsScreen() {
                                 <Text style={styles.contribName}>{group.socio_name}</Text>
                                 <View style={styles.contribCountPill}>
                                   <Text style={styles.contribCountPillText}>
-                                    {group.compromisos.length} aportes
+                                    {group.compromisos.length} {group.compromisos.length === 1 ? 'aporte' : 'aportes'}
                                   </Text>
                                 </View>
                               </View>
                               <Text style={[styles.contribAmountLine, { fontSize: 13, fontWeight: '700', color: '#f8fafc', marginTop: 2 }]}>
                                 Total: ${formatVE(group.total_usd)} USD
-                                <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: 'normal' }}>
-                                  {` (~Bs ${formatVE(group.total_bs)})`}
-                                </Text>
+                              </Text>
+                              <Text style={styles.contribAmountBs}>
+                                ~Bs {formatVE(group.total_bs)}
                               </Text>
                             </View>
                           </View>
@@ -3672,6 +3678,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginTop: 8,
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
@@ -3715,13 +3722,29 @@ const styles = StyleSheet.create({
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'flex-start',
     marginBottom: 6,
+  },
+  progressHeaderMetaCol: {
+    flex: 1,
+    marginRight: 8,
   },
   progressHeaderMeta: {
     fontSize: 13,
     fontWeight: 'bold',
     color: '#f8fafc',
+  },
+  progressMetaBs: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 1,
+  },
+  progressStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
   },
   progressLabel: {
     fontSize: 12,
@@ -3777,6 +3800,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  myPledgeAmountBs: {
+    fontSize: 11,
+    color: '#cbd5e1',
+    marginTop: 1,
   },
   pledgeStatePill: {
     paddingHorizontal: 8,
@@ -4622,15 +4650,16 @@ const styles = StyleSheet.create({
   },
   contribCardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 6,
   },
   contribAvatarWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     flex: 1,
+    marginRight: 8,
   },
   contribAvatar: {
     width: 36,
@@ -4641,7 +4670,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   contribName: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
-  contribAmountLine: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
+  contribAmountLine: { color: '#f8fafc', fontSize: 13, fontWeight: '700', marginTop: 1 },
+  contribAmountBs: { color: '#94a3b8', fontSize: 11, marginTop: 1 },
   contribStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
