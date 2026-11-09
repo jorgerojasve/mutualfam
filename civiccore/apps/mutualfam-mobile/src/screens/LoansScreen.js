@@ -1384,7 +1384,8 @@ export default function LoansScreen() {
                           if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
                           if (tipo === 'Extranjero' || tipo === 'E') return 'E';
                           if (tipo === 'Comercio' || tipo === 'J') return 'J';
-                          if (tipo === 'Comuna' || tipo === 'G') return 'G';
+                          if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+                          if (tipo === 'Comuna' || tipo === 'C') return 'C';
                           return tipo[0] || 'V';
                         };
                         const docPrefix = getPrefix(config.tipo_doc);
@@ -1561,7 +1562,8 @@ export default function LoansScreen() {
                           if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
                           if (tipo === 'Extranjero' || tipo === 'E') return 'E';
                           if (tipo === 'Comercio' || tipo === 'J') return 'J';
-                          if (tipo === 'Comuna' || tipo === 'G') return 'G';
+                          if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+                          if (tipo === 'Comuna' || tipo === 'C') return 'C';
                           return tipo[0] || 'V';
                         };
                         const docPrefix = getPrefix(config.tipo_doc);

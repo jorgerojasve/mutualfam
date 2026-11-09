@@ -25,7 +25,8 @@ export default function BankTransferCard({
     if (!tipo || tipo === 'Persona' || tipo === 'V') return 'V';
     if (tipo === 'Extranjero' || tipo === 'E') return 'E';
     if (tipo === 'Comercio' || tipo === 'J') return 'J';
-    if (tipo === 'Comuna' || tipo === 'G') return 'G';
+    if (tipo === 'Gubernamental' || tipo === 'G') return 'G';
+    if (tipo === 'Comuna' || tipo === 'C') return 'C';
     return tipo[0] || 'V';
   };
 
