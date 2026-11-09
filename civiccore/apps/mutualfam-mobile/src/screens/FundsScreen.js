@@ -246,6 +246,8 @@ export default function FundsScreen() {
   const [showRateInfo, setShowRateInfo] = useState(false);
   const [showRulesInfo, setShowRulesInfo] = useState(false);
   const [showPmInfo, setShowPmInfo] = useState(false);
+  const [showPledgeRulesInfo, setShowPledgeRulesInfo] = useState(false);
+  const [showSelfPledgeInfo, setShowSelfPledgeInfo] = useState(false);
   const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([
     'Pago Móvil',
     'Transferencia Bancaria',
@@ -828,6 +830,7 @@ export default function FundsScreen() {
         currency: pledgeCurrency
       });
       setShowPledgeModal(false);
+      setShowPledgeRulesInfo(false);
       setPledgeAmount('');
       setPledgeCurrency('USD');
       setTargetColecta(null);
@@ -936,6 +939,7 @@ export default function FundsScreen() {
       });
 
       setShowPaymentModal(false);
+      setShowSelfPledgeInfo(false);
       setPaymentRef('');
       setPaymentNote('');
       setReceiptUri(null);
@@ -1536,6 +1540,7 @@ export default function FundsScreen() {
                 setTargetCompromiso(comp);
                 const avail = getAvailablePaymentMethods(colectaItem.beneficiario_datos_pago);
                 setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
+                setShowSelfPledgeInfo(false);
                 setShowPaymentModal(true);
               }}
             >
@@ -1932,6 +1937,7 @@ export default function FundsScreen() {
               style={styles.btnPrimary}
               onPress={() => {
                 setTargetColecta(item);
+                setShowPledgeRulesInfo(false);
                 setShowPledgeModal(true);
               }}
             >
@@ -1950,6 +1956,7 @@ export default function FundsScreen() {
                 setTargetCompromiso(myPledge);
                 const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
                 setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
+                setShowSelfPledgeInfo(false);
                 setShowPaymentModal(true);
               }}
             >
@@ -2661,21 +2668,38 @@ export default function FundsScreen() {
                   )}
                 </View>
 
-                <View style={styles.paymentRuleCard}>
-                  <Text style={styles.paymentRuleTitle}>ℹ️ ¿Cuándo se realiza el pago?</Text>
-                  <Text style={styles.paymentRuleText}>
-                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan el día de pago/liquidación ({targetColecta?.fecha_pago}{targetColecta?.hora_pago ? ` a las ${targetColecta.hora_pago}` : ''}) calculados a la tasa de ese día.
+                {/* Botón Desplegable para Cuándo se realiza el pago */}
+                <TouchableOpacity
+                  style={styles.collapsibleHeaderRow}
+                  onPress={() => setShowPledgeRulesInfo(!showPledgeRulesInfo)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Text style={styles.collapsibleHeaderIcon}>ℹ️</Text>
+                    <Text style={styles.collapsibleHeaderTitle}>¿Cuándo se realiza el pago?</Text>
+                  </View>
+                  <Text style={styles.collapsibleHeaderToggle}>
+                    {showPledgeRulesInfo ? 'Ocultar ▲' : 'Ver info ▼'}
                   </Text>
-                  <Text style={styles.paymentRuleText}>
-                    • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden transferirse o entregarse antes.
-                  </Text>
-                </View>
+                </TouchableOpacity>
+
+                {showPledgeRulesInfo && (
+                  <View style={styles.collapsibleBodyCard}>
+                    <Text style={styles.paymentRuleText}>
+                      • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan el día de pago/liquidación ({targetColecta?.fecha_pago}{targetColecta?.hora_pago ? ` a las ${targetColecta.hora_pago}` : ''}) calculados a la tasa de ese día.
+                    </Text>
+                    <Text style={styles.paymentRuleText}>
+                      • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden transferirse o entregarse antes.
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={styles.modalCancel}
                     onPress={() => {
                       setShowPledgeModal(false);
+                      setShowPledgeRulesInfo(false);
                       setPledgeAmount('');
                     }}
                   >
@@ -2740,11 +2764,28 @@ export default function FundsScreen() {
 
                   {currentUser && targetColecta.beneficiario_id === currentUser.id ? (
                     <View style={styles.selfPledgeBox}>
-                      <Text style={styles.selfPledgeTitle}>🤝 Aporte Propio (Responsable de Gestión)</Text>
-                      <Text style={styles.selfPledgeText}>
-                        Eres quien gestiona esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
-                      </Text>
-                      <View style={{ marginTop: 12, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: showSelfPledgeInfo ? 8 : 4 }}>
+                        <Text style={[styles.selfPledgeTitle, { marginBottom: 0 }]}>🤝 Aporte Propio (Responsable de Gestión)</Text>
+                        <TouchableOpacity
+                          style={styles.infoToggleBtn}
+                          onPress={() => setShowSelfPledgeInfo(!showSelfPledgeInfo)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <Text style={[styles.infoToggleBtnText, { color: '#10b981' }]}>
+                            ℹ️ {showSelfPledgeInfo ? 'Ocultar ▲' : '¿Cómo funciona? ▼'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {showSelfPledgeInfo && (
+                        <View style={[styles.infoCollapsedCard, { marginBottom: 8, marginTop: 4, borderLeftColor: '#10b981' }]}>
+                          <Text style={styles.selfPledgeText}>
+                            Eres quien gestiona esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={{ marginTop: 8, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
                         <Text style={{ color: '#10b981', fontWeight: 'bold', fontSize: 15, textAlign: 'center' }}>
                           Monto a Acreditar: ${formatVE(activeComp?.monto_usd)} USD
                         </Text>
@@ -2977,6 +3018,7 @@ export default function FundsScreen() {
                       style={styles.modalCancel}
                       onPress={() => {
                         setShowPaymentModal(false);
+                        setShowSelfPledgeInfo(false);
                         setTargetCompromiso(null);
                       }}
                     >
