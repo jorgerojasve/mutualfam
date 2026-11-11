@@ -34,6 +34,60 @@ const getColectaFinancialStats = (colecta) => {
   };
 };
 
+const isPlannedDateReached = (fechaPago) => {
+  if (!fechaPago) return false;
+  try {
+    const cleanDateStr = String(fechaPago).split('T')[0].replace(/\//g, '-').trim();
+    if (!cleanDateStr) return false;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}` >= cleanDateStr;
+  } catch {
+    return false;
+  }
+};
+
+const isHardCurrencyMethod = (method) => {
+  if (!method) return false;
+  const m = String(method).toLowerCase().trim();
+  if (!m) return false;
+  if (
+    m.includes('bolívar') ||
+    m.includes('bolivar') ||
+    m.includes('pago móvil') ||
+    m.includes('pago movil') ||
+    m.includes('pago_movil') ||
+    m.includes('transferencia') ||
+    m.includes('ves') ||
+    m.includes('(bs)') ||
+    m.includes(' bs') ||
+    m.includes('_bs') ||
+    m === 'bs'
+  ) {
+    return false;
+  }
+  return (
+    m.includes('efectivo usd') ||
+    m.includes('efectivo_usd') ||
+    m.includes('usd') ||
+    m.includes('usdt') ||
+    m.includes('binance') ||
+    m.includes('zelle') ||
+    m.includes('divisa') ||
+    m === 'efectivo'
+  );
+};
+
+const getEarlyBsPaymentMessage = (fechaPago, mode = 'pay') => {
+  const action = mode === 'verify' ? 'validar pagos' : 'registrar ni validar aportes';
+  return (
+    `No es posible ${action} en Bolívares (Bs) antes de la fecha de pago/liquidación (${fechaPago || 'planificada'}). ` +
+    `Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.`
+  );
+};
+
 export default function FundsDashboard() {
   const { activeOrg, user, isOffline } = useAuthStore();
   const [activeTab, setActiveTab] = useState('colectas'); // 'colectas' | 'periodicos'
@@ -325,8 +379,12 @@ export default function FundsDashboard() {
   const handleNotifyPayment = async (e) => {
     e.preventDefault();
     if (!targetColecta) return;
+    if (!isPlannedDateReached(targetColecta.fecha_pago) && !isHardCurrencyMethod(paymentMethod)) {
+      alert(getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay'));
+      return;
+    }
     if (!paymentRef.trim()) {
-      alert('Por favor ingresa el número de referencia bancaria');
+      alert('Por favor ingresa el número de referencia del pago');
       return;
     }
 
@@ -337,10 +395,12 @@ export default function FundsDashboard() {
         throw new Error('No tienes un compromiso registrado en esta colecta.');
       }
       const payload = {
-        metodo_pago: paymentMethod,
-        codigo_banco: paymentBankCode,
-        referencia: paymentRef.trim(),
-        comprobante_url: paymentReceiptUrl.trim() || null
+        payment_method: paymentMethod,
+        referencia_pago: paymentRef.trim(),
+        comprobante_url: paymentReceiptUrl.trim() || null,
+        nota_pago: (paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && paymentBankCode
+          ? `Banco emisor: ${paymentBankCode}`
+          : undefined,
       };
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, payload);
       setShowPaymentModal(false);
@@ -912,10 +972,11 @@ export default function FundsDashboard() {
                           style={{ flex: 1, minWidth: '130px', fontSize: '0.85rem', backgroundColor: '#2563eb', color: '#fff', border: 'none' }}
                           onClick={() => {
                             setTargetColecta(item);
+                            setPaymentMethod('pago_movil');
                             setShowPaymentModal(true);
                           }}
                         >
-                          🔔 Notificar Pago Bs
+                          💵 Notificar / Pagar
                         </button>
                       )}
 
@@ -1601,13 +1662,44 @@ export default function FundsDashboard() {
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                 >
-                  <option value="pago_movil">Pago Móvil</option>
-                  <option value="transferencia">Transferencia Bancaria</option>
-                  <option value="efectivo">Efectivo Divisas</option>
-                  <option value="zelle">Zelle</option>
-                  <option value="binance">Binance Pay</option>
+                  <option value="pago_movil">Pago Móvil (Bs)</option>
+                  <option value="transferencia">Transferencia Bancaria (Bs)</option>
+                  <option value="efectivo">Efectivo USD (Divisas)</option>
+                  <option value="binance">Binance Pay (USDT)</option>
+                  <option value="zelle">Zelle (USD)</option>
                 </select>
               </div>
+
+              {!isPlannedDateReached(targetColecta.fecha_pago) && (
+                isHardCurrencyMethod(paymentMethod) ? (
+                  <div style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    fontSize: '0.8rem',
+                    color: '#34d399',
+                    lineHeight: '1.4',
+                  }}>
+                    ✅ Moneda dura habilitada: Puedes registrar y validar aportes en USD en efectivo, USDT o Zelle antes de la fecha de liquidación ({targetColecta.fecha_pago}).
+                  </div>
+                ) : (
+                  <div style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    fontSize: '0.8rem',
+                    color: '#fde68a',
+                    lineHeight: '1.4',
+                  }}>
+                    <strong style={{ display: 'block', color: '#fbbf24', marginBottom: '2px' }}>
+                      ⏳ Pago en Bs no permitido antes del {targetColecta.fecha_pago}
+                    </strong>
+                    {getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay')}
+                  </div>
+                )
+              )}
 
               {(paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && (
                 <div>
@@ -1669,7 +1761,10 @@ export default function FundsDashboard() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ backgroundColor: '#2563eb', border: 'none' }}
+                  style={{
+                    backgroundColor: !isPlannedDateReached(targetColecta.fecha_pago) && !isHardCurrencyMethod(paymentMethod) ? '#b45309' : '#2563eb',
+                    border: 'none',
+                  }}
                   disabled={submittingPayment}
                 >
                   {submittingPayment ? 'Enviando...' : 'Notificar Pago'}

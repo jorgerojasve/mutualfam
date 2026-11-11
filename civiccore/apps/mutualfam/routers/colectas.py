@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, object_session
 from typing import List, Optional, Dict, Any
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 import json
 
 from civiccore.core.database import get_db
@@ -23,6 +23,60 @@ from services.notifications import notify_users
 from services import tasa_cambio
 
 router = APIRouter()
+
+CARACAS_TZ = timezone(timedelta(hours=-4))
+
+
+def _is_colecta_payment_date_reached(colecta: Colecta) -> bool:
+    """Verifica si la fecha de pago/liquidación planificada de la colecta ya llegó (hora Venezuela)."""
+    if not colecta or not getattr(colecta, "fecha_pago", None):
+        return True
+    today_ve = datetime.now(CARACAS_TZ).date()
+    return today_ve >= colecta.fecha_pago
+
+
+def _is_hard_currency_payment(payment_method: Optional[str]) -> bool:
+    """
+    Devuelve True únicamente para monedas 'duras' (USD en efectivo, USDT/Binance, Zelle).
+    Los pagos en Bolívares (Pago Móvil, Transferencia Bancaria, Efectivo Bolívares o Aporte Propio en Bs)
+    retornan False y solo pueden confirmarse o validarse a partir de fecha_pago.
+    """
+    if not payment_method:
+        return False
+    m = str(payment_method).lower().strip()
+    if not m:
+        return False
+    if any(
+        bs_kw in m
+        for bs_kw in [
+            "bolívar",
+            "bolivar",
+            "pago móvil",
+            "pago movil",
+            "pago_movil",
+            "transferencia",
+            "ves",
+            "(bs)",
+            " bs",
+            "_bs",
+        ]
+    ) or m == "bs":
+        return False
+    if any(
+        hc_kw in m
+        for hc_kw in ["efectivo usd", "efectivo_usd", "usd", "usdt", "binance", "zelle", "divisa"]
+    ):
+        return True
+    return m == "efectivo"
+
+
+def _early_bs_payment_error(colecta: Colecta, action: str = "registrar") -> str:
+    fecha_str = str(colecta.fecha_pago) if getattr(colecta, "fecha_pago", None) else "planificada"
+    return (
+        f"No es posible {action} pagos en Bolívares (Bs) antes de la fecha de pago/liquidación "
+        f"({fecha_str}). Antes de esa fecha, esto solo puede hacerse con monedas \"duras\" "
+        f"como USD en efectivo o USDT."
+    )
 
 
 # ==========================================
@@ -310,7 +364,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int, db: Optional[Sess
         pendientes = [
             c for c in colecta.compromisos
             if c.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]
-            and c.payment_method != "Aporte Propio"
+            and not (c.payment_method or "").lower().startswith("aporte propio")
         ]
         tiene_devoluciones_pendientes = len(pendientes) > 0
 
@@ -821,6 +875,9 @@ def confirm_commitment_payment(
     gestor_id = colecta.beneficiario_id or colecta.proponente_id
     is_self = (org_member["user"].id == gestor_id)
 
+    if not _is_colecta_payment_date_reached(colecta) and not _is_hard_currency_payment(req.payment_method):
+        raise HTTPException(status_code=400, detail=_early_bs_payment_error(colecta, action="registrar"))
+
     # Si quien paga es quien gestiona la colecta (aporte propio), se valida de inmediato
     if is_self:
         compromiso.estado = EstadoCompromiso.VALIDADO
@@ -932,6 +989,9 @@ def verify_commitment_payment(
 
     if compromiso.estado != EstadoCompromiso.PAGADO:
         raise HTTPException(status_code=400, detail="Solo se pueden validar aportes con pago notificado.")
+
+    if not _is_colecta_payment_date_reached(colecta) and not _is_hard_currency_payment(compromiso.payment_method):
+        raise HTTPException(status_code=400, detail=_early_bs_payment_error(colecta, action="validar"))
 
     compromiso.estado = EstadoCompromiso.VALIDADO
     compromiso.fecha_validacion = utcnow()
@@ -1178,7 +1238,8 @@ def cancel_colecta(
     member_ids = [m.user_id for m in all_members]
 
     hay_pagados = any(
-        c.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO] and c.payment_method != "Aporte Propio"
+        c.estado in [EstadoCompromiso.PAGADO, EstadoCompromiso.VALIDADO]
+        and not (c.payment_method or "").lower().startswith("aporte propio")
         for c in colecta.compromisos
     )
     detalle_devolucion = " Quien gestiona procederá a devolver los fondos recaudados a cada aportante según el método de pago original." if hay_pagados else ""

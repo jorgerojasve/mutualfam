@@ -150,32 +150,69 @@ def run_tests():
                 assert comp["tasa_usada"] > 0
         print(f"✅ Compromisos notificados con montos calculados en Bs.")
 
-        print("\n--- TEST 8: Carlos confirma su pago (Pasa a En Validación) ---")
-        pago_payload = {
+        print("\n--- TEST 8: Bloqueo de pagos/validaciones en Bs antes de fecha_pago; monedas duras permitidas ---")
+        # 8a. Carlos intenta pagar en Bolívares (Pago Móvil) 5 días antes -> 400
+        pago_bs_temprano = {
             "payment_method": "pago_movil",
-            "referencia_pago": "REF-987654",
-            "nota_pago": "Pago móvil enviado desde Banesco"
+            "referencia_pago": "REF-TEMPRANO",
+            "nota_pago": "Intento en Bs antes de fecha"
+        }
+        res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/confirmar-pago", json=pago_bs_temprano, headers=headers_carlos)
+        assert res.status_code == 400, f"Debió bloquear pago temprano en Bs: {res.text}"
+        detail_8a = res.json().get("detail", "")
+        assert "Bolívares" in detail_8a and "duras" in detail_8a, f"Mensaje inesperado: {detail_8a}"
+        print(f"✅ Bloqueado pago temprano en Bs antes de fecha_pago: {detail_8a}")
+
+        # 8b. Ana intenta Aporte Propio en Bs (sin moneda dura) 5 días antes -> 400
+        res = client.post(
+            f"/api/v1/colectas/{colecta_id}/compromisos/{ana_comp_id}/confirmar-pago",
+            json={"payment_method": "Aporte Propio", "referencia_pago": "PROPIO-BS"},
+            headers=headers_ana
+        )
+        assert res.status_code == 400, f"Debió bloquear aporte propio temprano en Bs: {res.text}"
+        print("✅ Bloqueado Aporte Propio temprano en Bs antes de fecha_pago.")
+
+        # 8c. Bloqueo de validación en Bs si existiera un compromiso PAGADO en Bs antes de fecha_pago
+        comp_row = db.query(models.CompromisoColecta).filter(models.CompromisoColecta.id == carlos_comp_id).first()
+        prev_estado = comp_row.estado
+        comp_row.estado = models.EstadoCompromiso.PAGADO
+        comp_row.payment_method = "Pago Móvil"
+        db.commit()
+        res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/validar-pago", headers=headers_ana)
+        assert res.status_code == 400, f"Debió bloquear validación temprana en Bs: {res.text}"
+        detail_8c = res.json().get("detail", "")
+        assert "Bolívares" in detail_8c and "duras" in detail_8c, f"Mensaje inesperado validar: {detail_8c}"
+        comp_row.estado = prev_estado
+        comp_row.payment_method = None
+        db.commit()
+        print("✅ Bloqueada validación temprana en Bs antes de fecha_pago.")
+
+        # 8d. Carlos confirma con moneda dura (Efectivo USD / USDT) 5 días antes -> 200 (En Validación)
+        pago_payload = {
+            "payment_method": "Efectivo USD",
+            "referencia_pago": "USD-987654",
+            "nota_pago": "USD en efectivo entregados con anticipación"
         }
         res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/confirmar-pago", json=pago_payload, headers=headers_carlos)
-        assert res.status_code == 200
+        assert res.status_code == 200, f"Debió permitir moneda dura temprana: {res.text}"
         colecta = res.json()
         assert colecta["monto_pagado_usd"] == 20.0
         assert colecta["monto_validado_usd"] == 0.0
-        print(f"✅ Pago de Carlos notificado exitosamente (En validación: ${colecta['monto_pagado_usd']}).")
+        print(f"✅ Pago temprano en moneda dura notificado (En validación: ${colecta['monto_pagado_usd']}).")
 
-        print("\n--- TEST 8.1: Ana (Gestora) valida el pago de Carlos ---")
+        print("\n--- TEST 8.1: Ana (Gestora) valida el pago en moneda dura de Carlos ---")
         res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{carlos_comp_id}/validar-pago", headers=headers_ana)
-        assert res.status_code == 200
+        assert res.status_code == 200, f"Debió permitir validar moneda dura temprana: {res.text}"
         colecta = res.json()
         assert colecta["monto_validado_usd"] == 20.0
         assert colecta["monto_pagado_usd"] == 0.0
-        print(f"✅ Pago de Carlos validado por la gestora (Total validado: ${colecta['monto_validado_usd']}).")
+        print(f"✅ Pago en moneda dura validado por la gestora (Total validado: ${colecta['monto_validado_usd']}).")
 
-        print("\n--- TEST 9: Ana confirma su propio pago -> Colecta pasa a CERRADA (en espera de gasto) ---")
+        print("\n--- TEST 9: Ana confirma su propio pago en moneda dura -> Colecta pasa a CERRADA (en espera de gasto) ---")
         pago_ana = {
-            "payment_method": "efectivo",
+            "payment_method": "Aporte Propio (Efectivo USD)",
             "referencia_pago": "EFECTIVO-ANA",
-            "nota_pago": "Aporte propio en efectivo"
+            "nota_pago": "Aporte propio en efectivo USD"
         }
         res = client.post(f"/api/v1/colectas/{colecta_id}/compromisos/{ana_comp_id}/confirmar-pago", json=pago_ana, headers=headers_ana)
         assert res.status_code == 200
@@ -203,7 +240,7 @@ def run_tests():
             "proposito": "Adquisición de tratamiento de soporte",
             "monto_meta_usd": 80.0,
             "tipo_tasa": "bcv",
-            "fecha_pago": str(date.today() + timedelta(days=5)),
+            "fecha_pago": str(date.today()),
             "beneficiario_nombre": "Ana Pérez"
         }
         res = client.post("/api/v1/colectas/", json=colecta_2_payload, headers=headers_ana)
