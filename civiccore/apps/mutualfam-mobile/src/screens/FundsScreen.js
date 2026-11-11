@@ -54,6 +54,47 @@ const AVAILABLE_PAYMENT_METHODS = [
   'Binance',
 ];
 
+const isHardCurrencyMethod = (method) => {
+  if (!method) return false;
+  const m = String(method).toLowerCase().trim();
+  if (!m) return false;
+  if (
+    m.includes('bolívar') ||
+    m.includes('bolivar') ||
+    m.includes('pago móvil') ||
+    m.includes('pago movil') ||
+    m.includes('pago_movil') ||
+    m.includes('transferencia') ||
+    m.includes('ves') ||
+    m.includes('(bs)') ||
+    m.includes(' bs') ||
+    m.includes('_bs') ||
+    m === 'bs'
+  ) {
+    return false;
+  }
+  return (
+    m.includes('efectivo usd') ||
+    m.includes('efectivo_usd') ||
+    m.includes('usd') ||
+    m.includes('usdt') ||
+    m.includes('binance') ||
+    m.includes('zelle') ||
+    m.includes('divisa') ||
+    m === 'efectivo'
+  );
+};
+
+const isSelfPledgeMethod = (method) => String(method || '').toLowerCase().includes('propio');
+
+const getEarlyBsPaymentMessage = (fechaPago, mode = 'pay') => {
+  const action = mode === 'verify' ? 'validar pagos' : 'registrar ni validar aportes';
+  return (
+    `No es posible ${action} en Bolívares (Bs) antes de la fecha de pago/liquidación (${fechaPago || 'planificada'}).\n\n` +
+    `Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.`
+  );
+};
+
 const getBeneficiaryMethodData = (datosPago, method) => {
   if (!datosPago) return null;
   let obj = datosPago;
@@ -330,6 +371,7 @@ export default function FundsScreen() {
 
   // Formulario Confirmar Pago
   const [paymentMethod, setPaymentMethod] = useState('pago_movil');
+  const [selfPledgeMethod, setSelfPledgeMethod] = useState('Aporte Propio');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [receiptUri, setReceiptUri] = useState(null);
@@ -402,21 +444,21 @@ export default function FundsScreen() {
       textColor = '#a5b4fc';
       iconColor = '#a5b4fc';
       iconSize = 15;
-    } else if (lower.includes('efectivo')) {
-      iconName = 'cash-outline';
-      label = 'Efectivo';
-      bg = 'rgba(16, 185, 129, 0.14)';
-      border = 'rgba(52, 211, 153, 0.35)';
-      textColor = '#34d399';
-      iconColor = '#34d399';
-      iconSize = 13;
     } else if (lower.includes('propio') || lower.includes('gestor') || lower.includes('beneficiario')) {
       iconName = 'person-outline';
-      label = 'Aporte Propio';
+      label = m.includes('(') ? m : 'Aporte Propio';
       bg = 'rgba(245, 158, 11, 0.14)';
       border = 'rgba(251, 191, 36, 0.35)';
       textColor = '#fbbf24';
       iconColor = '#fbbf24';
+      iconSize = 13;
+    } else if (lower.includes('efectivo')) {
+      iconName = 'cash-outline';
+      label = lower.includes('usd') ? 'Efectivo USD' : 'Efectivo';
+      bg = 'rgba(16, 185, 129, 0.14)';
+      border = 'rgba(52, 211, 153, 0.35)';
+      textColor = '#34d399';
+      iconColor = '#34d399';
       iconSize = 13;
     }
 
@@ -946,9 +988,17 @@ export default function FundsScreen() {
       Alert.alert('Error', 'No se ha seleccionado un compromiso válido.');
       return;
     }
+    const isBeneficiarySelf = Boolean(currentUser && targetColecta.beneficiario_id === currentUser.id);
+    const selectedMethod = isBeneficiarySelf ? selfPledgeMethod : paymentMethod;
+    if (!isPlannedDateReached(targetColecta.fecha_pago) && !isHardCurrencyMethod(selectedMethod)) {
+      Alert.alert(
+        'Pago en Bs no permitido aún',
+        getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay')
+      );
+      return;
+    }
     setSubmitting(true);
     try {
-      const isBeneficiarySelf = Boolean(currentUser && targetColecta.beneficiario_id === currentUser.id);
       let finalComprobanteUrl = null;
       if (!isBeneficiarySelf && receiptUri) {
         setUploadingReceipt(true);
@@ -959,11 +1009,13 @@ export default function FundsScreen() {
 
       const compromisoId = activeComp.id;
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
-        payment_method: isBeneficiarySelf ? 'Aporte Propio' : paymentMethod,
+        payment_method: selectedMethod,
         codigo_banco: undefined,
         referencia_pago: isBeneficiarySelf ? 'Aporte directo de quien gestiona' : (paymentRef.trim() || undefined),
         comprobante_url: isBeneficiarySelf ? undefined : finalComprobanteUrl,
-        nota_pago: isBeneficiarySelf ? 'Aporte propio directo' : (paymentNote.trim() || undefined),
+        nota_pago: isBeneficiarySelf
+          ? (isHardCurrencyMethod(selectedMethod) ? 'Aporte propio directo en moneda dura' : 'Aporte propio directo')
+          : (paymentNote.trim() || undefined),
       });
 
       setShowPaymentModal(false);
@@ -1038,7 +1090,7 @@ export default function FundsScreen() {
         (c) =>
           c.socio_id === compOrList.socio_id &&
           (c.estado === 'pagado' || c.estado === 'validado') &&
-          c.payment_method !== 'Aporte Propio' &&
+          !isSelfPledgeMethod(c.payment_method) &&
           normalizePaymentMethodName(c.payment_method) === normMethod
       );
       comps = sameSocioMethodComps.length > 0 ? sameSocioMethodComps : [compOrList];
@@ -1167,8 +1219,35 @@ export default function FundsScreen() {
     }
   };
 
+  const openPaymentModalForComp = (colectaItem, comp) => {
+    setTargetColecta(colectaItem);
+    setTargetCompromiso(comp);
+    const avail = getAvailablePaymentMethods(colectaItem.beneficiario_datos_pago);
+    const plannedReached = isPlannedDateReached(colectaItem.fecha_pago);
+    const defaultRegular = !plannedReached
+      ? (avail.find((m) => isHardCurrencyMethod(m)) || avail[0] || 'Pago Móvil')
+      : (avail.length > 0 ? avail[0] : 'Pago Móvil');
+    setPaymentMethod(defaultRegular);
+    setSelfPledgeMethod('Aporte Propio');
+    setShowSelfPledgeInfo(false);
+    setShowPaymentModal(true);
+  };
+
   // Validar Pago de Aporte por el Gestor (Homologado a Préstamos)
-  const handleVerifyCompromiso = (colectaId, compId, socioName, montoUsd) => {
+  const handleVerifyCompromiso = (colectaItem, comp) => {
+    const colectaId = colectaItem?.id;
+    const compId = comp?.id;
+    const socioName = comp?.socio_name;
+    const montoUsd = comp?.monto_usd;
+
+    if (!isPlannedDateReached(colectaItem?.fecha_pago) && !isHardCurrencyMethod(comp?.payment_method)) {
+      Alert.alert(
+        'Validación en Bs no permitida aún',
+        getEarlyBsPaymentMessage(colectaItem?.fecha_pago, 'verify')
+      );
+      return;
+    }
+
     Alert.alert(
       "Validar Pago",
       `¿Confirmas que recibiste el aporte de $${formatVE(montoUsd)} USD de ${socioName || 'este socio'}?`,
@@ -1547,24 +1626,31 @@ export default function FundsScreen() {
 
         {/* Acciones de aporte para el gestor */}
         {isGestor && comp.estado === 'pagado' && (
-          <View style={styles.contribActions}>
-            <TouchableOpacity
-              style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]}
-              onPress={() => handleVerifyCompromiso(colectaItem.id, comp.id, comp.socio_name, comp.monto_usd)}
-            >
-              <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.btnReject}
-              onPress={() => handleOpenRejectCompromiso(colectaItem, comp)}
-            >
-              <Text style={styles.btnRejectText}>✕ Rechazar</Text>
-            </TouchableOpacity>
+          <View>
+            {!isPlannedDateReached(colectaItem.fecha_pago) && !isHardCurrencyMethod(comp.payment_method) && (
+              <Text style={styles.earlyBsInlineWarning}>
+                ⏳ Pago en Bs: solo podrá validarse desde el {colectaItem.fecha_pago}. Antes de esa fecha solo se permiten validaciones con monedas "duras" (USD efectivo, USDT).
+              </Text>
+            )}
+            <View style={styles.contribActions}>
+              <TouchableOpacity
+                style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]}
+                onPress={() => handleVerifyCompromiso(colectaItem, comp)}
+              >
+                <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.btnReject}
+                onPress={() => handleOpenRejectCompromiso(colectaItem, comp)}
+              >
+                <Text style={styles.btnRejectText}>✕ Rechazar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
         {/* Botón Devolver Aporte (Gestor en colecta cancelada con aportes pagados o validados) */}
-        {colectaItem.estado === 'cancelada' && isGestor && (comp.estado === 'pagado' || comp.estado === 'validado') && comp.payment_method !== 'Aporte Propio' && (
+        {colectaItem.estado === 'cancelada' && isGestor && (comp.estado === 'pagado' || comp.estado === 'validado') && !isSelfPledgeMethod(comp.payment_method) && (
           <View style={styles.contribActions}>
             <TouchableOpacity
               style={[styles.contribActionPrimary, { backgroundColor: '#e11d48' }]}
@@ -1580,14 +1666,7 @@ export default function FundsScreen() {
           <View style={styles.contribActions}>
             <TouchableOpacity
               style={[styles.contribActionPrimary, { backgroundColor: '#10b981' }]}
-              onPress={() => {
-                setTargetColecta(colectaItem);
-                setTargetCompromiso(comp);
-                const avail = getAvailablePaymentMethods(colectaItem.beneficiario_datos_pago);
-                setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
-                setShowSelfPledgeInfo(false);
-                setShowPaymentModal(true);
-              }}
+              onPress={() => openPaymentModalForComp(colectaItem, comp)}
             >
               <Text style={styles.contribActionPrimaryText}>💵 Pagar este aporte</Text>
             </TouchableOpacity>
@@ -1884,7 +1963,7 @@ export default function FundsScreen() {
                         {(() => {
                           if (item.estado !== 'cancelada' || !isGestor) return null;
                           const refundable = group.compromisos.filter(
-                            (c) => (c.estado === 'pagado' || c.estado === 'validado') && c.payment_method !== 'Aporte Propio'
+                            (c) => (c.estado === 'pagado' || c.estado === 'validado') && !isSelfPledgeMethod(c.payment_method)
                           );
                           if (refundable.length === 0) return null;
 
@@ -1996,14 +2075,7 @@ export default function FundsScreen() {
           {myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado') && (
             <TouchableOpacity
               style={styles.btnSuccess}
-              onPress={() => {
-                setTargetColecta(item);
-                setTargetCompromiso(myPledge);
-                const avail = getAvailablePaymentMethods(item.beneficiario_datos_pago);
-                setPaymentMethod(avail.length > 0 ? avail[0] : 'Pago Móvil');
-                setShowSelfPledgeInfo(false);
-                setShowPaymentModal(true);
-              }}
+              onPress={() => openPaymentModalForComp(item, myPledge)}
             >
               <Text style={styles.btnPrimaryText}>💵 Pagar (${formatVE(myPledge.monto_usd)} USD)</Text>
             </TouchableOpacity>
@@ -2851,6 +2923,10 @@ export default function FundsScreen() {
               <Text style={styles.modalTitle}>💵 Confirmar Pago de Aporte</Text>
               {targetColecta && (() => {
                 const activeComp = targetCompromiso || targetColecta.mi_compromiso;
+                const plannedReached = isPlannedDateReached(targetColecta.fecha_pago);
+                const isBeneficiarySelf = Boolean(currentUser && targetColecta.beneficiario_id === currentUser.id);
+                const chosenMethod = isBeneficiarySelf ? selfPledgeMethod : paymentMethod;
+                const isEarlyBsBlocked = !plannedReached && !isHardCurrencyMethod(chosenMethod);
                 return (
                 <>
                   <Text style={styles.modalSubtitle}>
@@ -2871,7 +2947,7 @@ export default function FundsScreen() {
                     </View>
                   )}
 
-                  {currentUser && targetColecta.beneficiario_id === currentUser.id ? (
+                  {isBeneficiarySelf ? (
                     <View style={styles.selfPledgeBox}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: showSelfPledgeInfo ? 8 : 4 }}>
                         <Text style={[styles.selfPledgeTitle, { marginBottom: 0 }]}>🤝 Aporte Propio (Responsable de Gestión)</Text>
@@ -2892,6 +2968,48 @@ export default function FundsScreen() {
                             Eres quien gestiona esta colecta. Tu compromiso de aporte se sumará directamente a la recaudación total sin necesidad de realizarte un pago móvil ni adjuntar comprobante bancario a tu propia cuenta.
                           </Text>
                         </View>
+                      )}
+
+                      <Text style={[styles.inputLabel, { marginTop: 8, marginBottom: 6 }]}>
+                        Moneda / Método del Aporte Propio
+                      </Text>
+                      <View style={styles.rateTypeSelector}>
+                        {[
+                          { value: 'Aporte Propio', label: '🇻🇪 Bolívares (Bs)' },
+                          { value: 'Aporte Propio (Efectivo USD)', label: '💵 USD Efectivo' },
+                          { value: 'Aporte Propio (USDT)', label: '🪙 USDT (Binance)' },
+                        ].map((opt) => {
+                          const isSelected = selfPledgeMethod === opt.value;
+                          return (
+                            <TouchableOpacity
+                              key={opt.value}
+                              style={[styles.rateTypeBtn, isSelected && styles.rateTypeBtnActive]}
+                              onPress={() => setSelfPledgeMethod(opt.value)}
+                            >
+                              <Text style={[styles.rateTypeBtnText, isSelected && styles.rateTypeBtnTextActive]}>
+                                {opt.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {!plannedReached && (
+                        isHardCurrencyMethod(selfPledgeMethod) ? (
+                          <View style={styles.hardCurrencyReadyBox}>
+                            <Text style={styles.hardCurrencyReadyText}>
+                              ✅ Moneda dura habilitada: Puedes registrar y validar aportes en USD en efectivo o USDT antes de la fecha de liquidación ({targetColecta.fecha_pago}).
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.earlyBsWarningBox}>
+                            <Text style={styles.earlyBsWarningTitle}>⏳ Pago y validación en Bs no permitidos aún</Text>
+                            <Text style={styles.earlyBsWarningText}>
+                              No es posible registrar ni validar aportes en Bolívares (Bs) antes de la fecha de pago/liquidación ({targetColecta.fecha_pago}).{'\n'}
+                              Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
+                            </Text>
+                          </View>
+                        )
                       )}
 
                       <View style={{ marginTop: 8, backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' }}>
@@ -2947,6 +3065,24 @@ export default function FundsScreen() {
                             );
                           })}
                         </View>
+
+                        {!plannedReached && (
+                          isHardCurrencyMethod(selectedNormalized) ? (
+                            <View style={styles.hardCurrencyReadyBox}>
+                              <Text style={styles.hardCurrencyReadyText}>
+                                ✅ Moneda dura habilitada: Puedes registrar y validar aportes en USD en efectivo o USDT antes de la fecha de liquidación ({targetColecta.fecha_pago}).
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.earlyBsWarningBox}>
+                              <Text style={styles.earlyBsWarningTitle}>⏳ Pago en Bs no permitido antes del {targetColecta.fecha_pago}</Text>
+                              <Text style={styles.earlyBsWarningText}>
+                                No es posible registrar ni validar aportes en Bolívares ({selectedNormalized}) antes de la fecha de pago/liquidación.{'\n'}
+                                Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
+                              </Text>
+                            </View>
+                          )
+                        )}
 
                         {/* Tarjeta de Datos de Pago Móvil con Copiado */}
                         {isPagoMovil && pmData && (
@@ -3128,13 +3264,14 @@ export default function FundsScreen() {
                       onPress={() => {
                         setShowPaymentModal(false);
                         setShowSelfPledgeInfo(false);
+                        setSelfPledgeMethod('Aporte Propio');
                         setTargetCompromiso(null);
                       }}
                     >
                       <Text style={styles.modalCancelText}>Cancelar</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.modalSubmit}
+                      style={[styles.modalSubmit, isEarlyBsBlocked && styles.modalSubmitBlocked]}
                       onPress={handleConfirmPayment}
                       disabled={submitting || uploadingReceipt}
                     >
@@ -3142,7 +3279,7 @@ export default function FundsScreen() {
                         <ActivityIndicator color="#fff" />
                       ) : (
                         <Text style={styles.modalSubmitText}>
-                          {currentUser && targetColecta.beneficiario_id === currentUser.id
+                          {isBeneficiarySelf
                             ? 'Confirmar Aporte Propio'
                             : 'Registrar Pago'}
                         </Text>
@@ -4200,6 +4337,56 @@ const styles = StyleSheet.create({
   modalOverlayShifted: {
     justifyContent: 'flex-start',
     paddingTop: Platform.OS === 'android' ? 35 : 55,
+  },
+  earlyBsWarningBox: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  earlyBsWarningTitle: {
+    color: '#fbbf24',
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  earlyBsWarningText: {
+    color: '#fde68a',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  hardCurrencyReadyBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  hardCurrencyReadyText: {
+    color: '#34d399',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  earlyBsInlineWarning: {
+    color: '#fbbf24',
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 6,
+    marginBottom: 2,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    padding: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  modalSubmitBlocked: {
+    backgroundColor: '#b45309',
   },
   selfPledgeBox: {
     backgroundColor: 'rgba(16, 185, 129, 0.08)',
