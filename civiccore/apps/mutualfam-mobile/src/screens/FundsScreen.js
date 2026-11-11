@@ -122,6 +122,34 @@ const hasConfiguredPaymentMethods = (config) => {
   return getAvailablePaymentMethods(config).length > 0;
 };
 
+/** Calcula meta, comprometido total, restante y promedio real de aportes vigentes. */
+const getColectaFinancialStats = (colecta) => {
+  if (!colecta) {
+    return { metaUsd: 0, comprometidoUsd: 0, restanteUsd: 0, promedioUsd: 0, aportesCount: 0 };
+  }
+  const metaUsd = Number(colecta.monto_meta_usd) || 0;
+  const comprometidoUsd =
+    (Number(colecta.monto_prometido_usd) || 0) +
+    (Number(colecta.monto_pagado_usd) || 0) +
+    (Number(colecta.monto_validado_usd) || 0);
+  const restanteUsd = Math.max(0, metaUsd - comprometidoUsd);
+  const activeComps = (colecta.compromisos || []).filter(
+    (c) => c.estado !== 'cancelado' && c.estado !== 'devuelto'
+  );
+  const aportesCount = activeComps.length > 0
+    ? activeComps.length
+    : (Number(colecta.total_aportantes) || 0);
+  const promedioUsd = aportesCount > 0 ? (comprometidoUsd / aportesCount) : 0;
+
+  return {
+    metaUsd,
+    comprometidoUsd,
+    restanteUsd,
+    promedioUsd,
+    aportesCount,
+  };
+};
+
 export default function FundsScreen() {
   const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
   const [activeTab, setActiveTab] = useState('colectas'); // 'colectas' | 'periodicos'
@@ -1641,7 +1669,7 @@ export default function FundsScreen() {
               <Text style={[styles.progressStatusHint, { color: item.is_active ? '#4ade80' : '#f59e0b' }]}>
                 {item.is_active
                   ? '🎉 ¡Meta alcanzada!'
-                  : `Faltan $${formatVE(Math.max(0, item.monto_meta_usd - ((item.monto_prometido_usd || 0) + (item.monto_pagado_usd || 0) + (item.monto_validado_usd || 0))))} USD`}
+                  : `Faltan $${formatVE(getColectaFinancialStats(item).restanteUsd)} USD`}
               </Text>
             </View>
           </View>
@@ -2627,6 +2655,67 @@ export default function FundsScreen() {
             {targetColecta && (
               <>
                 <Text style={styles.modalSubtitle}>Colecta: "{targetColecta.titulo}"</Text>
+
+                {/* Resumen financiero de la colecta (Meta, Prometido, Restante y Promedio de aportes) */}
+                {(() => {
+                  const stats = getColectaFinancialStats(targetColecta);
+                  const statCards = [
+                    {
+                      key: 'meta',
+                      label: '🎯 Meta',
+                      value: `$${formatVE(stats.metaUsd)} USD`,
+                      color: '#f8fafc',
+                      sub: `~Bs ${formatVE(targetColecta.monto_meta_bs || (stats.metaUsd * effPledgeRate))}`,
+                    },
+                    {
+                      key: 'prometido',
+                      label: '📢 Monto prometido',
+                      value: `$${formatVE(stats.comprometidoUsd)} USD`,
+                      color: '#38bdf8',
+                      sub: `~Bs ${formatVE(stats.comprometidoUsd * effPledgeRate)}`,
+                    },
+                    {
+                      key: 'restante',
+                      label: '⏳ Restante',
+                      value: `$${formatVE(stats.restanteUsd)} USD`,
+                      color: stats.restanteUsd > 0 ? '#fbbf24' : '#10b981',
+                      sub: stats.restanteUsd > 0
+                        ? `~Bs ${formatVE(stats.restanteUsd * effPledgeRate)}`
+                        : '¡Meta alcanzada!',
+                    },
+                    {
+                      key: 'promedio',
+                      label: '📊 Promedio de aportes',
+                      value: `$${formatVE(stats.promedioUsd)} USD`,
+                      color: '#34d399',
+                      sub: stats.aportesCount > 0
+                        ? `~Bs ${formatVE(stats.promedioUsd * effPledgeRate)} (${stats.aportesCount} aporte${stats.aportesCount !== 1 ? 's' : ''})`
+                        : 'Sin aportes aún',
+                    },
+                  ];
+
+                  return (
+                    <View style={styles.pledgeStatsBox}>
+                      {[0, 2].map((rowStart) => (
+                        <View
+                          key={rowStart}
+                          style={[styles.pledgeStatsRow, rowStart > 0 && { marginTop: 8 }]}
+                        >
+                          {statCards.slice(rowStart, rowStart + 2).map((cell) => (
+                            <View key={cell.key} style={styles.pledgeStatCell}>
+                              <Text style={styles.pledgeStatLabel}>{cell.label}</Text>
+                              <Text style={[styles.pledgeStatValue, { color: cell.color }]}>
+                                {cell.value}
+                              </Text>
+                              <Text style={styles.pledgeStatSub}>{cell.sub}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
+
                 {/* Selector Bimoneda para Aporte */}
                 <View style={styles.currencySelectorContainer}>
                   <Text style={styles.inputLabel}>Moneda y Monto a Aportar *</Text>
@@ -5212,5 +5301,42 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 11,
     lineHeight: 16,
+  },
+  pledgeStatsBox: {
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 12,
+  },
+  pledgeStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pledgeStatCell: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'rgba(30, 41, 59, 0.55)',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  pledgeStatLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  pledgeStatValue: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#f8fafc',
+  },
+  pledgeStatSub: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 2,
   },
 });

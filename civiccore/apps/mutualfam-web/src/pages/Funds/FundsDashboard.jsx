@@ -6,6 +6,34 @@ import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../../utils/currency.js';
 
+/** Calcula meta, comprometido total, restante y promedio real de aportes vigentes. */
+const getColectaFinancialStats = (colecta) => {
+  if (!colecta) {
+    return { metaUsd: 0, comprometidoUsd: 0, restanteUsd: 0, promedioUsd: 0, aportesCount: 0 };
+  }
+  const metaUsd = Number(colecta.monto_meta_usd) || 0;
+  const comprometidoUsd =
+    (Number(colecta.monto_prometido_usd) || 0) +
+    (Number(colecta.monto_pagado_usd) || 0) +
+    (Number(colecta.monto_validado_usd) || 0);
+  const restanteUsd = Math.max(0, metaUsd - comprometidoUsd);
+  const activeComps = (colecta.compromisos || []).filter(
+    (c) => c.estado !== 'cancelado' && c.estado !== 'devuelto'
+  );
+  const aportesCount = activeComps.length > 0
+    ? activeComps.length
+    : (Number(colecta.total_aportantes) || 0);
+  const promedioUsd = aportesCount > 0 ? (comprometidoUsd / aportesCount) : 0;
+
+  return {
+    metaUsd,
+    comprometidoUsd,
+    restanteUsd,
+    promedioUsd,
+    aportesCount,
+  };
+};
+
 export default function FundsDashboard() {
   const { activeOrg, user, isOffline } = useAuthStore();
   const [activeTab, setActiveTab] = useState('colectas'); // 'colectas' | 'periodicos'
@@ -1296,9 +1324,80 @@ export default function FundsDashboard() {
               </button>
             </div>
 
-            <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
               Colecta: <strong>{targetColecta.titulo}</strong>
             </p>
+
+            {/* Resumen financiero de la colecta (Meta, Prometido, Restante y Promedio de aportes) */}
+            {(() => {
+              const stats = getColectaFinancialStats(targetColecta);
+              const statCards = [
+                {
+                  key: 'meta',
+                  label: '🎯 Meta',
+                  value: `$${formatVE(stats.metaUsd)} USD`,
+                  color: '#f8fafc',
+                  sub: `~Bs ${formatVE(targetColecta.monto_meta_bs || (stats.metaUsd * effPledgeRate))}`,
+                },
+                {
+                  key: 'prometido',
+                  label: '📢 Monto prometido',
+                  value: `$${formatVE(stats.comprometidoUsd)} USD`,
+                  color: '#38bdf8',
+                  sub: `~Bs ${formatVE(stats.comprometidoUsd * effPledgeRate)}`,
+                },
+                {
+                  key: 'restante',
+                  label: '⏳ Restante',
+                  value: `$${formatVE(stats.restanteUsd)} USD`,
+                  color: stats.restanteUsd > 0 ? '#fbbf24' : '#10b981',
+                  sub: stats.restanteUsd > 0
+                    ? `~Bs ${formatVE(stats.restanteUsd * effPledgeRate)}`
+                    : '¡Meta alcanzada!',
+                },
+                {
+                  key: 'promedio',
+                  label: '📊 Promedio de aportes',
+                  value: `$${formatVE(stats.promedioUsd)} USD`,
+                  color: '#34d399',
+                  sub: stats.aportesCount > 0
+                    ? `~Bs ${formatVE(stats.promedioUsd * effPledgeRate)} (${stats.aportesCount} aporte${stats.aportesCount !== 1 ? 's' : ''})`
+                    : 'Sin aportes aún',
+                },
+              ];
+              return (
+                <div style={{
+                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  borderRadius: '10px',
+                  padding: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  marginBottom: '1rem',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gap: '8px',
+                }}>
+                  {statCards.map((cell) => (
+                    <div key={cell.key} style={{
+                      backgroundColor: 'rgba(30, 41, 59, 0.55)',
+                      borderRadius: '8px',
+                      padding: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      minWidth: 0,
+                    }}>
+                      <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>
+                        {cell.label}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '700', color: cell.color }}>
+                        {cell.value}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>
+                        {cell.sub}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             <form onSubmit={handlePledge} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
