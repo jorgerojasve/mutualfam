@@ -69,8 +69,86 @@ class ComentarioRequest(BaseModel):
 # HELPERS
 # ==========================================
 
+def dispatch_proposal_resolution_notifications(db: Session, proposal: Proposal, org_id: Optional[int] = None):
+    """
+    Despacha las notificaciones push y eventos WebSocket cuando una propuesta
+    concluye y es resuelta (Aprobada o Rechazada).
+    """
+    try:
+        oid = org_id or proposal.organization_id
+        if not oid:
+            return
+
+        extra = dict(proposal.extra_fields or {})
+        if extra.get("resolution_notified"):
+            return  # Evitar notificaciones duplicadas
+        extra["resolution_notified"] = True
+        proposal.extra_fields = extra
+        db.commit()
+
+        all_members = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == oid,
+            OrganizationMembership.status == MemberStatus.ACTIVE
+        ).all()
+        all_user_ids = [m.user_id for m in all_members]
+
+        target_user = db.query(User).filter(User.id == proposal.target_member_id).first() if proposal.target_member_id else None
+        target_name = f"{target_user.first_name} {target_user.last_name}".strip() if target_user else "Usuario"
+
+        if proposal.status == ProposalStatus.APPROVED:
+            if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+                notify_users(
+                    db,
+                    all_user_ids,
+                    "🎉 Nuevo Miembro Admitido",
+                    f"¡{target_name} ha sido admitido como nuevo miembro de la mutual!",
+                    {"proposal_id": proposal.id}
+                )
+            elif proposal.proposal_type == ProposalType.EXPULSION:
+                notify_users(
+                    db,
+                    all_user_ids,
+                    "📋 Expulsión Aprobada",
+                    f"{target_name} ha sido expulsado de la mutual.",
+                    {"proposal_id": proposal.id}
+                )
+        elif proposal.status == ProposalStatus.REJECTED:
+            if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
+                veto_info = ""
+                if proposal.extra_fields and proposal.extra_fields.get("veto_activated"):
+                    veto_info = " por veto en asamblea"
+                notify_users(
+                    db,
+                    [proposal.author_id],
+                    "🚫 Admisión Rechazada",
+                    f"La propuesta de ingreso de {target_name} fue rechazada{veto_info}.",
+                    {"proposal_id": proposal.id}
+                )
+            elif proposal.proposal_type == ProposalType.EXPULSION:
+                notify_users(
+                    db,
+                    all_user_ids,
+                    "✅ Expulsión Rechazada",
+                    f"La propuesta de expulsión de {target_name} fue rechazada. El miembro permanece activo.",
+                    {"proposal_id": proposal.id}
+                )
+
+        notify_org(oid, "PROPUESTA_RESUELTA", {
+            "proposal_id": proposal.id,
+            "status": proposal.status.value,
+            "passed": (proposal.status == ProposalStatus.APPROVED)
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Error despachando notificaciones de resolución: {e}")
+
+
 def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[str, Any]:
     GovernanceService._enrich_proposal(db, p)
+
+    if p.status in (ProposalStatus.APPROVED, ProposalStatus.REJECTED):
+        if not (p.extra_fields and p.extra_fields.get("resolution_notified")):
+            dispatch_proposal_resolution_notifications(db, p, p.organization_id)
     
     author = db.query(User).filter(User.id == p.author_id).first()
     author_name = f"{author.first_name} {author.last_name}".strip() if author else "Desconocido"
@@ -449,7 +527,18 @@ def votar_propuesta(
         raise HTTPException(status_code=400, detail=str(e))
 
     notify_org(org.id, "VOTO_EMITIDO", {"proposal_id": proposal.id, "voter_id": user.id})
-    return {"message": "Voto registrado exitosamente", "voto": voto_normalizado}
+
+    # Cierre anticipado tras registrar el voto si se alcanzó unanimidad o fin de censo (Opción 3)
+    db.refresh(proposal)
+    if proposal.status in (ProposalStatus.APPROVED, ProposalStatus.REJECTED):
+        dispatch_proposal_resolution_notifications(db, proposal, org.id)
+
+    return {
+        "message": "Voto registrado exitosamente",
+        "voto": voto_normalizado,
+        "proposal_status": proposal.status.value,
+        "proposal": _serialize_proposal(db, proposal, user.id)
+    }
 
 
 @router.post("/propuestas/{proposal_id}/defensa")
@@ -507,64 +596,10 @@ def cerrar_propuesta(
         raise HTTPException(status_code=404, detail="Propuesta no encontrada")
 
     if proposal.status in (ProposalStatus.APPROVED, ProposalStatus.REJECTED):
-        raise HTTPException(status_code=400, detail="Esta propuesta ya fue cerrada y resuelta")
+        return _serialize_proposal(db, proposal, user.id)
 
     results = GovernanceService.calculate_proposal_results(db, proposal)
-
-    # Notificaciones según resultado
-    all_members = db.query(OrganizationMembership).filter(
-        OrganizationMembership.organization_id == org.id,
-        OrganizationMembership.status == MemberStatus.ACTIVE
-    ).all()
-    all_user_ids = [m.user_id for m in all_members]
-
-    target_user = db.query(User).filter(User.id == proposal.target_member_id).first() if proposal.target_member_id else None
-    target_name = f"{target_user.first_name} {target_user.last_name}".strip() if target_user else "Usuario"
-
-    if results.get("passed"):
-        if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
-            admission_service.generate_invite_for_approved_proposal(db, proposal, proposal.author_id)
-            notify_users(
-                db,
-                all_user_ids,
-                "🎉 Nuevo Miembro Admitido",
-                f"¡{target_name} ha sido admitido como nuevo miembro de la mutual!",
-                {"proposal_id": proposal.id}
-            )
-        elif proposal.proposal_type == ProposalType.EXPULSION:
-            notify_users(
-                db,
-                all_user_ids,
-                "📋 Expulsión Aprobada",
-                f"{target_name} ha sido expulsado de la mutual.",
-                {"proposal_id": proposal.id}
-            )
-    else:
-        if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
-            veto_info = ""
-            if proposal.extra_fields and proposal.extra_fields.get("veto_activated"):
-                veto_info = " por veto en asamblea"
-            notify_users(
-                db,
-                [proposal.author_id],
-                "🚫 Admisión Rechazada",
-                f"La propuesta de ingreso de {target_name} fue rechazada{veto_info}.",
-                {"proposal_id": proposal.id}
-            )
-        elif proposal.proposal_type == ProposalType.EXPULSION:
-            notify_users(
-                db,
-                all_user_ids,
-                "✅ Expulsión Rechazada",
-                f"La propuesta de expulsión de {target_name} fue rechazada. El miembro permanece activo.",
-                {"proposal_id": proposal.id}
-            )
-
-    notify_org(org.id, "PROPUESTA_RESUELTA", {
-        "proposal_id": proposal.id,
-        "status": proposal.status.value,
-        "passed": results.get("passed")
-    })
+    dispatch_proposal_resolution_notifications(db, proposal, org.id)
 
     return _serialize_proposal(db, proposal, user.id)
 

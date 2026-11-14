@@ -317,6 +317,9 @@ export default function FundsScreen() {
   const [showPmInfo, setShowPmInfo] = useState(false);
   const [showPledgeRulesInfo, setShowPledgeRulesInfo] = useState(false);
   const [showSelfPledgeInfo, setShowSelfPledgeInfo] = useState(false);
+  const [expandedEarlyBsHelp, setExpandedEarlyBsHelp] = useState({});
+  const [showEarlyBsSelfInfo, setShowEarlyBsSelfInfo] = useState(false);
+  const [showEarlyBsPaymentInfo, setShowEarlyBsPaymentInfo] = useState(false);
   const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([
     'Pago Móvil',
     'Transferencia Bancaria',
@@ -1020,6 +1023,8 @@ export default function FundsScreen() {
 
       setShowPaymentModal(false);
       setShowSelfPledgeInfo(false);
+      setShowEarlyBsSelfInfo(false);
+      setShowEarlyBsPaymentInfo(false);
       setPaymentRef('');
       setPaymentNote('');
       setReceiptUri(null);
@@ -1230,6 +1235,8 @@ export default function FundsScreen() {
     setPaymentMethod(defaultRegular);
     setSelfPledgeMethod('Aporte Propio');
     setShowSelfPledgeInfo(false);
+    setShowEarlyBsSelfInfo(false);
+    setShowEarlyBsPaymentInfo(false);
     setShowPaymentModal(true);
   };
 
@@ -1628,9 +1635,31 @@ export default function FundsScreen() {
         {isGestor && comp.estado === 'pagado' && (
           <View>
             {!isPlannedDateReached(colectaItem.fecha_pago) && !isHardCurrencyMethod(comp.payment_method) && (
-              <Text style={styles.earlyBsInlineWarning}>
-                ⏳ Pago en Bs: solo podrá validarse desde el {colectaItem.fecha_pago}. Antes de esa fecha solo se permiten validaciones con monedas "duras" (USD efectivo, USDT).
-              </Text>
+              <View style={{ marginVertical: 6 }}>
+                <TouchableOpacity
+                  style={styles.earlyBsCollapsibleHeader}
+                  onPress={() => setExpandedEarlyBsHelp(prev => ({ ...prev, [comp.id]: !prev[comp.id] }))}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <Text style={{ fontSize: 13 }}>⏳</Text>
+                    <Text style={styles.earlyBsCollapsibleTitle} numberOfLines={1}>
+                      Validación en Bs: solo desde el {colectaItem.fecha_pago}
+                    </Text>
+                  </View>
+                  <Text style={styles.earlyBsCollapsibleToggle}>
+                    {expandedEarlyBsHelp[comp.id] ? 'Ocultar ▲' : 'Ver info ▼'}
+                  </Text>
+                </TouchableOpacity>
+
+                {expandedEarlyBsHelp[comp.id] && (
+                  <View style={styles.earlyBsCollapsibleBody}>
+                    <Text style={styles.earlyBsCollapsibleText}>
+                      Los pagos en Bolívares (Bs) solo podrán validarse a partir de la fecha de pago/liquidación ({colectaItem.fecha_pago}). Antes de esa fecha solo se permiten validaciones con monedas "duras" (USD efectivo, USDT).
+                    </Text>
+                  </View>
+                )}
+              </View>
             )}
             <View style={styles.contribActions}>
               <TouchableOpacity
@@ -3002,12 +3031,30 @@ export default function FundsScreen() {
                             </Text>
                           </View>
                         ) : (
-                          <View style={styles.earlyBsWarningBox}>
-                            <Text style={styles.earlyBsWarningTitle}>⏳ Pago y validación en Bs no permitidos aún</Text>
-                            <Text style={styles.earlyBsWarningText}>
-                              No es posible registrar ni validar aportes en Bolívares (Bs) antes de la fecha de pago/liquidación ({targetColecta.fecha_pago}).{'\n'}
-                              Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
-                            </Text>
+                          <View style={{ marginVertical: 6 }}>
+                            <TouchableOpacity
+                              style={styles.earlyBsCollapsibleHeader}
+                              onPress={() => setShowEarlyBsSelfInfo(!showEarlyBsSelfInfo)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <Text style={{ fontSize: 13 }}>⏳</Text>
+                                <Text style={styles.earlyBsCollapsibleTitle} numberOfLines={1}>
+                                  Aporte propio en Bs: disponible desde el {targetColecta.fecha_pago}
+                                </Text>
+                              </View>
+                              <Text style={styles.earlyBsCollapsibleToggle}>
+                                {showEarlyBsSelfInfo ? 'Ocultar ▲' : 'Ver info ▼'}
+                              </Text>
+                            </TouchableOpacity>
+
+                            {showEarlyBsSelfInfo && (
+                              <View style={styles.earlyBsCollapsibleBody}>
+                                <Text style={styles.earlyBsCollapsibleText}>
+                                  No es posible registrar ni validar aportes en Bolívares (Bs) antes de la fecha de pago/liquidación ({targetColecta.fecha_pago}). Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         )
                       )}
@@ -3074,12 +3121,30 @@ export default function FundsScreen() {
                               </Text>
                             </View>
                           ) : (
-                            <View style={styles.earlyBsWarningBox}>
-                              <Text style={styles.earlyBsWarningTitle}>⏳ Pago en Bs no permitido antes del {targetColecta.fecha_pago}</Text>
-                              <Text style={styles.earlyBsWarningText}>
-                                No es posible registrar ni validar aportes en Bolívares ({selectedNormalized}) antes de la fecha de pago/liquidación.{'\n'}
-                                Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
-                              </Text>
+                            <View style={{ marginVertical: 6 }}>
+                              <TouchableOpacity
+                                style={styles.earlyBsCollapsibleHeader}
+                                onPress={() => setShowEarlyBsPaymentInfo(!showEarlyBsPaymentInfo)}
+                                activeOpacity={0.7}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                  <Text style={{ fontSize: 13 }}>⏳</Text>
+                                  <Text style={styles.earlyBsCollapsibleTitle} numberOfLines={1}>
+                                    Pago en Bs ({selectedNormalized}): solo desde el {targetColecta.fecha_pago}
+                                  </Text>
+                                </View>
+                                <Text style={styles.earlyBsCollapsibleToggle}>
+                                  {showEarlyBsPaymentInfo ? 'Ocultar ▲' : 'Ver info ▼'}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {showEarlyBsPaymentInfo && (
+                                <View style={styles.earlyBsCollapsibleBody}>
+                                  <Text style={styles.earlyBsCollapsibleText}>
+                                    No es posible registrar ni validar aportes en Bolívares ({selectedNormalized}) antes de la fecha de pago/liquidación ({targetColecta.fecha_pago}). Esto solo puede hacerse con monedas "duras" como USD en efectivo o USDT.
+                                  </Text>
+                                </View>
+                              )}
                             </View>
                           )
                         )}
@@ -3264,6 +3329,8 @@ export default function FundsScreen() {
                       onPress={() => {
                         setShowPaymentModal(false);
                         setShowSelfPledgeInfo(false);
+                        setShowEarlyBsSelfInfo(false);
+                        setShowEarlyBsPaymentInfo(false);
                         setSelfPledgeMethod('Aporte Propio');
                         setTargetCompromiso(null);
                       }}
@@ -4384,6 +4451,44 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  earlyBsCollapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  earlyBsCollapsibleTitle: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  earlyBsCollapsibleToggle: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  earlyBsCollapsibleBody: {
+    backgroundColor: 'rgba(245, 158, 11, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.18)',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  earlyBsCollapsibleText: {
+    color: '#fde68a',
+    fontSize: 12,
+    lineHeight: 17,
   },
   modalSubmitBlocked: {
     backgroundColor: '#b45309',

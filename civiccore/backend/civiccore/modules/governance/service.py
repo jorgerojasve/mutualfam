@@ -83,7 +83,7 @@ class GovernanceService:
         return proposal
         
     @staticmethod
-    def _enrich_proposal(db: Session, p: Proposal) -> Proposal:
+    def _enrich_proposal(db: Session, p: Proposal, auto_close: bool = True) -> Proposal:
         if p:
             from ...core.config import is_qa_environment
             now_dt = utcnow()
@@ -104,6 +104,10 @@ class GovernanceService:
                 if now_dt >= v_start:
                     p.status = ProposalStatus.VOTING
                     db.commit()
+
+            # Automatic closing evaluation for proposals in VOTING (Opción 3 y vencimiento de plazo)
+            if auto_close and p.status == ProposalStatus.VOTING:
+                GovernanceService.check_and_auto_close_proposal(db, p)
 
             votes = db.query(Vote).filter(Vote.proposal_id == p.id).all()
             
@@ -326,8 +330,68 @@ class GovernanceService:
             
         db.commit()
         db.refresh(vote)
+
+        # Evaluar cierre anticipado tras registrar el voto (Opción 3)
+        GovernanceService.check_and_auto_close_proposal(db, proposal)
+
         return vote
-        
+
+    @staticmethod
+    def check_and_auto_close_proposal(db: Session, proposal: Proposal) -> bool:
+        """
+        Evalúa y ejecuta el cierre automático de una propuesta en fase de VOTACIÓN:
+        1. Vencimiento del plazo reglamentario (now >= voting_ends_at).
+        2. Cierre anticipado por Unanimidad del Censo (Opción 3):
+           El 100% de los miembros activos de la mutual han votado SÍ.
+           No queda ningún miembro pendiente de emitir su voto y existe consenso
+           afirmativo pleno (certeza matemática absoluta).
+        3. Cierre anticipado por conclusión total del censo:
+           Todos los miembros activos de la mutual han emitido su voto, por lo que
+           no quedan votos pendientes para alterar el resultado.
+        """
+        if proposal.status != ProposalStatus.VOTING:
+            return False
+
+        if getattr(proposal, '_auto_closing', False):
+            return False
+        proposal._auto_closing = True
+        try:
+            now_dt = utcnow()
+
+            deadline_passed = False
+            if proposal.voting_ends_at:
+                v_end = proposal.voting_ends_at.replace(tzinfo=timezone.utc) if proposal.voting_ends_at.tzinfo is None else proposal.voting_ends_at
+                deadline_passed = (now_dt >= v_end)
+
+            # Censo total de miembros activos
+            if proposal.organization_id:
+                from ..membership.models import OrganizationMembership, MemberStatus
+                total_active_members = db.query(OrganizationMembership).filter(
+                    OrganizationMembership.organization_id == proposal.organization_id,
+                    OrganizationMembership.status == MemberStatus.ACTIVE
+                ).count()
+            else:
+                total_active_members = db.query(Member).count()
+            total_active_members = max(total_active_members, 1)
+
+            votes = db.query(Vote).filter(Vote.proposal_id == proposal.id).all()
+            yes_count = sum(1 for v in votes if v.vote_value == 1.0)
+            total_casted = len(votes)
+
+            # Regla Opción 3: Unanimidad afirmativa del 100% del censo activo
+            unanimidad_censo = (total_active_members > 0 and yes_count >= total_active_members)
+
+            # 100% del censo ha votado (conclusión natural sin votos pendientes)
+            censo_completo = (total_active_members > 0 and total_casted >= total_active_members)
+
+            if deadline_passed or unanimidad_censo or censo_completo:
+                GovernanceService.calculate_proposal_results(db, proposal)
+                return True
+
+            return False
+        finally:
+            proposal._auto_closing = False
+
     @staticmethod
     def calculate_proposal_results(db: Session, proposal: Proposal) -> dict:
         votes = db.query(Vote).filter(Vote.proposal_id == proposal.id).all()
@@ -422,7 +486,7 @@ class GovernanceService:
         
         # We need to know the required quorum to see if the proposal is valid
         # We can leverage _enrich_proposal to calculate it dynamically
-        enriched_p = GovernanceService._enrich_proposal(db, proposal)
+        enriched_p = GovernanceService._enrich_proposal(db, proposal, auto_close=False)
         quorum_reached = len(votes) >= enriched_p.quorum_needed
         
         # Meta-Governance rule checking
