@@ -66,6 +66,22 @@ export default function AssemblyScreen({ embedded = false }) {
     setReceiptViewerVisible(true);
   };
 
+  const formatRemainingTime = (seconds) => {
+    if (seconds === undefined || seconds === null) return '';
+    if (seconds <= 0) return 'Plazo concluido';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+
+    if (d > 0) {
+      return h > 0 ? `${d}d ${h}h restantes` : `${d}d restantes`;
+    }
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m restantes` : `${h}h restantes`;
+    }
+    return `${Math.max(1, m)}m restantes`;
+  };
+
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -552,8 +568,14 @@ export default function AssemblyScreen({ embedded = false }) {
         onPress: async () => {
           setSubmittingVote(true);
           try {
-            await governanceApi.votar(proposalDetail.id, voto);
-            Alert.alert('¡Voto Registrado!', `Has votado: ${voto.toUpperCase()}`);
+            const res = await governanceApi.votar(proposalDetail.id, voto);
+            if (res?.proposal_status === 'approved') {
+              Alert.alert('🎉 ¡Propuesta Aprobada!', '¡Consenso unánime alcanzado! La asamblea familiar ha aprobado la propuesta exitosamente.');
+            } else if (res?.proposal_status === 'rejected') {
+              Alert.alert('🚫 Propuesta Rechazada', 'La propuesta ha sido concluida y rechazada por la asamblea.');
+            } else {
+              Alert.alert('¡Voto Registrado!', `Has votado: ${voto.toUpperCase()}`);
+            }
             openProposalDetail({ id: proposalDetail.id });
             fetchPropuestas(true);
           } catch (e) {
@@ -674,9 +696,14 @@ export default function AssemblyScreen({ embedded = false }) {
           <Text style={styles.metaText}>
             👤 Propuesto por: <Text style={styles.metaHighlight}>{item.author_name}</Text>
           </Text>
-          {item.time_remaining_seconds > 0 && (
+          {isVoting && (
             <Text style={styles.timerText}>
-              ⏱️ {Math.ceil(item.time_remaining_seconds / 86400)}d restantes
+              ⏱️ {item.time_remaining_seconds > 0 ? formatRemainingTime(item.time_remaining_seconds) : 'Votación concluida'}
+            </Text>
+          )}
+          {isDebate && item.time_remaining_seconds > 0 && (
+            <Text style={styles.timerText}>
+              💬 Debate ({formatRemainingTime(item.time_remaining_seconds)})
             </Text>
           )}
         </View>
@@ -930,11 +957,29 @@ export default function AssemblyScreen({ embedded = false }) {
                 {/* Fase y tiempo */}
                 <View style={styles.phaseAlert}>
                   <Text style={styles.phaseAlertTitle}>{proposalDetail.phase_label}</Text>
-                  {proposalDetail.time_remaining_seconds > 0 && (
+                  {proposalDetail.status === 'voting' ? (
                     <Text style={styles.phaseAlertSub}>
-                      Tiempo restante: {Math.ceil(proposalDetail.time_remaining_seconds / 86400)} días
+                      {proposalDetail.time_remaining_seconds > 0
+                        ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                        : '⏱️ Plazo concluido • Votación lista para computar resolución'}
                     </Text>
-                  )}
+                  ) : proposalDetail.status === 'debate' ? (
+                    <Text style={styles.phaseAlertSub}>
+                      {proposalDetail.time_remaining_seconds > 0
+                        ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                        : '💬 Deliberación concluida • Pasando a votación'}
+                    </Text>
+                  ) : proposalDetail.status === 'approved' ? (
+                    <Text style={[styles.phaseAlertSub, { color: '#34d399' }]}>
+                      ✅ Propuesta aprobada por la asamblea familiar
+                    </Text>
+                  ) : proposalDetail.status === 'rejected' ? (
+                    <Text style={[styles.phaseAlertSub, { color: '#f87171' }]}>
+                      {proposalDetail.veto_activated
+                        ? '🚫 Propuesta rechazada por veto nominativo'
+                        : '❌ Propuesta no aprobada por la asamblea'}
+                    </Text>
+                  ) : null}
                 </View>
 
                 {/* Info Justificación / Motivo */}
@@ -1102,6 +1147,27 @@ export default function AssemblyScreen({ embedded = false }) {
                       >
                         <Text style={styles.voteBtnText}>⬜ Abstención</Text>
                       </TouchableOpacity>
+                    </View>
+
+                    {/* Botón para Concluir y Computar Votación */}
+                    <View style={styles.concludeContainer}>
+                      <TouchableOpacity
+                        style={styles.concludeBtn}
+                        onPress={handleCerrarPropuesta}
+                        disabled={closingProposal}
+                        activeOpacity={0.8}
+                      >
+                        {closingProposal ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
+                        )}
+                      </TouchableOpacity>
+                      <Text style={styles.concludeNote}>
+                        {proposalDetail.votes_yes >= (proposalDetail.quorum_needed || 1)
+                          ? '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.'
+                          : 'Cierra la asamblea y registra el resultado oficial de la votación.'}
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -2861,5 +2927,37 @@ const styles = StyleSheet.create({
     color: '#e2e8f0',
     fontSize: 14,
     fontWeight: '600',
-  }
+  },
+  concludeContainer: {
+    marginTop: 15,
+    marginBottom: 5,
+    width: '100%',
+    alignItems: 'center',
+  },
+  concludeBtn: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  concludeBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  concludeNote: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    paddingHorizontal: 10,
+  },
 });

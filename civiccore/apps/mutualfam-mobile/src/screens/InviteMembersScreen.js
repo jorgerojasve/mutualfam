@@ -23,22 +23,30 @@ export default function InviteMembersScreen({ navigation }) {
   const [members, setMembers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [showSecurityZone, setShowSecurityZone] = useState(false);
+  const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const { activeOrg, loading: orgLoading, isOffline } = React.useContext(OrgContext);
 
   const handleRequestWithdrawal = () => {
+    if (!safetyConfirmed) {
+      Alert.alert('Acción Protegida', 'Para activar el retiro voluntario, debes marcar primero la casilla de confirmación en la Zona de Seguridad.');
+      return;
+    }
     Alert.alert(
-      '¿Solicitar Retiro Voluntario?',
-      `¿Estás seguro de que deseas retirarte de la mutual "${activeOrg?.name}"? Esta acción finalizará tu participación activa en la mutual.`,
+      '¿Confirmar Retiro Voluntario?',
+      `¿Estás completamente seguro de que deseas tramitar tu retiro de la mutual "${activeOrg?.name}"?\n\nEsta acción finalizará tu condición de miembro activo. Se verificará tu solvencia inmediata para autorizar la salida.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Sí, Solicitar Retiro',
+          text: 'Sí, Confirmar Retiro',
           style: 'destructive',
           onPress: async () => {
             setWithdrawing(true);
             try {
               const res = await authApi.solicitarRetiro(activeOrg.id);
               Alert.alert('Retiro Procesado', res.message || 'Tu retiro voluntario ha sido registrado.');
+              setShowSecurityZone(false);
+              setSafetyConfirmed(false);
               fetchOrgInfo();
             } catch (e) {
               const msg = getErrorMessage(e, 'No se pudo procesar el retiro voluntario.');
@@ -263,7 +271,7 @@ export default function InviteMembersScreen({ navigation }) {
               
               <View style={styles.timerContainer}>
                 <Text style={styles.timerLabel}>Tiempo restante:</Text>
-                <Text style={[styles.timerValue, !canInvite && {color: '#ef4444'}]}>
+                <Text style={[styles.timerValue, !canInvite && styles.timerValueExpired]}>
                   {timeLeft || 'Calculando...'}
                 </Text>
               </View>
@@ -278,35 +286,110 @@ export default function InviteMembersScreen({ navigation }) {
                 </TouchableOpacity>
               ) : (
                 <View style={styles.expiredWarning}>
+                  <View style={styles.expiredWarningHeader}>
+                    <Ionicons name="information-circle-outline" size={18} color="#94a3b8" style={{ marginRight: 6 }} />
+                    <Text style={styles.expiredWarningTitle}>Período de gracia concluido</Text>
+                  </View>
                   <Text style={styles.expiredText}>
                     El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante la Asamblea Familiar.
                   </Text>
                   <TouchableOpacity
-                    style={[styles.button, { marginTop: 12, backgroundColor: '#0284c7' }]}
+                    style={styles.btnGoAssembly}
                     onPress={() => setActiveTab('asamblea')}
                   >
-                    <Text style={styles.buttonText}>🏛️ Ir a Asamblea</Text>
+                    <Text style={styles.btnGoAssemblyText}>🏛️ Ir a Asamblea</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
           )}
-          <View style={[styles.card, { marginTop: 16 }]}>
-            <Text style={styles.cardTitle}>Gestión de Membresía</Text>
-            <Text style={styles.cardText}>
-              Puedes solicitar el retiro voluntario de la mutual familiar en cualquier momento, siempre y cuando no tengas deudas o préstamos activos pendientes por liquidar.
-            </Text>
+
+          {/* Zona de Seguridad (Retiro Voluntario) */}
+          <View style={styles.securityZoneWrapper}>
             <TouchableOpacity
-              style={styles.btnWithdrawal}
-              onPress={handleRequestWithdrawal}
-              disabled={withdrawing}
+              style={styles.securityZoneHeader}
+              onPress={() => {
+                const next = !showSecurityZone;
+                setShowSecurityZone(next);
+                if (!next) setSafetyConfirmed(false);
+              }}
+              activeOpacity={0.7}
             >
-              {withdrawing ? (
-                <ActivityIndicator color="#ef4444" />
-              ) : (
-                <Text style={styles.btnWithdrawalText}>🚪 Solicitar Retiro Voluntario</Text>
-              )}
+              <View style={styles.securityZoneHeaderLeft}>
+                <View style={styles.securityShieldBadge}>
+                  <Ionicons name="shield-outline" size={18} color="#94a3b8" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.securityZoneTitle}>Zona de Seguridad</Text>
+                  <Text style={styles.securityZoneSubtitle}>Opciones sensibles • Retiro de membresía</Text>
+                </View>
+              </View>
+              <View style={styles.securityZoneToggle}>
+                <Text style={styles.securityZoneToggleText}>{showSecurityZone ? 'Ocultar' : 'Acceder'}</Text>
+                <Ionicons name={showSecurityZone ? "chevron-up" : "chevron-down"} size={16} color="#94a3b8" />
+              </View>
             </TouchableOpacity>
+
+            {showSecurityZone && (
+              <View style={styles.securityZoneBody}>
+                <View style={styles.securityNoticeBox}>
+                  <Ionicons name="warning-outline" size={18} color="#f59e0b" style={{ marginRight: 8, marginTop: 1 }} />
+                  <Text style={styles.securityNoticeText}>
+                    Esta es una acción definitiva. Al tramitar tu retiro voluntario, finalizará tu condición de miembro activo en la mutual familiar.
+                  </Text>
+                </View>
+
+                <Text style={styles.securityCardTitle}>Solicitud de Retiro Voluntario</Text>
+                <Text style={styles.securityCardDesc}>
+                  Puedes solicitar tu retiro en cualquier momento, siempre y cuando no tengas deudas activas o préstamos pendientes por liquidar en esta mutual.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.securityCheckboxRow}
+                  onPress={() => setSafetyConfirmed(!safetyConfirmed)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={safetyConfirmed ? "checkbox" : "square-outline"}
+                    size={22}
+                    color={safetyConfirmed ? "#ef4444" : "#64748b"}
+                    style={{ marginRight: 10 }}
+                  />
+                  <Text style={styles.securityCheckboxLabel}>
+                    He verificado mi solvencia y confirmo que deseo habilitar la opción de retiro voluntario.
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.btnWithdrawal,
+                    !safetyConfirmed && styles.btnWithdrawalDisabled
+                  ]}
+                  onPress={handleRequestWithdrawal}
+                  disabled={!safetyConfirmed || withdrawing}
+                  activeOpacity={0.8}
+                >
+                  {withdrawing ? (
+                    <ActivityIndicator color={safetyConfirmed ? "#ef4444" : "#64748b"} />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons
+                        name={safetyConfirmed ? "exit-outline" : "lock-closed-outline"}
+                        size={16}
+                        color={safetyConfirmed ? "#ef4444" : "#64748b"}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={[
+                        styles.btnWithdrawalText,
+                        !safetyConfirmed && styles.btnWithdrawalTextDisabled
+                      ]}>
+                        {safetyConfirmed ? "Solicitar Retiro Voluntario" : "Retiro Bloqueado (Marca la casilla)"}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           <View style={{height: 40}} />
@@ -396,6 +479,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
+  timerValueExpired: {
+    color: '#94a3b8',
+    fontSize: 18,
+    fontWeight: '600',
+  },
   button: {
     backgroundColor: '#25D366', // WhatsApp green
     padding: 15,
@@ -408,16 +496,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   expiredWarning: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
     borderWidth: 1,
-    borderColor: '#ef4444',
-    padding: 15,
-    borderRadius: 8,
+    borderColor: 'rgba(148, 163, 184, 0.25)',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 6,
+  },
+  expiredWarningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  expiredWarningTitle: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
   },
   expiredText: {
-    color: '#ef4444',
-    fontSize: 14,
+    color: '#94a3b8',
+    fontSize: 13.5,
+    lineHeight: 19,
     textAlign: 'center',
+  },
+  btnGoAssembly: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  btnGoAssemblyText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 15,
   },
   memberRow: {
     flexDirection: 'row',
@@ -488,18 +601,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  securityZoneWrapper: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 12,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    overflow: 'hidden',
+  },
+  securityZoneHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  securityZoneHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  securityShieldBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: 'rgba(148, 163, 184, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  securityZoneTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f8fafc',
+  },
+  securityZoneSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  securityZoneToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  securityZoneToggleText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  securityZoneBody: {
+    padding: 16,
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  securityNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  securityNoticeText: {
+    flex: 1,
+    color: '#fde68a',
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  securityCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f8fafc',
+    marginBottom: 6,
+  },
+  securityCardDesc: {
+    fontSize: 13,
+    color: '#94a3b8',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  securityCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  securityCheckboxLabel: {
+    flex: 1,
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   btnWithdrawal: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
     borderWidth: 1,
     borderColor: '#ef4444',
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 8,
+  },
+  btnWithdrawalDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   btnWithdrawalText: {
     color: '#ef4444',
     fontWeight: '700',
     fontSize: 14,
+  },
+  btnWithdrawalTextDisabled: {
+    color: '#64748b',
   },
 });

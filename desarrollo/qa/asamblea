@@ -56,3 +56,26 @@ Tiempos de debate y votación en QA (1 día cada uno) vs Producción (plazos reg
   2. `civiccore/modules/governance/service.py`: En `create_proposal`, si `is_qa` es True, usa claves de configuración o defaults `QA_DIAS_DEBATE=1` y `QA_DIAS_VOTACION=1`. En `_enrich_proposal`, auto-acelera propuestas antiguas en QA si ya transcurrieron 24 horas.
   3. `mutualfam/routers/gobernanza.py`: Notificaciones push adaptan la redacción dinámica: "1 día para debatir" en QA vs "4 días / 10 días" en Producción.
   4. `AssemblyScreen.js`: Banners informativos y modales de confirmación ajustan el texto según `theme.isQA`.
+
+Desatasco de Votaciones Asamblearias (Opción 3: Cierre Anticipado por Unanimidad del Censo + Cierre por Vencimiento de Plazo).
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Problema Detectado:
+  1. Propuestas en fase de votación (ej. admisión de familiar) quedaban "atascadas" indefinidamente aún cuando el 100% de los miembros activos ya habían votado a favor (ej. 2 de 2 votos SÍ).
+  2. No se computaba ni aprobaba la propuesta de manera automática al vencer el plazo reglamentario (`voting_ends_at`).
+  3. No se mostraba temporizador regresivo visual ni se informaba con precisión cuánto tiempo restaba para votar.
+  4. La función `handleCerrarPropuesta` en la app móvil estaba huérfana (sin botón en la interfaz).
+  5. El enlace y código de invitación para el nuevo ingreso permanecían bloqueados al no transicionar la propuesta a estado `approved`.
+- Solución Implementada (Opción 3):
+  1. Backend (`service.py` - `check_and_auto_close_proposal`):
+     - Unanimidad del Censo (Cierre Anticipado): Si el 100% de los miembros activos de la mutual ya votaron SÍ (`yes_count >= total_active_members`), la propuesta se cierra y aprueba inmediatamente sin requerir agotar el plazo restante, ya que existe consenso pleno y certeza matemática absoluta.
+     - Cierre por Conclusión del Censo: Si la totalidad de los miembros activos ya emitieron su voto (`total_casted >= total_active_members`), la asamblea se da por concluida y se computa el resultado oficial.
+     - Vencimiento de Plazo: Si `now >= voting_ends_at`, se evalúa y resuelve automáticamente la propuesta al consultarla (`_enrich_proposal`) o al registrar un voto.
+  2. Router (`gobernanza.py`):
+     - `votar_propuesta`: Al emitirse un voto, evalúa si se alcanzó la resolución anticipada. Si la propuesta se resuelve, envía inmediatamente las notificaciones a los miembros y el evento WebSocket `PROPUESTA_RESUELTA`, retornando el estado final y el token de invitación.
+     - `dispatch_proposal_resolution_notifications`: Despachador idempotente protegido contra notificaciones duplicadas (`resolution_notified`).
+     - `cerrar_propuesta`: Endpoint manual ahora completamente seguro e idempotente.
+  3. Frontend Móvil (`AssemblyScreen.js`):
+     - Formateador dinámico de tiempo (`formatRemainingTime`): Desglosa días, horas y minutos con precisión, indicando claramente si el plazo está en curso o concluido.
+     - `phaseAlert` y tarjeta de propuesta: Reflejan el tiempo restante exacto de debate o votación, y notifican si la propuesta fue aprobada por consenso o está lista para computar.
+     - Botón "⚖️ Computar y Concluir Votación": Expuesto en el detalle de la propuesta durante la fase de votación, permitiendo computar el resultado oficial bajo demanda.
+     - Alerta celebratoria de aprobación inmediata tras el último voto afirmativo unánime.

@@ -138,6 +138,7 @@ export default function FundsDashboard() {
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentReceiptUrl, setPaymentReceiptUrl] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [showEarlyBsNotice, setShowEarlyBsNotice] = useState(false);
 
   // Form: Validar Gasto
   const [expenseDesc, setExpenseDesc] = useState('');
@@ -1684,19 +1685,45 @@ export default function FundsDashboard() {
                     ✅ Moneda dura habilitada: Puedes registrar y validar aportes en USD en efectivo, USDT o Zelle antes de la fecha de liquidación ({targetColecta.fecha_pago}).
                   </div>
                 ) : (
-                  <div style={{
-                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                    border: '1px solid rgba(245, 158, 11, 0.4)',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    fontSize: '0.8rem',
-                    color: '#fde68a',
-                    lineHeight: '1.4',
-                  }}>
-                    <strong style={{ display: 'block', color: '#fbbf24', marginBottom: '2px' }}>
-                      ⏳ Pago en Bs no permitido antes del {targetColecta.fecha_pago}
-                    </strong>
-                    {getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay')}
+                  <div style={{ margin: '8px 0' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowEarlyBsNotice(!showEarlyBsNotice)}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '8px',
+                        padding: '7px 10px',
+                        fontSize: '0.8rem',
+                        color: '#fbbf24',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        ⏳ Pago en Bs: disponible desde el {targetColecta.fecha_pago}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: '700' }}>
+                        {showEarlyBsNotice ? 'Ocultar ▲' : 'Ver info ▼'}
+                      </span>
+                    </button>
+                    {showEarlyBsNotice && (
+                      <div style={{
+                        backgroundColor: 'rgba(245, 158, 11, 0.06)',
+                        border: '1px solid rgba(245, 158, 11, 0.2)',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        marginTop: '4px',
+                        fontSize: '0.75rem',
+                        color: '#fde68a',
+                        lineHeight: '1.4',
+                      }}>
+                        {getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay')}
+                      </div>
+                    )}
                   </div>
                 )
               )}
