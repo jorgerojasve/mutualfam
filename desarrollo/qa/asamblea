@@ -96,3 +96,15 @@ Inhabilitación de la Asamblea durante el Período de Gracia de Creación de Mut
   3. Frontend Móvil (`AssemblyScreen.js`):
      - Bloqueo a nivel de pantalla con temporizador en tiempo real (`graceTimeLeft`) y tarjeta `graceLockedCard` mientras `activeOrg.grace_period_ends_at` esté vigente.
 
+Homologación de Opciones para Adjuntar Foto en Foro de Asamblea (v1.1.41).
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Objetivo:
+  Homologar la acción de adjuntar fotos en el foro de debate de la Asamblea con el estándar del selector de comprobantes utilizado en Fondos y Préstamos.
+- Solución Implementada (`AssemblyScreen.js`):
+  1. Se actualizó el diálogo de opciones `handlePickCommentImage` homologándolo al formato estándar:
+     - `✂️ Galería (Recortar)`: Abre la galería permitiendo recortar la imagen antes de enviarla.
+     - `🖼️ Galería (Original)`: Permite subir la foto completa en su resolución original.
+     - `📷 Tomar Foto`: Solicita permisos de cámara mediante `requestCameraPermissionsAsync` y abre la cámara nativa (`launchCameraAsync`).
+     - `Cancelar`: Cierra el diálogo sin cambios.
+
+
