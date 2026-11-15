@@ -2,7 +2,7 @@
 Router de Gobernanza para MutualFam
 Maneja propuestas de ingreso y expulsión de miembros, votación, debate, defensa y resolución.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -254,6 +254,7 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
 def proponer_ingreso(
     req: ProponerIngresoRequest,
     current_org_member: dict = Depends(get_current_org_member),
+    x_bypass_grace: Optional[str] = Header(None, alias="X-Bypass-Grace-Period"),
     db: Session = Depends(get_db)
 ):
     """
@@ -267,6 +268,13 @@ def proponer_ingreso(
 
     if not membership or membership.status != MemberStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Debes ser miembro activo de la mutual para proponer ingresos")
+
+    # Inhabilitación de asamblea durante el período de gracia de creación de la mutual
+    if org.grace_period_ends_at and utcnow() <= org.grace_period_ends_at.replace(tzinfo=timezone.utc) and not x_bypass_grace:
+        raise HTTPException(
+            status_code=400,
+            detail="La asamblea está inhabilitada durante el período de gracia de 24 horas de la mutual. Durante este período, el fundador puede invitar miembros directamente sin pasar por asamblea."
+        )
 
     candidate_name = (req.candidate_name or "").strip()
     if not candidate_name and req.candidate_user_id:
@@ -502,6 +510,12 @@ def votar_propuesta(
     if not membership or membership.status != MemberStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Debes ser miembro activo para votar")
 
+    if org.grace_period_ends_at and utcnow() <= org.grace_period_ends_at.replace(tzinfo=timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="La asamblea está inhabilitada durante el período de gracia de la mutual."
+        )
+
     proposal = db.query(Proposal).filter(
         Proposal.id == proposal_id,
         Proposal.organization_id == org.id
@@ -587,6 +601,12 @@ def cerrar_propuesta(
     """
     org = current_org_member["organization"]
     user = current_org_member["user"]
+
+    if org.grace_period_ends_at and utcnow() <= org.grace_period_ends_at.replace(tzinfo=timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="La asamblea está inhabilitada durante el período de gracia de la mutual."
+        )
 
     proposal = db.query(Proposal).filter(
         Proposal.id == proposal_id,
