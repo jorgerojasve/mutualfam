@@ -33,7 +33,7 @@ import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
-import { formatLocalDate, parseLocalDate } from '../utils/dates';
+import { formatLocalDate, parseLocalDate, formatTimeAMPM } from '../utils/dates';
 
 const normalizePaymentMethodName = (method) => {
   if (!method) return '';
@@ -331,10 +331,10 @@ export default function FundsScreen() {
     return d;
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [horaPago, setHoraPago] = useState('12:00');
+  const [horaPago, setHoraPago] = useState('14:00');
   const [timeObj, setTimeObj] = useState(() => {
     const t = new Date();
-    t.setHours(12, 0, 0, 0);
+    t.setHours(14, 0, 0, 0);
     return t;
   });
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -860,7 +860,7 @@ export default function FundsScreen() {
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
-        hora_pago: horaPago || '12:00',
+        hora_pago: horaPago || '14:00',
         beneficiario_nombre: beneficiarioNombre.trim() || undefined,
         beneficiario_datos_pago: (Object.keys(filteredDatosPago).length > 0) ? filteredDatosPago : undefined,
       });
@@ -876,7 +876,10 @@ export default function FundsScreen() {
       defaultD.setDate(defaultD.getDate() + 7);
       setDateObj(defaultD);
       setFechaPago(formatLocalDate(defaultD));
-      setHoraPago('12:00');
+      setHoraPago('14:00');
+      const defaultT = new Date();
+      defaultT.setHours(14, 0, 0, 0);
+      setTimeObj(defaultT);
       Alert.alert('¡Colecta Creada!', 'La propuesta de colecta está activa y lista para recibir compromisos.');
       setConnectionError(false);
       if (setIsOffline) setIsOffline(false);
@@ -1764,7 +1767,7 @@ export default function FundsScreen() {
             👤 Gestionado por: <Text style={styles.infoHighlight}>{item.beneficiario_nombre}</Text>
           </Text>
           <Text style={styles.infoText}>
-            📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}{item.hora_pago ? ` (${item.hora_pago})` : ''}</Text>
+            📅 Fecha de pago: <Text style={styles.infoHighlight}>{item.fecha_pago}{item.hora_pago ? ` (${formatTimeAMPM(item.hora_pago)})` : ''}</Text>
           </Text>
         </View>
 
@@ -2630,7 +2633,7 @@ export default function FundsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={{ color: horaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
-                  ⏰ {horaPago || '12:00'} (Tocar para cambiar hora)
+                  ⏰ {formatTimeAMPM(horaPago || '14:00')} (Tocar para cambiar hora)
                 </Text>
               </TouchableOpacity>
               {showTimePicker && (
@@ -2641,6 +2644,7 @@ export default function FundsScreen() {
                     display={Platform.OS === 'ios' ? 'inline' : 'default'}
                     onChange={onTimeChange}
                     themeVariant="dark"
+                    is24Hour={false}
                   />
                   {Platform.OS === 'ios' && (
                     <TouchableOpacity
@@ -2932,7 +2936,7 @@ export default function FundsScreen() {
                 {showPledgeRulesInfo && (
                   <View style={styles.collapsibleBodyCard}>
                     <Text style={styles.paymentRuleText}>
-                      • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan el día de pago/liquidación ({targetColecta?.fecha_pago}{targetColecta?.hora_pago ? ` a las ${targetColecta.hora_pago}` : ''}) calculados a la tasa de ese día.
+                      • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Bolívares (Bs):</Text> Se realizan el día de pago/liquidación ({targetColecta?.fecha_pago}{targetColecta?.hora_pago ? ` a las ${formatTimeAMPM(targetColecta.hora_pago)}` : ''}) calculados a la tasa de ese día.
                     </Text>
                     <Text style={styles.paymentRuleText}>
                       • <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>Aportes en Monedas Duras (USD en efectivo / USDT):</Text> Pueden transferirse o entregarse antes.

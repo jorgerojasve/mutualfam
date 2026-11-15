@@ -73,6 +73,13 @@ export default function LoansScreen() {
   const [repayAmount, setRepayAmount] = useState('');
   const [repaying, setRepaying] = useState(false);
 
+  // Rechazar aporte o devolución
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectType, setRejectType] = useState('contribution'); // 'contribution' | 'repayment'
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
   // Configurar Métodos de Pago
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [paymentConfig, setPaymentConfig] = useState({});
@@ -700,6 +707,45 @@ export default function LoansScreen() {
     ]);
   };
 
+  const handlePressRejectContribution = (contrib) => {
+    setRejectType('contribution');
+    setRejectTarget(contrib);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const handlePressRejectRepayment = (repay) => {
+    setRejectType('repayment');
+    setRejectTarget(repay);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectReason || !rejectReason.trim()) {
+      Alert.alert('Campo Requerido', 'Debes ingresar el motivo por el cual rechazas este pago.');
+      return;
+    }
+    setRejecting(true);
+    try {
+      if (rejectType === 'contribution') {
+        await loansApi.rejectContributionPayment(rejectTarget.id, rejectReason.trim());
+        Alert.alert('Pago Rechazado', 'El pago ha sido rechazado y notificado al aportante.');
+      } else {
+        await loansApi.rejectRepayment(rejectTarget.id, rejectReason.trim());
+        Alert.alert('Devolución Rechazada', 'La devolución ha sido rechazada y notificada al prestatario.');
+      }
+      setShowRejectModal(false);
+      setRejectTarget(null);
+      setRejectReason('');
+      fetchLoans();
+    } catch (e) {
+      Alert.alert('Error', getErrorMessage(e, 'No se pudo rechazar'));
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   const pickImage = () => {
     Alert.alert(
       'Adjuntar Comprobante',
@@ -970,21 +1016,31 @@ export default function LoansScreen() {
                     <View style={styles.repaymentsList}>
                       {c.repayments.map(r => {
                         const repayPending = r.status === 'paid';
+                        const repayRejected = r.status === 'rejected';
+                        const borderColor = repayRejected ? '#ef4444' : (repayPending ? '#eab308' : '#10b981');
                         return (
-                          <View key={r.id} style={[styles.repaymentRow, { borderColor: repayPending ? '#eab308' : '#10b981' }]}>
+                          <View key={r.id} style={[styles.repaymentRow, { borderColor }]}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                              <Text style={{ fontSize: 13 }}>{repayPending ? '⏳' : '✅'}</Text>
-                              <Text style={[styles.repaymentAmount, { color: repayPending ? '#facc15' : '#34d399' }]}>
+                              <Text style={{ fontSize: 13 }}>{repayRejected ? '❌' : (repayPending ? '⏳' : '✅')}</Text>
+                              <Text style={[styles.repaymentAmount, { color: repayRejected ? '#f87171' : (repayPending ? '#facc15' : '#34d399') }]}>
                                 Devolución ${r.amount_usd}
                               </Text>
-                              <View style={[styles.repaymentBadge, { backgroundColor: repayPending ? 'rgba(202,138,4,0.2)' : 'rgba(16,185,129,0.2)', borderColor: repayPending ? '#ca8a04' : '#059669' }]}>
-                                <Text style={{ fontSize: 10, fontWeight: '700', color: repayPending ? '#fde047' : '#6ee7b7' }}>
-                                  {repayPending ? 'Por validar' : 'Validada'}
+                              <View style={[styles.repaymentBadge, {
+                                backgroundColor: repayRejected ? 'rgba(239,68,68,0.2)' : (repayPending ? 'rgba(202,138,4,0.2)' : 'rgba(16,185,129,0.2)'),
+                                borderColor: repayRejected ? '#ef4444' : (repayPending ? '#ca8a04' : '#059669')
+                              }]}>
+                                <Text style={{ fontSize: 10, fontWeight: '700', color: repayRejected ? '#fca5a5' : (repayPending ? '#fde047' : '#6ee7b7') }}>
+                                  {repayRejected ? 'Rechazada' : (repayPending ? 'Por validar' : 'Validada')}
                                 </Text>
                               </View>
                             </View>
                             {r.payment_method ? renderPaymentMethodBadge(r.payment_method) : null}
                             {r.reference_text ? (<Text style={styles.contribMetaText}># {r.reference_text}</Text>) : null}
+                            {r.rejection_reason ? (
+                              <Text style={{ fontSize: 11, color: '#f87171', marginTop: 4, fontStyle: 'italic' }}>
+                                ⚠️ Motivo de rechazo: {r.rejection_reason}
+                              </Text>
+                            ) : null}
                             {r.receipt_url ? (
                               <TouchableOpacity 
                                 style={styles.receiptLinkBtnSmall}
@@ -998,13 +1054,32 @@ export default function LoansScreen() {
                               </TouchableOpacity>
                             ) : null}
                             {c.funder_id === user?.id && r.status === 'paid' && (
-                              <TouchableOpacity style={[styles.smallActionBtn, { backgroundColor: '#10b981', marginTop: 6, alignSelf: 'flex-start' }]} onPress={() => handleVerifyRepayment(r.id)}>
-                                <Text style={styles.smallActionText}>Validar Devolución</Text>
-                              </TouchableOpacity>
+                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                                <TouchableOpacity
+                                  style={[styles.smallActionBtn, { backgroundColor: '#ef4444' }]}
+                                  onPress={() => handlePressRejectRepayment(r)}
+                                >
+                                  <Text style={styles.smallActionText}>✕ Rechazar</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.smallActionBtn, { backgroundColor: '#10b981' }]}
+                                  onPress={() => handleVerifyRepayment(r.id)}
+                                >
+                                  <Text style={styles.smallActionText}>✔ Validar Devolución</Text>
+                                </TouchableOpacity>
+                              </View>
                             )}
                           </View>
                         );
                       })}
+                    </View>
+                  )}
+
+                  {c.rejection_reason && c.status === 'pledged' && (
+                    <View style={{ backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: '#ef4444', borderRadius: 8, padding: 8, marginTop: 6 }}>
+                      <Text style={{ color: '#f87171', fontSize: 11, fontWeight: '600' }}>
+                        ⚠️ Pago anterior rechazado: {c.rejection_reason}
+                      </Text>
                     </View>
                   )}
 
@@ -1028,10 +1103,20 @@ export default function LoansScreen() {
                         </TouchableOpacity>
                       </>
                     )}
-                    {isMine && c.status === 'paid' && (
-                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]} onPress={() => handleVerify(c.id)}>
-                        <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                    {isMine && c.status === 'pledged' && c.funder_id !== user?.id && (
+                      <TouchableOpacity style={[styles.contribActionDanger, { backgroundColor: '#b91c1c' }]} onPress={() => handleCancelContribution(c.id)}>
+                        <Text style={styles.contribActionDangerText}>Liberar Cupo</Text>
                       </TouchableOpacity>
+                    )}
+                    {isMine && c.status === 'paid' && (
+                      <View style={{ flexDirection: 'row', gap: 8, flex: 1, justifyContent: 'flex-end' }}>
+                        <TouchableOpacity style={[styles.contribActionDanger, { backgroundColor: '#ef4444' }]} onPress={() => handlePressRejectContribution(c)}>
+                          <Text style={styles.contribActionDangerText}>✕ Rechazar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#059669' }]} onPress={() => handleVerify(c.id)}>
+                          <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                     {canRepayMore && (
                       <TouchableOpacity
@@ -1053,7 +1138,7 @@ export default function LoansScreen() {
         <View style={styles.cardFooter}>
           {isMine ? (
             <View style={{ gap: 10 }}>
-              {item.status === 'pending' && (
+              {item.status !== 'repaid' && item.status !== 'cancelled' && (item.amount_paid || 0) === 0 && (item.amount_verified || 0) === 0 && (
                 <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => handleCancelLoan(item.id)}>
                   <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
                 </TouchableOpacity>
@@ -1846,6 +1931,58 @@ export default function LoansScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Modal Rechazar Pago o Devolución */}
+      <Modal visible={showRejectModal} animationType="slide" transparent={true} onRequestClose={() => setShowRejectModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              <Text style={[styles.modalTitle, { color: '#f87171' }]}>✕ {rejectType === 'contribution' ? 'Rechazar Pago de Aporte' : 'Rechazar Devolución'}</Text>
+              <Text style={styles.modalSubtitle}>
+                {rejectType === 'contribution'
+                  ? `Indica al aportante el motivo por el cual no se acredita este pago de $${rejectTarget?.amount_usd} USD. El aporte volverá a estado prometido para que el socio pueda corregirlo.`
+                  : `Indica al prestatario el motivo por el cual no se acredita esta devolución de $${rejectTarget?.amount_usd} USD para que pueda verificar sus datos y reenviarla.`}
+              </Text>
+
+              <Text style={styles.inputLabel}>Motivo del Rechazo *</Text>
+              <TextInput
+                style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="Ej: No aparece en cuenta bancaria, monto incompleto, comprobante ilegible..."
+                placeholderTextColor="#64748b"
+                multiline
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => {
+                    setShowRejectModal(false);
+                    setRejectTarget(null);
+                    setRejectReason('');
+                  }}
+                  disabled={rejecting}
+                >
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalSubmit, { backgroundColor: '#ef4444' }]}
+                  onPress={handleConfirmReject}
+                  disabled={rejecting}
+                >
+                  {rejecting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Rechazar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>

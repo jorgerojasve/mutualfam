@@ -38,3 +38,27 @@ export const parseLocalDate = (dateStr) => {
   }
   return new Date();
 };
+
+/**
+ * Formatea una hora en formato 'HH:MM' (24 horas) a formato 'hh:mm AM/PM'.
+ * Soporta entradas como '14:00', '12:00', '08:30', o cadenas que ya contengan AM/PM.
+ * @param {string} timeStr
+ * @returns {string} Hora en formato 'hh:mm AM/PM' (ej. '02:00 PM', '09:30 AM')
+ */
+export const formatTimeAMPM = (timeStr) => {
+  if (!timeStr) return '';
+  const clean = String(timeStr).trim();
+  if (/am|pm/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+  const parts = clean.split(':');
+  if (parts.length < 2) return clean;
+  let hours = parseInt(parts[0], 10);
+  const minutes = parts[1].slice(0, 2);
+  if (isNaN(hours)) return clean;
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  const hoursStr = String(hours).padStart(2, '0');
+  return `${hoursStr}:${minutes} ${ampm}`;
+};

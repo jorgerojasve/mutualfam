@@ -240,12 +240,20 @@ export const loansApi = {
     const { data } = await apiClient.post(`/loans/contributions/${contribId}/verify_payment`);
     return data;
   },
+  rejectContributionPayment: async (contribId, motivo) => {
+    const { data } = await apiClient.post(`/loans/contributions/${contribId}/reject_payment`, { motivo });
+    return data;
+  },
   notifyRepayment: async (contribId, repayData) => {
     const { data } = await apiClient.post(`/loans/contributions/${contribId}/repay`, repayData);
     return data;
   },
   verifyRepayment: async (repayId) => {
     const { data } = await apiClient.post(`/loans/repayments/${repayId}/verify`);
+    return data;
+  },
+  rejectRepayment: async (repayId, motivo) => {
+    const { data } = await apiClient.post(`/loans/repayments/${repayId}/reject`, { motivo });
     return data;
   },
   uploadFile: async (fileUri) => {

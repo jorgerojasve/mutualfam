@@ -13,7 +13,7 @@ def ensure_colectas_columns_exist(engine):
         ("colectas", "moneda_origen", "VARCHAR(10) DEFAULT 'USD'"),
         ("colectas", "motivo_cancelacion", "TEXT"),
         ("colectas", "fecha_cancelacion", "TIMESTAMP"),
-        ("colectas", "hora_pago", "VARCHAR(10) DEFAULT '12:00'"),
+        ("colectas", "hora_pago", "VARCHAR(10) DEFAULT '14:00'"),
         ("colectas", "recordatorio_previo_enviado", "BOOLEAN DEFAULT FALSE"),
         ("colectas", "recordatorio_mismo_dia_enviado", "BOOLEAN DEFAULT FALSE"),
         ("colectas", "ultimo_recordatorio_manual", "TIMESTAMP"),
