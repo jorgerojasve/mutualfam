@@ -751,6 +751,17 @@ export default function FundsScreen() {
   };
 
   const handlePressCreateColecta = async () => {
+    if (activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1) {
+      Alert.alert(
+        'Invitaciones Requeridas',
+        'Tu mutual aún no tiene otros miembros familiares. Debes invitar a tus familiares antes de proponer una colecta solidaria.',
+        [
+          { text: 'Invitar Familiares', onPress: () => navigation.navigate('Familia') },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
+      return;
+    }
     const latestConfig = await fetchUserPaymentConfig();
     if (!hasConfiguredPaymentMethods(latestConfig)) {
       Alert.alert(
@@ -2305,6 +2316,25 @@ export default function FundsScreen() {
             <Text style={styles.missingPmBannerTitle}>Datos de pago pendientes</Text>
             <Text style={styles.missingPmBannerSubtitle}>
               Debes registrar al menos un método de pago antes de proponer una colecta o aportar. Toca aquí para configurarlo.
+            </Text>
+          </View>
+          <Text style={styles.missingPmBannerArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
+      {activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1 && (
+        <TouchableOpacity
+          style={styles.missingPmBanner}
+          onPress={() => navigation.navigate('Familia')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.missingPmBannerIconBox}>
+            <Text style={styles.missingPmBannerIcon}>👥</Text>
+          </View>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.missingPmBannerTitle}>Invitaciones pendientes</Text>
+            <Text style={styles.missingPmBannerSubtitle}>
+              Tu mutual aún no tiene otros miembros. Debes invitar a tus familiares antes de proponer colectas o aportar. Toca aquí para invitar miembros.
             </Text>
           </View>
           <Text style={styles.missingPmBannerArrow}>→</Text>

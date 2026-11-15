@@ -11,7 +11,7 @@ import { OrgContext } from '../context/OrgContext';
 import { getErrorMessage, handleLimitError } from '../utils/errors';
 import theme from '../utils/theme';
 
-export default function InviteMembersScreen({ navigation }) {
+export default function InviteMembersScreen({ navigation, route }) {
   const [activeTab, setActiveTab] = useState('miembros'); // 'miembros' | 'asamblea'
   const [loading, setLoading] = useState(true);
   const [orgData, setOrgData] = useState(null);
@@ -118,6 +118,9 @@ export default function InviteMembersScreen({ navigation }) {
           authApi.me().catch(() => null)
         ]);
         setMembers(membersData);
+        if (activeOrg && membersData) {
+          activeOrg.members_count = membersData.length;
+        }
         if (meData) setCurrentUser(meData);
       } catch (memErr) {
         console.warn("Could not fetch members", memErr);
@@ -168,6 +171,58 @@ export default function InviteMembersScreen({ navigation }) {
     }
   };
 
+  const isSoleMember = !loading && orgData?.role === 'founder' && members.length <= 1;
+
+  const renderInviteCard = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
+      <Text style={styles.cardText}>
+        Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante las primeras 24 horas (período de gracia).
+      </Text>
+
+      <View style={styles.singleUseNotice}>
+        <Ionicons name="information-circle-outline" size={18} color="#38bdf8" style={{ marginRight: 8, marginTop: 2 }} />
+        <Text style={styles.singleUseNoticeText}>
+          <Text style={{ fontWeight: 'bold', color: '#38bdf8' }}>Enlace único y personal: </Text>
+          Cada invitación es de un solo uso para una persona. Si deseas invitar a varios familiares, genera un enlace para cada uno.
+        </Text>
+      </View>
+      
+      <View style={styles.timerContainer}>
+        <Text style={styles.timerLabel}>Tiempo restante:</Text>
+        <Text style={[styles.timerValue, !canInvite && styles.timerValueExpired]}>
+          {timeLeft || 'Calculando...'}
+        </Text>
+      </View>
+      
+      {canInvite ? (
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={generateInvite}
+          disabled={generating}
+        >
+          {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.expiredWarning}>
+          <View style={styles.expiredWarningHeader}>
+            <Ionicons name="information-circle-outline" size={18} color="#94a3b8" style={{ marginRight: 6 }} />
+            <Text style={styles.expiredWarningTitle}>Período de gracia concluido</Text>
+          </View>
+          <Text style={styles.expiredText}>
+            El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante la Asamblea Familiar.
+          </Text>
+          <TouchableOpacity
+            style={styles.btnGoAssembly}
+            onPress={() => setActiveTab('asamblea')}
+          >
+            <Text style={styles.btnGoAssemblyText}>🏛️ Ir a Asamblea</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -211,12 +266,37 @@ export default function InviteMembersScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Banner de Invitaciones Pendientes (homologado con el banner de Datos de Pago) */}
+      {isSoleMember && (
+        <TouchableOpacity 
+          style={styles.missingInvitesBanner} 
+          onPress={canInvite ? generateInvite : () => setActiveTab('asamblea')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.missingInvitesBannerIconBox}>
+            <Text style={styles.missingInvitesBannerIcon}>👥</Text>
+          </View>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={styles.missingInvitesBannerTitle}>Invitaciones pendientes</Text>
+            <Text style={styles.missingInvitesBannerSubtitle}>
+              {canInvite
+                ? 'Tu mutual está recién creada. Tienes 24 horas para invitar a tus familiares directamente sin pasar por asamblea. Toca aquí para compartir el enlace de invitación.'
+                : 'Tu mutual solo cuenta con 1 miembro. El período de gracia concluyó; propón nuevos ingresos en la Asamblea.'}
+            </Text>
+          </View>
+          <Text style={styles.missingInvitesBannerArrow}>›</Text>
+        </TouchableOpacity>
+      )}
+
       {activeTab === 'asamblea' ? (
         <View style={{ flex: 1, marginTop: 4 }}>
           <AssemblyScreen embedded={true} />
         </View>
       ) : (
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {/* Si solo hay 1 miembro (recién creada), priorizar la sección de invitar familiares */}
+          {isSoleMember && canInvite && renderInviteCard()}
+
           <View style={[styles.card, { marginBottom: 20 }]}>
             <Text style={styles.cardTitle}>
               {isOffline && members.length === 0 ? 'Miembros Actuales (Sin conexión)' : `Miembros Actuales (${members.length})`}
@@ -254,55 +334,8 @@ export default function InviteMembersScreen({ navigation }) {
             )}
           </View>
 
-          {orgData.role === 'founder' && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Invitar (Período de Gracia)</Text>
-              <Text style={styles.cardText}>
-                Como fundador de la mutual, puedes invitar miembros directamente sin pasar por asamblea durante los primeros 15 días.
-              </Text>
-
-              <View style={styles.singleUseNotice}>
-                <Ionicons name="information-circle-outline" size={18} color="#38bdf8" style={{ marginRight: 8, marginTop: 2 }} />
-                <Text style={styles.singleUseNoticeText}>
-                  <Text style={{ fontWeight: 'bold', color: '#38bdf8' }}>Enlace único y personal: </Text>
-                  Cada invitación es de un solo uso para una persona. Si deseas invitar a varios familiares, genera un enlace para cada uno.
-                </Text>
-              </View>
-              
-              <View style={styles.timerContainer}>
-                <Text style={styles.timerLabel}>Tiempo restante:</Text>
-                <Text style={[styles.timerValue, !canInvite && styles.timerValueExpired]}>
-                  {timeLeft || 'Calculando...'}
-                </Text>
-              </View>
-              
-              {canInvite ? (
-                <TouchableOpacity 
-                  style={styles.button} 
-                  onPress={generateInvite}
-                  disabled={generating}
-                >
-                  {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Compartir Enlace de Invitación</Text>}
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.expiredWarning}>
-                  <View style={styles.expiredWarningHeader}>
-                    <Ionicons name="information-circle-outline" size={18} color="#94a3b8" style={{ marginRight: 6 }} />
-                    <Text style={styles.expiredWarningTitle}>Período de gracia concluido</Text>
-                  </View>
-                  <Text style={styles.expiredText}>
-                    El período de gracia ha finalizado. Los nuevos miembros deberán ser propuestos mediante la Asamblea Familiar.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.btnGoAssembly}
-                    onPress={() => setActiveTab('asamblea')}
-                  >
-                    <Text style={styles.btnGoAssemblyText}>🏛️ Ir a Asamblea</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Si ya hay más de 1 miembro (o si el período ya expiró), la tarjeta de invitar se muestra después de la lista */}
+          {(!isSoleMember || !canInvite) && orgData.role === 'founder' && renderInviteCard()}
 
           {/* Zona de Seguridad (Retiro Voluntario) */}
           <View style={styles.securityZoneWrapper}>
@@ -414,6 +447,44 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)'
+  },
+  missingInvitesBanner: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: 'rgba(234, 179, 8, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(234, 179, 8, 0.4)',
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  missingInvitesBannerIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  missingInvitesBannerIcon: {
+    fontSize: 20,
+  },
+  missingInvitesBannerTitle: {
+    color: '#fef08a',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  missingInvitesBannerSubtitle: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  missingInvitesBannerArrow: {
+    color: '#facc15',
+    fontSize: 22,
+    fontWeight: 'bold',
   },
   tabButton: {
     flex: 1,

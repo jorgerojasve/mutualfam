@@ -26,14 +26,24 @@ export default function CreateMutualScreen({ navigation }) {
         name: name.trim(), 
         description: description.trim() 
       });
-      Alert.alert('¡Éxito!', 'Mutual creada. Tienes 24 horas para invitar a tus familiares libremente.');
       
-      // Auto-select the newly created org
+      // Auto-select the newly created org and navigate directly to Familia
       if (data.organization_id) {
         await AsyncStorage.setItem('active_org_id', data.organization_id.toString());
         await AsyncStorage.setItem('org_id', data.organization_id.toString());
         await loadActiveOrg(); // This will fetch organizations and set activeOrg
-        navigation.replace('MainTabs');
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'MainTabs',
+              params: {
+                screen: 'Familia',
+                params: { justCreated: true }
+              }
+            }
+          ]
+        });
       } else {
         navigation.replace('SelectMutual');
       }

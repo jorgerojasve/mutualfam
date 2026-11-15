@@ -338,12 +338,19 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
     orgs = []
     for m in memberships:
         org = db.query(Organization).filter(Organization.id == m.organization_id).first()
+        if not org:
+            continue
+        m_count = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org.id,
+            OrganizationMembership.status == MemberStatus.ACTIVE
+        ).count()
         orgs.append({
             "id": org.id,
             "name": org.name,
             "role": m.role,
             "status": m.status,
-            "grace_period_ends_at": org.grace_period_ends_at
+            "grace_period_ends_at": org.grace_period_ends_at,
+            "members_count": m_count
         })
         
     return {
