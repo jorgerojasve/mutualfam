@@ -62,3 +62,41 @@ export const formatTimeAMPM = (timeStr) => {
   const hoursStr = String(hours).padStart(2, '0');
   return `${hoursStr}:${minutes} ${ampm}`;
 };
+
+/**
+ * Retorna la hora por defecto para una fecha de pago ('YYYY-MM-DD').
+ * Si la colecta es para hoy: coloca por defecto la hora una hora después,
+ * redondeando hacia arriba (más tarde) para que queden en cero los minutos (:00).
+ * Si la colecta es para una fecha futura: por defecto son las 2:00 PM ('14:00').
+ * @param {string} fechaStr Fecha seleccionada en formato 'YYYY-MM-DD'
+ * @returns {string} Hora en formato 'HH:00' (24h)
+ */
+export const getDefaultHoraPago = (fechaStr) => {
+  const todayStr = formatLocalDate(new Date());
+  const cleanFecha = fechaStr ? String(fechaStr).split('T')[0].replace(/\//g, '-').trim() : '';
+  if (cleanFecha && cleanFecha === todayStr) {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const s = now.getSeconds();
+    let targetH = (m > 0 || s > 0) ? h + 2 : h + 1;
+    if (targetH > 23) {
+      targetH = 23;
+    }
+    return `${String(targetH).padStart(2, '0')}:00`;
+  }
+  return '14:00';
+};
+
+/**
+ * Retorna un objeto Date con la hora por defecto correspondiente a la fecha.
+ * @param {string} fechaStr Fecha seleccionada en formato 'YYYY-MM-DD'
+ * @returns {Date}
+ */
+export const getDefaultTimeObj = (fechaStr) => {
+  const timeStr = getDefaultHoraPago(fechaStr);
+  const [h, m] = timeStr.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+};
