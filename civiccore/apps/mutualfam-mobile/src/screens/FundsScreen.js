@@ -33,6 +33,7 @@ import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
+import { formatLocalDate, parseLocalDate } from '../utils/dates';
 
 const normalizePaymentMethodName = (method) => {
   if (!method) return '';
@@ -364,7 +365,7 @@ export default function FundsScreen() {
     }
     if (selectedDate) {
       setDateObj(selectedDate);
-      setFechaPago(selectedDate.toISOString().split('T')[0]);
+      setFechaPago(formatLocalDate(selectedDate));
     }
   };
 
@@ -586,7 +587,7 @@ export default function FundsScreen() {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     setDateObj(d);
-    setFechaPago(d.toISOString().split('T')[0]);
+    setFechaPago(formatLocalDate(d));
   }, []);
 
   useEffect(() => {
@@ -874,7 +875,7 @@ export default function FundsScreen() {
       const defaultD = new Date();
       defaultD.setDate(defaultD.getDate() + 7);
       setDateObj(defaultD);
-      setFechaPago(defaultD.toISOString().split('T')[0]);
+      setFechaPago(formatLocalDate(defaultD));
       setHoraPago('12:00');
       Alert.alert('¡Colecta Creada!', 'La propuesta de colecta está activa y lista para recibir compromisos.');
       setConnectionError(false);
@@ -2589,7 +2590,12 @@ export default function FundsScreen() {
               <Text style={styles.inputLabel}>Fecha de Pago / Liquidación</Text>
               <TouchableOpacity
                 style={[styles.input, { justifyContent: 'center' }]}
-                onPress={() => setShowDatePicker(true)}
+                onPress={() => {
+                  if (fechaPago) {
+                    setDateObj(parseLocalDate(fechaPago));
+                  }
+                  setShowDatePicker(true);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={{ color: fechaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
