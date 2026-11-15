@@ -442,12 +442,12 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
-  // Adjuntar imagen desde la galería (con opción previa de recortar)
+  // Adjuntar imagen para el foro de la asamblea (homologado con comprobantes)
   const pickCommentImage = async (crop = false) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso Requerido', 'Necesitamos acceso a tus fotos para adjuntar imágenes en el foro.');
+        Alert.alert('Permiso requerido', 'Se requiere acceso a la galería.');
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -464,18 +464,42 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
+  const takeCommentPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Se requiere acceso a la cámara.');
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        setCommentAttachment({ uri: res.assets[0].uri, type: 'image' });
+      }
+    } catch (e) {
+      console.warn('Error taking photo for comment', e);
+      Alert.alert('Error', 'No se pudo abrir la cámara.');
+    }
+  };
+
   const handlePickCommentImage = () => {
     Alert.alert(
       'Adjuntar Foto al Foro',
-      '¿Deseas recortar la foto antes de adjuntarla?',
+      '¿Cómo deseas agregar la foto?',
       [
         {
-          text: '✂️ Recortar foto',
+          text: '✂️ Galería (Recortar)',
           onPress: () => pickCommentImage(true),
         },
         {
-          text: '🖼️ Foto completa (sin recortar)',
+          text: '🖼️ Galería (Original)',
           onPress: () => pickCommentImage(false),
+        },
+        {
+          text: '📷 Tomar Foto',
+          onPress: takeCommentPhoto,
         },
         {
           text: 'Cancelar',
