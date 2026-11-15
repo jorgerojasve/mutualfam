@@ -69,6 +69,8 @@ class LoanContribution(Base):
     reference_text = Column(String(255), nullable=True) # Texto de referencia del pago
     
     status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
+    rejection_reason = Column(Text, nullable=True)
+    rejection_date = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=utcnow)
 
@@ -102,6 +104,8 @@ class FundContribution(Base):
     payment_method = Column(String(50))
     receipt_url = Column(String(500), nullable=True)
     status = Column(Enum(ContributionStatus), default=ContributionStatus.PLEDGED)
+    rejection_reason = Column(Text, nullable=True)
+    rejection_date = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=utcnow)
 
@@ -121,6 +125,8 @@ class LoanRepayment(Base):
     status = Column(Enum(RepaymentStatus), default=RepaymentStatus.PAID)
     created_at = Column(DateTime, default=utcnow)
     verified_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
 
 class UserPushToken(Base):
     __tablename__ = "mutualfam_user_push_tokens"
@@ -196,7 +202,7 @@ class Colecta(Base):
 
     # Fechas
     fecha_pago = Column(Date, nullable=False)
-    hora_pago = Column(String(10), default="12:00")
+    hora_pago = Column(String(10), default="14:00")
     fecha_limite_aportes = Column(Date, nullable=True)
 
     # Recordatorios y notificaciones automáticas/manuales

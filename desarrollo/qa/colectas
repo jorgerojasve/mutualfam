@@ -43,3 +43,18 @@ Desfase de un día al seleccionar fecha en el calendario (aparece un día despu�
      - Se reemplazó todo uso de `selectedDate.toISOString().split('T')[0]` por `formatLocalDate(selectedDate)`.
      - Al presionar el campo para abrir el calendario, se sincroniza el estado `dateObj` usando `parseLocalDate(fecha)` para que el calendario nativo abra exactamente en la fecha seleccionada.
 
+Máquina de estados, desbloqueo de flujos y hora AM/PM por defecto 2:00 PM (v1.1.42)
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Mejoras:
+  1. Desbloqueo y gestión de estados de créditos (Préstamos):
+     - Auto-verificación de devoluciones por inacción (CR-03): si el acreedor no valida ni objeta una devolución tras 7 días continuos, se auto-valida automáticamente.
+     - Endpoints y modal para rechazo formal de pagos y devoluciones con motivo obligatorio (CR-02 y CR-04).
+     - Desbloqueo de solicitudes y promesas fantasma (CR-01): prestatarios pueden cancelar préstamos sin aportes pagados/verificados y liberar cupos prometidos inactivos.
+  2. Colectas solidarias ("Vacas"):
+     - Cierre automático a CERRADA al alcanzar el 100% recaudado validado (COL-01), liberando promesas excedentes no requeridas.
+     - Formato de hora en AM/PM en selector nativo (is24Hour={false}), tarjetas y reglas informativas (formatTimeAMPM).
+     - Hora de pago y liquidación por defecto fijada a las 2:00 PM (14:00).
+  3. Membresía y Solvencia:
+     - Cálculo de solvencia neta deduciendo amortizaciones verificadas para evitar falsos bloqueos en retiros voluntarios (CR-05).
+     - Salvaguardas para retiro del fundador único y compromisos de colectas en proceso.
+

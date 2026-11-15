@@ -7,15 +7,22 @@ from services.notifications import notify_users
 logger = logging.getLogger(__name__)
 
 def ensure_reminder_column_exists(engine):
-    """Garantiza de forma segura que la columna last_repayment_reminder_date exista en SQLite/PostgreSQL."""
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE loan_requests ADD COLUMN last_repayment_reminder_date DATE"))
-            conn.commit()
-            logger.info("Columna last_repayment_reminder_date agregada a loan_requests")
-    except Exception:
-        # La columna ya existe o la base de datos no requiere ALTER
-        pass
+    """Garantiza de forma segura que las columnas de recordatorios y rechazos existan en SQLite/PostgreSQL."""
+    columns_to_add = [
+        ("loan_requests", "last_repayment_reminder_date", "DATE"),
+        ("loan_contributions", "rejection_reason", "TEXT"),
+        ("loan_contributions", "rejection_date", "DATETIME"),
+        ("loan_repayments", "rejection_reason", "TEXT"),
+        ("loan_repayments", "rejected_at", "DATETIME"),
+    ]
+    for table, col, col_type in columns_to_add:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                conn.commit()
+                logger.info(f"Columna {col} agregada a {table}")
+        except Exception:
+            pass
 
 def format_ve_amount(amount: float) -> str:
     """Formatea un monto al estándar venezolano $ 1.250,50"""
@@ -31,6 +38,88 @@ def format_ve_amount(amount: float) -> str:
     except Exception:
         return f"${amount}"
 
+def auto_verify_pending_repayments(db) -> int:
+    """
+    CR-03: Auto-valida devoluciones notificadas (PAID) tras 7 días continuos de inacción del acreedor.
+    Evita que el prestatario quede insolvente indefinidamente por ghosting del acreedor.
+    """
+    from datetime import datetime, timezone, timedelta
+    from models import LoanRepayment, RepaymentStatus, LoanContribution, ContributionStatus, LoanRequest, LoanStatus
+    from sqlalchemy import func
+    from services.telegram_bot import send_telegram_notification
+    from services.realtime import notify_org
+
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    
+    stale_repayments = db.query(LoanRepayment).filter(
+        LoanRepayment.status == RepaymentStatus.PAID,
+        LoanRepayment.created_at <= seven_days_ago
+    ).all()
+
+    auto_verified_count = 0
+    now_dt = datetime.now(timezone.utc)
+
+    for repay in stale_repayments:
+        contrib = db.query(LoanContribution).filter(LoanContribution.id == repay.contribution_id).first()
+        if not contrib:
+            continue
+
+        repay.status = RepaymentStatus.VERIFIED
+        repay.verified_at = now_dt
+        db.flush()
+
+        # Recalcular si se cubrió el total de la contribución
+        total_verified = db.query(func.sum(LoanRepayment.amount_usd)).filter(
+            LoanRepayment.contribution_id == contrib.id,
+            LoanRepayment.status == RepaymentStatus.VERIFIED
+        ).scalar() or 0.0
+
+        if total_verified >= (contrib.amount_usd - 0.05):
+            contrib.status = ContributionStatus.REPAID
+        else:
+            pending_repay = db.query(LoanRepayment).filter(
+                LoanRepayment.contribution_id == contrib.id,
+                LoanRepayment.status == RepaymentStatus.PAID
+            ).first()
+            if not pending_repay:
+                contrib.status = ContributionStatus.VERIFIED
+            else:
+                contrib.status = ContributionStatus.REPAY_NOTIFIED
+
+        loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+        if loan:
+            all_contribs = db.query(LoanContribution).filter(
+                LoanContribution.loan_request_id == loan.id,
+                LoanContribution.status != ContributionStatus.REJECTED
+            ).all()
+
+            all_repaid = len(all_contribs) > 0 and all(c.status == ContributionStatus.REPAID for c in all_contribs)
+            if all_repaid:
+                loan.status = LoanStatus.REPAID
+                loan.repaid_at = now_dt
+
+            msg = (
+                f"⏰ <b>Devolución Auto-Verificada por Inacción</b>\n\n"
+                f"La devolución de <b>${repay.amount_usd}</b> en el préstamo de {loan.motive} "
+                f"ha sido auto-verificada tras 7 días continuos sin objeción del acreedor."
+            )
+            send_telegram_notification(msg)
+            notify_users(
+                db,
+                [loan.requester_id, contrib.funder_id],
+                "Devolución auto-verificada",
+                f"La devolución de ${repay.amount_usd} fue auto-verificada por el sistema tras 7 días de inacción.",
+                data={"screen": "Loans", "loan_id": loan.id, "type": "auto_verified"}
+            )
+            notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
+
+        auto_verified_count += 1
+
+    if auto_verified_count > 0:
+        db.commit()
+
+    return auto_verified_count
+
 def check_and_send_repayment_reminders(db, force: bool = False) -> dict:
     """
     Evalúa todos los préstamos activos y envía recordatorios push según la cadencia aprobada:
@@ -41,6 +130,7 @@ def check_and_send_repayment_reminders(db, force: bool = False) -> dict:
     - D+3+: Diario después del vencimiento hasta que sea saldado
     """
     today = datetime.now(timezone.utc).date()
+    auto_verified_count = auto_verify_pending_repayments(db)
     
     # Préstamos no saldados ni cancelados que tengan fecha estimada
     loans = db.query(LoanRequest).filter(
@@ -129,5 +219,6 @@ def check_and_send_repayment_reminders(db, force: bool = False) -> dict:
         "status": "ok",
         "evaluated_loans": evaluated_count,
         "reminders_sent": sent_count,
+        "auto_verified_repayments": auto_verified_count,
         "date": str(today)
     }

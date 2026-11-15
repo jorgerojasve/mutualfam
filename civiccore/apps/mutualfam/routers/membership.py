@@ -466,10 +466,11 @@ def check_solvency(
     db: Session = Depends(get_db)
 ):
     """
-    Verifica la solvencia del usuario en la mutual (deudas activas por préstamos).
+    Verifica la solvencia del usuario en la mutual (deudas netas activas por préstamos descontando amortizaciones).
     """
     check_user_id = target_user_id if target_user_id else current_user.id
-    from models import LoanRequest, LoanStatus
+    from models import LoanRequest, LoanStatus, LoanContribution, LoanRepayment, RepaymentStatus
+    from sqlalchemy import func
 
     active_loans = db.query(LoanRequest).filter(
         LoanRequest.organization_id == org_id,
@@ -477,15 +478,30 @@ def check_solvency(
         LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
     ).all()
 
-    total_debt = sum(l.amount_usd for l in active_loans if l.repaid_at is None)
+    total_debt = 0.0
+    for l in active_loans:
+        if l.repaid_at is not None:
+            continue
+        contrib_ids = [c.id for c in db.query(LoanContribution.id).filter(LoanContribution.loan_request_id == l.id).all()]
+        if not contrib_ids:
+            continue
+        total_verified = db.query(func.sum(LoanRepayment.amount_usd)).filter(
+            LoanRepayment.contribution_id.in_(contrib_ids),
+            LoanRepayment.status == RepaymentStatus.VERIFIED
+        ).scalar() or 0.0
+
+        remaining = max(0.0, round(l.amount_usd - total_verified, 2))
+        total_debt += remaining
+
+    is_solvent = (total_debt <= 0.01)
 
     return {
         "user_id": check_user_id,
         "organization_id": org_id,
-        "is_solvent": total_debt == 0,
+        "is_solvent": is_solvent,
         "active_debt_usd": round(total_debt, 2),
         "active_loans_count": len(active_loans),
-        "detail": "Solvente sin deudas activas" if total_debt == 0 else f"Tiene ${total_debt:,.2f} USD pendientes en préstamos activos"
+        "detail": "Solvente sin deudas activas" if is_solvent else f"Tiene ${total_debt:,.2f} USD pendientes en préstamos activos"
     }
 
 
@@ -497,7 +513,7 @@ def request_withdrawal(
 ):
     """
     Procesa la solicitud de retiro voluntario de un miembro.
-    Valida previamente la solvencia: no permite el retiro si tiene préstamos activos impagos.
+    Valida previamente la solvencia: no permite el retiro si tiene préstamos activos impagos o compromisos pendientes.
     """
     membership = db.query(OrganizationMembership).filter(
         OrganizationMembership.organization_id == org_id,
@@ -510,23 +526,65 @@ def request_withdrawal(
     if membership.status in [MemberStatus.WITHDRAWN, MemberStatus.WITHDRAWAL_REQUESTED]:
         raise HTTPException(status_code=400, detail="Ya has solicitado tu retiro o ya no eres miembro activo.")
 
-    # 1. Validación de Solvencia
-    from models import LoanRequest, LoanStatus
+    # 1. Validación de rol Fundador único (MB-02)
+    if membership.role == "founder":
+        other_active_members = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == org_id,
+            OrganizationMembership.user_id != current_user.id,
+            OrganizationMembership.status == MemberStatus.ACTIVE
+        ).count()
+        if other_active_members > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Eres el fundador de esta mutual. Antes de retirarte debes delegar o transferir el rol de fundador a otro miembro activo."
+            )
+
+    # 2. Validación de Solvencia neta real (CR-05)
+    from models import LoanRequest, LoanStatus, LoanContribution, LoanRepayment, RepaymentStatus
+    from sqlalchemy import func
+
     active_loans = db.query(LoanRequest).filter(
         LoanRequest.organization_id == org_id,
         LoanRequest.requester_id == current_user.id,
         LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
     ).all()
 
-    unpaid_loans = [l for l in active_loans if l.repaid_at is None]
-    if unpaid_loans:
-        total_debt = sum(l.amount_usd for l in unpaid_loans)
+    total_debt = 0.0
+    for l in active_loans:
+        if l.repaid_at is not None:
+            continue
+        contrib_ids = [c.id for c in db.query(LoanContribution.id).filter(LoanContribution.loan_request_id == l.id).all()]
+        if not contrib_ids:
+            continue
+        total_verified = db.query(func.sum(LoanRepayment.amount_usd)).filter(
+            LoanRepayment.contribution_id.in_(contrib_ids),
+            LoanRepayment.status == RepaymentStatus.VERIFIED
+        ).scalar() or 0.0
+
+        remaining = max(0.0, round(l.amount_usd - total_verified, 2))
+        total_debt += remaining
+
+    if total_debt > 0.01:
         raise HTTPException(
             status_code=400,
             detail=f"No puedes retirarte de la mutual mientras mantengas préstamos activos pendientes de pago (${total_debt:,.2f} USD). Por favor salda tus compromisos antes de salir."
         )
 
-    # 2. Procesar retiro
+    # 3. Validación de pagos en colectas en proceso (COL-05)
+    from models import Colecta, CompromisoColecta, EstadoColecta, EstadoCompromiso
+    active_colecta_pending = db.query(CompromisoColecta).join(Colecta).filter(
+        Colecta.organization_id == org_id,
+        Colecta.estado.in_([EstadoColecta.ACTIVA, EstadoColecta.CERRADA]),
+        CompromisoColecta.socio_id == current_user.id,
+        CompromisoColecta.estado == EstadoCompromiso.PAGADO
+    ).first()
+    if active_colecta_pending:
+        raise HTTPException(
+            status_code=400,
+            detail="Tienes aportes a colectas en proceso de validación. Por favor espera a que se concilien antes de retirarte."
+        )
+
+    # 4. Procesar retiro
     membership.status = MemberStatus.WITHDRAWN
     db.commit()
 

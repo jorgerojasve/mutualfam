@@ -29,6 +29,7 @@ class RepaymentResponse(BaseModel):
     payment_method: Optional[str]
     receipt_url: Optional[str]
     reference_text: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -42,11 +43,15 @@ class ContributionResponse(BaseModel):
     payment_method: Optional[str]
     receipt_url: Optional[str]
     reference_text: Optional[str] = None
+    rejection_reason: Optional[str] = None
     funder_payment_methods_json: str = "{}"
     repayments: List[RepaymentResponse] = []
     
     class Config:
         from_attributes = True
+
+class RejectPaymentRequest(BaseModel):
+    motivo: str
 
 class LoanRequestResponse(BaseModel):
     id: int
@@ -162,6 +167,13 @@ def get_loan_requests(
 ):
     if not org_member["organization"]:
         raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+
+    # CR-03: Evaluar si hay devoluciones con >= 7 días de inacción para auto-verificar
+    try:
+        from services.repayment_reminders import auto_verify_pending_repayments
+        auto_verify_pending_repayments(db)
+    except Exception as e:
+        pass
         
     loans = db.query(LoanRequest).filter(
         LoanRequest.organization_id == org_member["organization"].id
@@ -197,7 +209,8 @@ def get_loan_requests(
                     "status": r.status.value,
                     "payment_method": r.payment_method,
                     "receipt_url": r.receipt_url,
-                    "reference_text": r.reference_text
+                    "reference_text": r.reference_text,
+                    "rejection_reason": getattr(r, "rejection_reason", None)
                 })
 
             contributions.append({
@@ -209,6 +222,7 @@ def get_loan_requests(
                 "payment_method": c.payment_method,
                 "receipt_url": c.receipt_url,
                 "reference_text": c.reference_text,
+                "rejection_reason": getattr(c, "rejection_reason", None),
                 "funder_payment_methods_json": funder_config.payment_methods_json if funder_config else "{}",
                 "repayments": repayments_data
             })
@@ -275,8 +289,33 @@ def cancel_loan_request(
     if loan.requester_id != org_member["user"].id:
         raise HTTPException(status_code=403, detail="No puedes cancelar un préstamo que no solicitaste")
         
-    if loan.status != LoanStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Solo se pueden cancelar préstamos pendientes")
+    if loan.status in [LoanStatus.REPAID, LoanStatus.CANCELLED]:
+        raise HTTPException(status_code=400, detail="Este préstamo ya se encuentra finalizado o cancelado.")
+
+    # CR-01: Permitir cancelar préstamos si no tienen ningún aporte transferido o verificado
+    paid_or_verified = db.query(LoanContribution).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.status.in_([
+            ContributionStatus.PAID,
+            ContributionStatus.VERIFIED,
+            ContributionStatus.REPAY_NOTIFIED,
+            ContributionStatus.REPAID
+        ])
+    ).first()
+
+    if paid_or_verified:
+        raise HTTPException(
+            status_code=400, 
+            detail="No puedes cancelar un préstamo que ya cuenta con aportes transferidos o verificados."
+        )
+
+    # Eliminar promesas pendientes no pagadas
+    pledged_contribs = db.query(LoanContribution).filter(
+        LoanContribution.loan_request_id == loan.id,
+        LoanContribution.status == ContributionStatus.PLEDGED
+    ).all()
+    for p in pledged_contribs:
+        db.delete(p)
         
     loan.status = LoanStatus.CANCELLED
     db.commit()
@@ -391,14 +430,16 @@ def cancel_contribution(
     contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
     if not contrib:
         raise HTTPException(status_code=404, detail="Aporte no encontrado")
+
+    loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+    is_funder = (contrib.funder_id == org_member["user"].id)
+    is_borrower = (loan and loan.requester_id == org_member["user"].id)
         
-    if contrib.funder_id != org_member["user"].id:
-        raise HTTPException(status_code=403, detail="No puedes cancelar un aporte que no es tuyo")
+    if not is_funder and not is_borrower:
+        raise HTTPException(status_code=403, detail="Solo el aportante o el solicitante del préstamo pueden cancelar este aporte")
         
     if contrib.status != ContributionStatus.PLEDGED:
-        raise HTTPException(status_code=400, detail="Solo puedes cancelar aportes prometidos que no hayan sido pagados")
-        
-    loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+        raise HTTPException(status_code=400, detail="Solo se pueden cancelar aportes prometidos que no hayan sido pagados")
     
     amount = contrib.amount_usd
     db.delete(contrib)
@@ -516,6 +557,60 @@ def verify_payment(
     notify_users(db, [contrib.funder_id], "Pago verificado", f"{org_member['user'].first_name} confirmó recibir tu aporte de ${contrib.amount_usd}.")
     
     return {"message": "Pago verificado exitosamente"}
+
+@router.post("/contributions/{contrib_id}/reject_payment")
+def reject_contribution_payment(
+    contrib_id: int,
+    req: RejectPaymentRequest,
+    org_member: dict = Depends(get_current_org_member), 
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    contrib = db.query(LoanContribution).filter(LoanContribution.id == contrib_id).first()
+    if not contrib:
+        raise HTTPException(status_code=404, detail="Aporte no encontrado")
+        
+    loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+    if not loan or loan.requester_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el solicitante del préstamo puede rechazar los pagos de aporte")
+        
+    if contrib.status != ContributionStatus.PAID:
+        raise HTTPException(status_code=400, detail="Solo se pueden rechazar aportes en validación de pago")
+
+    motivo = req.motivo.strip()
+    if not motivo:
+        raise HTTPException(status_code=400, detail="Debe indicar el motivo por el cual rechaza el pago")
+
+    # Regresar a PLEDGED para que el aportante pueda corregir y reenviar comprobante
+    contrib.status = ContributionStatus.PLEDGED
+    contrib.rejection_reason = motivo
+    contrib.rejection_date = utcnow()
+    contrib.receipt_url = None
+    contrib.reference_text = None
+    contrib.payment_method = None
+    db.commit()
+
+    funder = db.query(User).filter(User.id == contrib.funder_id).first()
+    funder_name = funder.first_name if funder else "Socio"
+
+    msg = (
+        f"⚠️ <b>Pago de Aporte No Verificado</b>\n\n"
+        f"👤 El solicitante {org_member['user'].first_name} indicó que no ha recibido el aporte de <b>${contrib.amount_usd}</b> de {funder_name}.\n"
+        f"📝 Motivo: <i>{motivo}</i>\n"
+        f"El aporte regresó a estado prometido para que el socio pueda verificar y reenviar el pago."
+    )
+    send_telegram_notification(msg)
+    notify_users(
+        db,
+        [contrib.funder_id],
+        "⚠️ Pago de aporte no recibido",
+        f"{org_member['user'].first_name} indicó que no recibió tu aporte de ${contrib.amount_usd}. Motivo: \"{motivo}\". Puedes notificar el pago nuevamente.",
+        data={"screen": "Loans", "loan_id": loan.id, "type": "payment_rejected"}
+    )
+    notify_org(org_member["organization"].id, "LOANS_CHANGED", {"loan_id": loan.id})
+    return {"message": "Pago rechazado exitosamente"}
 
 class RepaymentNotify(BaseModel):
     amount_usd: float
@@ -682,6 +777,77 @@ def verify_return_payment(
     
     notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
     return {"message": "Devolución verificada exitosamente"}
+
+
+@router.post("/repayments/{repay_id}/reject")
+def reject_return_payment(
+    repay_id: int,
+    req: RejectPaymentRequest,
+    org_member: dict = Depends(get_current_org_member), 
+    db: Session = Depends(get_db)
+):
+    if not org_member["organization"]:
+        raise HTTPException(status_code=400, detail="Debe seleccionar una mutual familiar.")
+        
+    repay = db.query(LoanRepayment).filter(LoanRepayment.id == repay_id).first()
+    if not repay:
+        raise HTTPException(status_code=404, detail="Devolución no encontrada")
+        
+    contrib = db.query(LoanContribution).filter(LoanContribution.id == repay.contribution_id).first()
+    if not contrib or contrib.funder_id != org_member["user"].id:
+        raise HTTPException(status_code=403, detail="Solo el aportante/acreedor puede rechazar una devolución")
+        
+    if repay.status != RepaymentStatus.PAID:
+        raise HTTPException(status_code=400, detail="Esta devolución ya fue procesada o rechazada previamente")
+
+    motivo = req.motivo.strip()
+    if not motivo:
+        raise HTTPException(status_code=400, detail="Debe indicar el motivo por el cual rechaza la devolución")
+
+    repay.status = RepaymentStatus.REJECTED
+    repay.rejection_reason = motivo
+    repay.rejected_at = utcnow()
+    db.flush()
+
+    # Verificar si quedan otras devoluciones pendientes en PAID
+    pending_repay = db.query(LoanRepayment).filter(
+        LoanRepayment.contribution_id == contrib.id,
+        LoanRepayment.status == RepaymentStatus.PAID
+    ).first()
+
+    if not pending_repay:
+        # Verificar si hay saldo restante verificado
+        total_verified = db.query(func.sum(LoanRepayment.amount_usd)).filter(
+            LoanRepayment.contribution_id == contrib.id,
+            LoanRepayment.status == RepaymentStatus.VERIFIED
+        ).scalar() or 0.0
+
+        if total_verified >= (contrib.amount_usd - 0.05):
+            contrib.status = ContributionStatus.REPAID
+        else:
+            contrib.status = ContributionStatus.VERIFIED
+
+    db.commit()
+
+    loan = db.query(LoanRequest).filter(LoanRequest.id == contrib.loan_request_id).first()
+    msg = (
+        f"⚠️ <b>Devolución No Verificada</b>\n\n"
+        f"👤 {org_member['user'].first_name} indicó que no ha recibido la devolución de <b>${repay.amount_usd}</b>.\n"
+        f"📝 Motivo: <i>{motivo}</i>\n"
+        f"El saldo vuelve a figurar pendiente para que el prestatario pueda corregir el pago."
+    )
+    send_telegram_notification(msg)
+    if loan:
+        notify_users(
+            db,
+            [loan.requester_id],
+            "⚠️ Devolución no recibida",
+            f"{org_member['user'].first_name} indicó que no recibió la devolución de ${repay.amount_usd}. Motivo: \"{motivo}\". Por favor verifica tus datos de pago.",
+            data={"screen": "Loans", "loan_id": loan.id, "type": "repayment_rejected"}
+        )
+        notify_org(loan.organization_id, "LOANS_CHANGED", {"loan_id": loan.id})
+
+    return {"message": "Devolución rechazada exitosamente"}
 
 
 @router.post("/check-reminders")

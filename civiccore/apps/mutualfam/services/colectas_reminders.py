@@ -10,17 +10,45 @@ logger = logging.getLogger(__name__)
 CARACAS_TZ = timezone(timedelta(hours=-4))
 
 
-def parse_hora_pago(hora_str: str) -> time:
-    """Parsea una cadena 'HH:MM' a un objeto time. Por defecto 12:00."""
+def format_hora_ampm(hora_str: str) -> str:
+    """Convierte '14:00' a '02:00 PM' o devuelve la cadena limpia."""
     if not hora_str:
-        return time(12, 0)
+        return "02:00 PM"
+    clean = str(hora_str).strip()
+    if "am" in clean.lower() or "pm" in clean.lower():
+        return clean.upper()
     try:
-        parts = hora_str.strip().split(':')
+        parts = clean.split(":")
         h = int(parts[0])
         m = int(parts[1]) if len(parts) > 1 else 0
+        ampm = "PM" if h >= 12 else "AM"
+        h = h % 12
+        if h == 0:
+            h = 12
+        return f"{h:02d}:{m:02d} {ampm}"
+    except Exception:
+        return clean
+
+
+def parse_hora_pago(hora_str: str) -> time:
+    """Parsea una cadena 'HH:MM' o 'HH:MM AM/PM' a un objeto time. Por defecto 14:00."""
+    if not hora_str:
+        return time(14, 0)
+    try:
+        clean = str(hora_str).strip()
+        is_pm = "pm" in clean.lower()
+        is_am = "am" in clean.lower()
+        clean_time = clean.lower().replace("am", "").replace("pm", "").strip()
+        parts = clean_time.split(':')
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
+        if is_pm and h < 12:
+            h += 12
+        elif is_am and h == 12:
+            h = 0
         return time(h, m)
     except Exception:
-        return time(12, 0)
+        return time(14, 0)
 
 
 def check_and_send_colectas_reminders(db, force: bool = False) -> dict:
@@ -55,7 +83,7 @@ def check_and_send_colectas_reminders(db, force: bool = False) -> dict:
             continue
 
         hora_pago_time = parse_hora_pago(c.hora_pago)
-        hora_display = c.hora_pago or "12:00"
+        hora_display = format_hora_ampm(c.hora_pago or "14:00")
 
         # ----------------------------------------------------
         # 1. NOTIFICACIÓN D-1 (El día antes de la fecha de pago)

@@ -27,6 +27,26 @@ router = APIRouter()
 CARACAS_TZ = timezone(timedelta(hours=-4))
 
 
+def format_hora_ampm(hora_str: Optional[str]) -> str:
+    """Convierte '14:00' a '02:00 PM' o devuelve la cadena limpia."""
+    if not hora_str:
+        return "02:00 PM"
+    clean = str(hora_str).strip()
+    if "am" in clean.lower() or "pm" in clean.lower():
+        return clean.upper()
+    try:
+        parts = clean.split(":")
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
+        ampm = "PM" if h >= 12 else "AM"
+        h = h % 12
+        if h == 0:
+            h = 12
+        return f"{h:02d}:{m:02d} {ampm}"
+    except Exception:
+        return clean
+
+
 def _is_colecta_payment_date_reached(colecta: Colecta) -> bool:
     """Verifica si la fecha de pago/liquidación planificada de la colecta ya llegó (hora Venezuela)."""
     if not colecta or not getattr(colecta, "fecha_pago", None):
@@ -92,7 +112,7 @@ class CreateColectaRequest(BaseModel):
     tipo_tasa: str = "bcv"  # bcv, usdt, euro, fija
     tasa_fija_valor: Optional[float] = None
     fecha_pago: date
-    hora_pago: Optional[str] = "12:00"
+    hora_pago: Optional[str] = "14:00"
     fecha_limite_aportes: Optional[date] = None
     beneficiario_nombre: Optional[str] = None
     beneficiario_datos_pago: Optional[Dict[str, Any]] = None
@@ -197,7 +217,7 @@ class ColectaResponse(BaseModel):
     descripcion_gasto: Optional[str] = None
     comprobante_gasto_url: Optional[str] = None
     fecha_pago: date
-    hora_pago: Optional[str] = "12:00"
+    hora_pago: Optional[str] = "14:00"
     fecha_limite_aportes: Optional[date] = None
     estado: str
     motivo_cancelacion: Optional[str] = None
@@ -397,7 +417,7 @@ def _serialize_colecta(colecta: Colecta, current_user_id: int, db: Optional[Sess
         descripcion_gasto=colecta.descripcion_gasto,
         comprobante_gasto_url=colecta.comprobante_gasto_url,
         fecha_pago=colecta.fecha_pago,
-        hora_pago=getattr(colecta, "hora_pago", "12:00") or "12:00",
+        hora_pago=getattr(colecta, "hora_pago", "14:00") or "14:00",
         fecha_limite_aportes=colecta.fecha_limite_aportes,
         estado=estado_str,
         motivo_cancelacion=getattr(colecta, "motivo_cancelacion", None),
@@ -514,7 +534,7 @@ def create_colecta(
         beneficiario_nombre=req.beneficiario_nombre or f"{org_member['user'].first_name} {org_member['user'].last_name or ''}".strip(),
         beneficiario_datos_pago=datos_pago_json,
         fecha_pago=req.fecha_pago,
-        hora_pago=req.hora_pago or "12:00",
+        hora_pago=req.hora_pago or "14:00",
         fecha_limite_aportes=req.fecha_limite_aportes or req.fecha_pago,
         estado=EstadoColecta.PROPUESTA
     )
@@ -530,7 +550,7 @@ def create_colecta(
         f"👤 Proponente: {org_member['user'].first_name}\n"
         f"💵 Meta: <b>${nueva_colecta.monto_meta_usd:,.2f} USD</b> (Bs {meta_ves:,.2f})\n"
         f"📊 Tasa acordada: <b>{nueva_colecta.tipo_tasa.value.upper()}</b> (Ref: Bs {rate_val:,.2f})\n"
-        f"📅 Fecha de pago: {nueva_colecta.fecha_pago} (Hora: {nueva_colecta.hora_pago})\n"
+        f"📅 Fecha de pago: {nueva_colecta.fecha_pago} (Hora: {format_hora_ampm(nueva_colecta.hora_pago)})\n"
         f"📝 <i>{nueva_colecta.proposito}</i>"
     )
     send_telegram_notification(msg)
@@ -899,15 +919,25 @@ def confirm_commitment_payment(
     amt_verified = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.VALIDADO)
     colecta.monto_recaudado_usd = amt_verified
 
-    # Verificar si todos los compromisos activos ya están validados y meta alcanzada
-    activos = [c for c in colecta.compromisos if c.estado != EstadoCompromiso.CANCELADO]
-    todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
-
-    if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
+    # COL-01: Si la recaudación validada alcanza la meta, pasar a CERRADA y liberar promesas sobrantes
+    if colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
         if not colecta.gasto_validado and colecta.estado != EstadoColecta.COMPLETADA:
             colecta.estado = EstadoColecta.CERRADA  # Esperando rendición de cuentas por el beneficiario
         elif colecta.gasto_validado:
             colecta.estado = EstadoColecta.COMPLETADA
+
+        # Liberar compromisos no pagados sobrantes
+        sobrantes = [c for c in colecta.compromisos if c.estado in [EstadoCompromiso.PROMETIDO, EstadoCompromiso.NOTIFICADO]]
+        for s in sobrantes:
+            s.estado = EstadoCompromiso.CANCELADO
+            s.motivo_rechazo = "Meta de colecta alcanzada con aportes de la mutual"
+            s.fecha_cancelacion = utcnow()
+            notify_users(
+                db,
+                [s.socio_id],
+                "Compromiso liberado",
+                f"La colecta '{colecta.titulo}' ya alcanzó el 100% de la meta. Tu promesa voluntaria de ${s.monto_usd:,.2f} USD ha sido liberada."
+            )
 
     db.commit()
     db.refresh(colecta)
@@ -1000,14 +1030,25 @@ def verify_commitment_payment(
     amt_verified = sum(c.monto_usd for c in colecta.compromisos if c.estado == EstadoCompromiso.VALIDADO)
     colecta.monto_recaudado_usd = amt_verified
 
-    # Verificar si todos los compromisos activos ya están validados y meta alcanzada
-    activos = [c for c in colecta.compromisos if c.estado != EstadoCompromiso.CANCELADO]
-    todos_validados = all(c.estado == EstadoCompromiso.VALIDADO for c in activos)
-    if todos_validados and colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
+    # COL-01: Si la recaudación validada alcanza la meta, pasar a CERRADA y liberar promesas sobrantes
+    if colecta.monto_recaudado_usd >= (colecta.monto_meta_usd - 0.001):
         if not colecta.gasto_validado and colecta.estado != EstadoColecta.COMPLETADA:
             colecta.estado = EstadoColecta.CERRADA  # Esperando rendición de cuentas por el beneficiario
         elif colecta.gasto_validado:
             colecta.estado = EstadoColecta.COMPLETADA
+
+        # Liberar compromisos no pagados sobrantes
+        sobrantes = [c for c in colecta.compromisos if c.estado in [EstadoCompromiso.PROMETIDO, EstadoCompromiso.NOTIFICADO]]
+        for s in sobrantes:
+            s.estado = EstadoCompromiso.CANCELADO
+            s.motivo_rechazo = "Meta de colecta alcanzada con aportes de la mutual"
+            s.fecha_cancelacion = utcnow()
+            notify_users(
+                db,
+                [s.socio_id],
+                "Compromiso liberado",
+                f"La colecta '{colecta.titulo}' ya alcanzó el 100% de la meta. Tu promesa voluntaria de ${s.monto_usd:,.2f} USD ha sido liberada."
+            )
 
     db.commit()
     db.refresh(colecta)
