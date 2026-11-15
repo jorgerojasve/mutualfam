@@ -15,6 +15,7 @@ import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { formatVE, parseVEAmount } from '../utils/currency';
+import { formatLocalDate, parseLocalDate } from '../utils/dates';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 
@@ -761,7 +762,7 @@ export default function LoansScreen() {
     setShowDatePicker(false);
     if (selectedDate) {
       setDateObj(selectedDate);
-      setEstimatedDate(selectedDate.toISOString().split('T')[0]);
+      setEstimatedDate(formatLocalDate(selectedDate));
     }
   };
 
@@ -1247,7 +1248,15 @@ export default function LoansScreen() {
               </View>
               
               <Text style={styles.label}>Fecha Límite Sugerida</Text>
-              <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
+              <TouchableOpacity
+                style={styles.input}
+                onPress={() => {
+                  if (estimatedDate) {
+                    setDateObj(parseLocalDate(estimatedDate));
+                  }
+                  setShowDatePicker(true);
+                }}
+              >
                 <Text style={{color: estimatedDate ? '#fff' : '#94a3b8'}}>{estimatedDate || "Tocar para seleccionar fecha"}</Text>
               </TouchableOpacity>
               {showDatePicker && <DateTimePicker value={dateObj} mode="date" display="default" onChange={onDateChange} />}

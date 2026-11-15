@@ -28,3 +28,18 @@ Error de red sin desconexión visual ("Network Error")
   2. En `client.js`: Se incorporó un timeout de 20 segundos a `apiClient` para tolerar el inicio en frío de Fly.io, se añadió un despachador global de estado de red (`setNetworkStateListener`), y se blindó `colectasApi` contra llamadas con identificadores nulos o indefinidos.
   3. En `OrgContext.js`: Se enlazó el listener de conectividad de `client.js` para sincronizar de inmediato `isOffline` con las llamadas a la API.
   4. En `FundsScreen.js`: Se añadieron comprobaciones defensivas de `targetColecta?.id` y manejo de `isOffline` / `connectionError` en todas las operaciones de compromisos, pagos y gastos.
+
+Desfase de un día al seleccionar fecha en el calendario (aparece un día después)
+- Estado: CORREGIDO
+- Causa:
+  1. Al seleccionar una fecha en el selector nativo (`DateTimePicker`), el callback `onDateChange` formateaba la fecha con `selectedDate.toISOString().split('T')[0]`.
+  2. `toISOString()` convierte la fecha a tiempo universal coordinado (UTC). En zonas horarias occidentales como Venezuela (UTC-4), cualquier selección realizada en horas de la noche (después de las 20:00 local, ej. 21:36 en la captura del usuario) suma 4 horas al cruzar la medianoche, pasando al día siguiente en UTC (ej. 22 de noviembre 21:36 local se convertía en 23 de noviembre 01:36 UTC).
+  3. De igual manera, al volver a abrir el selector o inicializar el componente, `new Date("YYYY-MM-DD")` se parseaba en UTC midnight, lo que en hora local retrocedía un día al renderizar.
+- Solución:
+  1. Se creó el módulo de utilidades `src/utils/dates.js` con las funciones:
+     - `formatLocalDate(date)`: extrae el año, mes y día mediante los getters locales (`getFullYear()`, `getMonth() + 1`, `getDate()`) y formatea a `YYYY-MM-DD` sin ninguna conversión UTC.
+     - `parseLocalDate(dateStr)`: parsea de forma segura el string `YYYY-MM-DD` a un objeto `Date` local fijado al mediodía (12:00:00), eliminando cualquier riesgo de desborde horario por zonas horarias o límites de medianoche.
+  2. En `FundsScreen.js` (Colectas) y `LoansScreen.js` (Préstamos):
+     - Se reemplazó todo uso de `selectedDate.toISOString().split('T')[0]` por `formatLocalDate(selectedDate)`.
+     - Al presionar el campo para abrir el calendario, se sincroniza el estado `dateObj` usando `parseLocalDate(fecha)` para que el calendario nativo abra exactamente en la fecha seleccionada.
+
