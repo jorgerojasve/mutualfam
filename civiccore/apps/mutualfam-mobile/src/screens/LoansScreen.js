@@ -266,10 +266,15 @@ export default function LoansScreen() {
       );
       return;
     }
+    const totalRepaid = (c.repayments || []).reduce(
+      (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
+      0
+    );
+    const remaining = Math.max(0, +(c.amount_usd - totalRepaid).toFixed(2));
     setSelectedContrib(c);
     setSelectedLoan(loanItem);
     setNotifyMethod('');
-    setRepayAmount(c.amount_usd.toString());
+    setRepayAmount(remaining > 0 ? remaining.toString() : c.amount_usd.toString());
     setShowRepayModal(true);
   };
 
@@ -639,6 +644,18 @@ export default function LoansScreen() {
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Error', 'Monto inválido'); return;
     }
+    const totalRepaid = (selectedContrib?.repayments || []).reduce(
+      (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
+      0
+    );
+    const remaining = Math.max(0, +((selectedContrib?.amount_usd || 0) - totalRepaid).toFixed(2));
+    if (remaining > 0 && parsedAmount > (remaining + 0.05)) {
+      Alert.alert(
+        'Monto Excedido',
+        `El monto a devolver ($${parsedAmount} USD) no puede exceder el saldo restante pendiente por devolver ($${remaining} USD).`
+      );
+      return;
+    }
     setRepaying(true);
     try {
       let finalReceiptUrl = null;
@@ -893,6 +910,13 @@ export default function LoansScreen() {
                 repaid:        { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
               };
               const cs = csMap[c.status] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: c.status };
+              const totalRepaid = (c.repayments || []).reduce(
+                (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
+                0
+              );
+              const remainingToRepay = Math.max(0, +(c.amount_usd - totalRepaid).toFixed(2));
+              const hasRepayments = c.repayments && c.repayments.length > 0;
+              const canRepayMore = isMine && (c.status === 'verified' || c.status === 'repay_notified') && remainingToRepay > 0;
               return (
                 <View key={c.id} style={[styles.contribCard, { backgroundColor: cs.bg, borderLeftColor: cs.border }]}>
                   {/* Cabecera: nombre + monto + badge de estado */}
@@ -984,6 +1008,14 @@ export default function LoansScreen() {
                     </View>
                   )}
 
+                  {hasRepayments && remainingToRepay > 0 && (
+                    <View style={styles.remainingRepayBox}>
+                      <Text style={styles.remainingRepayText}>
+                        Saldo pendiente por devolver: <Text style={{ fontWeight: 'bold', color: '#facc15' }}>${remainingToRepay} USD</Text>
+                      </Text>
+                    </View>
+                  )}
+
                   {/* Acciones */}
                   <View style={styles.contribActions}>
                     {c.funder_id === user?.id && c.status === 'pledged' && (
@@ -1001,9 +1033,14 @@ export default function LoansScreen() {
                         <Text style={styles.contribActionPrimaryText}>✔ Validar Pago</Text>
                       </TouchableOpacity>
                     )}
-                    {isMine && c.status === 'verified' && (
-                      <TouchableOpacity style={[styles.contribActionPrimary, { backgroundColor: '#b45309' }]} onPress={() => handlePressRepay(c, item)}>
-                        <Text style={styles.contribActionPrimaryText}>↩ Devolver</Text>
+                    {canRepayMore && (
+                      <TouchableOpacity
+                        style={[styles.contribActionPrimary, { backgroundColor: hasRepayments ? '#d97706' : '#b45309' }]}
+                        onPress={() => handlePressRepay(c, item)}
+                      >
+                        <Text style={styles.contribActionPrimaryText}>
+                          {hasRepayments ? '➕ Devolver más' : '↩ Devolver'}
+                        </Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1537,9 +1574,33 @@ export default function LoansScreen() {
               <Text style={styles.modalTitle}>Devolver Dinero</Text>
               
               {selectedContrib && selectedLoan && (
-                <View style={{marginBottom: 15, padding: 10, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8}}>
-                  <Text style={{color: '#f8fafc'}}>Acreedor: <Text style={{fontWeight: 'bold'}}>{selectedContrib.funder_name}</Text></Text>
-                  <Text style={{color: '#94a3b8'}}>Monto original: ${selectedContrib.amount_usd}</Text>
+                <View style={{marginBottom: 15, padding: 12, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 8}}>
+                  <Text style={{color: '#f8fafc', fontSize: 14}}>
+                    Acreedor: <Text style={{fontWeight: 'bold'}}>{selectedContrib.funder_name}</Text>
+                  </Text>
+                  <Text style={{color: '#94a3b8', fontSize: 13, marginTop: 2}}>
+                    Monto original del aporte: <Text style={{fontWeight: '600'}}>${selectedContrib.amount_usd} USD</Text>
+                  </Text>
+                  {(() => {
+                    const totalRepaid = (selectedContrib.repayments || []).reduce(
+                      (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
+                      0
+                    );
+                    const remaining = Math.max(0, +(selectedContrib.amount_usd - totalRepaid).toFixed(2));
+                    if (totalRepaid > 0) {
+                      return (
+                        <View style={{marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)'}}>
+                          <Text style={{color: '#34d399', fontSize: 12.5}}>
+                            Devoluciones previas: ${totalRepaid} USD
+                          </Text>
+                          <Text style={{color: '#facc15', fontSize: 13, fontWeight: '700', marginTop: 2}}>
+                            Saldo pendiente por devolver: ${remaining} USD
+                          </Text>
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
                 </View>
               )}
 
@@ -1966,6 +2027,20 @@ const styles = StyleSheet.create({
   methodBadgeText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  remainingRepayBox: {
+    backgroundColor: 'rgba(250, 204, 21, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(250, 204, 21, 0.25)',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  remainingRepayText: {
+    fontSize: 12.5,
+    color: '#cbd5e1',
   },
   contribActions: {
     flexDirection: 'row',

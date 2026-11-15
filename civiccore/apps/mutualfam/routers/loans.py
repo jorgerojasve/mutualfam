@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import date
 
@@ -546,8 +547,27 @@ def notify_return_payment(
     if not loan or loan.requester_id != org_member["user"].id:
         raise HTTPException(status_code=403, detail="Solo el solicitante del préstamo puede devolver pagos")
         
-    if contrib.status != ContributionStatus.VERIFIED:
+    if contrib.status not in (ContributionStatus.VERIFIED, ContributionStatus.REPAY_NOTIFIED):
         raise HTTPException(status_code=400, detail="Solo se puede devolver aportes que hayan sido validados por ti")
+
+    # Validar monto ya reportado o verificado para permitir devoluciones parciales
+    total_repaid_so_far = db.query(func.sum(LoanRepayment.amount_usd)).filter(
+        LoanRepayment.contribution_id == contrib.id,
+        LoanRepayment.status.in_([RepaymentStatus.PAID, RepaymentStatus.VERIFIED])
+    ).scalar() or 0.0
+
+    remaining = round(contrib.amount_usd - total_repaid_so_far, 2)
+    if remaining <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Este aporte ya cuenta con devoluciones reportadas por el total (${contrib.amount_usd} USD)."
+        )
+
+    if repay.amount_usd > (remaining + 0.05):
+        raise HTTPException(
+            status_code=400,
+            detail=f"El monto a devolver (${repay.amount_usd} USD) excede el saldo restante pendiente por devolver (${remaining} USD)."
+        )
         
     new_repay = LoanRepayment(
         contribution_id=contrib.id,
@@ -622,7 +642,7 @@ def verify_return_payment(
         LoanRepayment.status == RepaymentStatus.VERIFIED
     ).scalar() or 0.0
     
-    if total_verified >= contrib.amount_usd:
+    if total_verified >= (contrib.amount_usd - 0.05):
         contrib.status = ContributionStatus.REPAID
     else:
         pending_repay = db.query(LoanRepayment).filter(
@@ -631,6 +651,8 @@ def verify_return_payment(
         ).first()
         if not pending_repay:
             contrib.status = ContributionStatus.VERIFIED
+        else:
+            contrib.status = ContributionStatus.REPAY_NOTIFIED
         
     db.commit()
     

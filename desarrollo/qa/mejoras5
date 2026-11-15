@@ -3,3 +3,20 @@ No llegan notificaciones, antes llegaban. Revisa los logs, primero se implementa
 Sesión tras limpieza de BD:
 Al limpiar la BD, la app abría en Préstamos porque AsyncStorage conservaba el token y App.js no verificaba /membership/me contra el backend en el arranque; adicionalmente /auth/refresh emitía nuevos access tokens sin verificar si el usuario existía en BD, y el interceptor de client.js no limpiaba la sesión al recibir 401 tras reintento. Corregido en backend (/auth/refresh verifica User) y frontend (forceLogout tras 401/404 y verificación en App.js).
 
+Devolución Parcial de Préstamos y Opción "Devolver +" (v1.1.40):
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Problema Detectado:
+  1. Al notificar una devolución parcial de un aporte de préstamo (ej. devolver $20 de un aporte de $40), el aporte pasaba a estado `repay_notified` y el botón "↩ Devolver" desaparecía por completo.
+  2. El prestatario no tenía manera de realizar devoluciones posteriores ("Devolver +") para completar el monto restante.
+  3. El backend bloqueaba cualquier notificación de devolución posterior si el estado era `repay_notified` ("Solo se puede devolver aportes que hayan sido validados por ti").
+- Solución Implementada:
+  1. Backend (`civiccore/apps/mutualfam/routers/loans.py`):
+     - `notify_return_payment`: Permite notificar devoluciones cuando el aporte está en `VERIFIED` o `REPAY_NOTIFIED`. Calcula el total reportado hasta el momento y valida que el monto a devolver no exceda el saldo restante pendiente.
+     - `verify_return_payment`: Comprueba si el monto total verificado cubre el aporte para marcarlo como `REPAID`. Si aún queda saldo y existen devoluciones pendientes de validar, mantiene `REPAY_NOTIFIED`; si no hay pendientes, lo regresa a `VERIFIED` para permitir continuar abonando.
+  2. Frontend Móvil (`LoansScreen.js`):
+     - Calcula en tiempo real el total devuelto (`totalRepaid`) y el saldo restante (`remainingToRepay`).
+     - Si hay devoluciones previas y queda saldo pendiente, muestra un recuadro con el "Saldo pendiente por devolver: $X USD".
+     - Expone el botón "➕ Devolver más" cuando el aporte está en revisión o validado y aún existe saldo pendiente.
+     - En el modal de devolución, muestra el desglose del aporte original, devoluciones previas y saldo pendiente, precargando automáticamente el saldo restante y validando que no se exceda.
+
+
