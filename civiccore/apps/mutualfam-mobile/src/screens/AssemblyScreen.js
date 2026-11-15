@@ -18,6 +18,7 @@ import {
   Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,6 +37,41 @@ export default function AssemblyScreen({ embedded = false }) {
   const [connectionError, setConnectionError] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Período de gracia de la mutual
+  const [isGraceActive, setIsGraceActive] = useState(false);
+  const [graceTimeLeft, setGraceTimeLeft] = useState('');
+
+  useEffect(() => {
+    if (!activeOrg?.grace_period_ends_at) {
+      setIsGraceActive(false);
+      setGraceTimeLeft('');
+      return;
+    }
+
+    const checkGrace = () => {
+      const now = new Date();
+      const raw = activeOrg.grace_period_ends_at;
+      const endsAtStr = raw.endsWith('Z') ? raw : raw + 'Z';
+      const endsAt = new Date(endsAtStr);
+      const diff = endsAt - now;
+
+      if (diff <= 0) {
+        setIsGraceActive(false);
+        setGraceTimeLeft('');
+      } else {
+        setIsGraceActive(true);
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff / 1000 / 60) % 60);
+        const s = Math.floor((diff / 1000) % 60);
+        setGraceTimeLeft(`${h}h ${m}m ${s}s`);
+      }
+    };
+
+    checkGrace();
+    const interval = setInterval(checkGrace, 1000);
+    return () => clearInterval(interval);
+  }, [activeOrg?.grace_period_ends_at]);
 
   // Visor de Imágenes / Adjuntos del Foro
   const [receiptViewerVisible, setReceiptViewerVisible] = useState(false);
@@ -809,6 +845,43 @@ export default function AssemblyScreen({ embedded = false }) {
         <Text style={styles.emptyText}>
           Selecciona una mutual en la barra superior para acceder a la Asamblea.
         </Text>
+      </View>
+    );
+  }
+
+  if (isGraceActive) {
+    return (
+      <View style={[styles.container, embedded && { paddingHorizontal: 0, backgroundColor: 'transparent' }]}>
+        {!embedded && <ScreenTitle title="🏛️ Asamblea Familiar" />}
+        <ScrollView style={{ flex: 1, marginTop: 8 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.graceLockedCard}>
+            <View style={styles.graceLockedIconBox}>
+              <Text style={styles.graceLockedIcon}>🏛️</Text>
+              <View style={styles.graceLockedBadge}>
+                <Ionicons name="lock-closed" size={14} color="#0f172a" />
+              </View>
+            </View>
+            <Text style={styles.graceLockedTitle}>Asamblea Inhabilitada</Text>
+            <Text style={styles.graceLockedSubtitle}>
+              La Asamblea Familiar se encuentra inhabilitada durante el período de gracia de 24 horas de la mutual.
+            </Text>
+
+            <View style={styles.graceLockedNotice}>
+              <Ionicons name="information-circle-outline" size={20} color="#38bdf8" style={{ marginRight: 8, marginTop: 2 }} />
+              <Text style={styles.graceLockedNoticeText}>
+                Durante este período, el fundador puede invitar directamente a sus familiares desde la sección Miembros sin necesidad de someterlos a asamblea.
+              </Text>
+            </View>
+
+            {graceTimeLeft ? (
+              <View style={styles.graceLockedTimerContainer}>
+                <Ionicons name="time-outline" size={18} color="#fbbf24" style={{ marginRight: 6 }} />
+                <Text style={styles.graceLockedTimerLabel}>Fin del período de gracia en:</Text>
+                <Text style={styles.graceLockedTimerValue}>{graceTimeLeft}</Text>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -2959,5 +3032,91 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 6,
     paddingHorizontal: 10,
+  },
+  graceLockedCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 20,
+  },
+  graceLockedIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    position: 'relative',
+  },
+  graceLockedIcon: {
+    fontSize: 28,
+  },
+  graceLockedBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#fbbf24',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  graceLockedTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#f8fafc',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  graceLockedSubtitle: {
+    fontSize: 13.5,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  graceLockedNotice: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  graceLockedNoticeText: {
+    flex: 1,
+    color: '#bae6fd',
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  graceLockedTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.2)',
+  },
+  graceLockedTimerLabel: {
+    fontSize: 12,
+    color: '#cbd5e1',
+    marginRight: 6,
+  },
+  graceLockedTimerValue: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#fbbf24',
+    fontVariant: ['tabular-nums'],
   },
 });

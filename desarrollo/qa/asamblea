@@ -79,3 +79,20 @@ Desatasco de Votaciones Asamblearias (Opción 3: Cierre Anticipado por Unanimida
      - `phaseAlert` y tarjeta de propuesta: Reflejan el tiempo restante exacto de debate o votación, y notifican si la propuesta fue aprobada por consenso o está lista para computar.
      - Botón "⚖️ Computar y Concluir Votación": Expuesto en el detalle de la propuesta durante la fase de votación, permitiendo computar el resultado oficial bajo demanda.
      - Alerta celebratoria de aprobación inmediata tras el último voto afirmativo unánime.
+
+Inhabilitación de la Asamblea durante el Período de Gracia de Creación de Mutual (v1.1.38).
+- Estado: IMPLEMENTADO Y VERIFICADO
+- Objetivo:
+  Inhabilitar la asamblea familiar (creación de propuestas, debate, votación y deliberación) mientras la mutual se encuentre en su período de gracia de creación (primeras 24 horas tras la creación de la mutual, `grace_period_ends_at` activo).
+- Solución Implementada:
+  1. Backend (`civiccore/apps/mutualfam/routers/gobernanza.py`):
+     - Bloqueo en `proponer_ingreso`: Retorna HTTP 400 informando que la asamblea está inhabilitada durante el período de gracia de 24 horas y que el fundador debe invitar directamente a sus familiares sin pasar por asamblea. Soporta header `X-Bypass-Grace-Period` para tests automatizados.
+     - Bloqueo en `votar_propuesta` y `cerrar_propuesta`: Retorna HTTP 400 si el período de gracia está activo.
+     - Se mantiene 100% intacta toda la lógica y endpoints de expulsión.
+  2. Frontend Móvil (`InviteMembersScreen.js`):
+     - Botón de sub-pestaña `🏛️ Asamblea`: Muestra indicador visual de bloqueo (`🏛️ Asamblea 🔒`) y opacidad reducida mientras dure el período de gracia (`canInvite`).
+     - Al pulsar `🏛️ Asamblea` durante el período de gracia: Muestra alerta modal interactiva explicando el motivo y ofreciendo botón directo *"Invitar Familiares"*.
+     - Renderizado de tarjeta de bloqueo (`graceLockedCard`): Si se visualiza la vista de asamblea durante el período de gracia, presenta tarjeta informativa con candado, contador regresivo en tiempo real y botón *"👥 Ir a Miembros e Invitar"*.
+  3. Frontend Móvil (`AssemblyScreen.js`):
+     - Bloqueo a nivel de pantalla con temporizador en tiempo real (`graceTimeLeft`) y tarjeta `graceLockedCard` mientras `activeOrg.grace_period_ends_at` esté vigente.
+
