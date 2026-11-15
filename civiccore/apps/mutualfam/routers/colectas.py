@@ -47,6 +47,24 @@ def format_hora_ampm(hora_str: Optional[str]) -> str:
         return clean
 
 
+def get_default_hora_pago(fecha_pago: Optional[Any] = None) -> str:
+    """Calcula la hora por defecto. Si la colecta es para hoy (hora Venezuela CARACAS_TZ),
+    coloca por defecto la hora una hora después, redondeando hacia arriba (más tarde) para que queden en cero los minutos (:00).
+    Para fechas futuras, por defecto son las 2:00 PM ('14:00').
+    """
+    today_ve = str(datetime.now(CARACAS_TZ).date())
+    if fecha_pago and str(fecha_pago).split("T")[0].strip() == today_ve:
+        now_ve = datetime.now(CARACAS_TZ)
+        h = now_ve.hour
+        m = now_ve.minute
+        s = now_ve.second
+        target_h = h + 2 if (m > 0 or s > 0) else h + 1
+        if target_h > 23:
+            target_h = 23
+        return f"{target_h:02d}:00"
+    return "14:00"
+
+
 def _is_colecta_payment_date_reached(colecta: Colecta) -> bool:
     """Verifica si la fecha de pago/liquidación planificada de la colecta ya llegó (hora Venezuela)."""
     if not colecta or not getattr(colecta, "fecha_pago", None):
@@ -112,7 +130,7 @@ class CreateColectaRequest(BaseModel):
     tipo_tasa: str = "bcv"  # bcv, usdt, euro, fija
     tasa_fija_valor: Optional[float] = None
     fecha_pago: date
-    hora_pago: Optional[str] = "14:00"
+    hora_pago: Optional[str] = None
     fecha_limite_aportes: Optional[date] = None
     beneficiario_nombre: Optional[str] = None
     beneficiario_datos_pago: Optional[Dict[str, Any]] = None
@@ -217,7 +235,7 @@ class ColectaResponse(BaseModel):
     descripcion_gasto: Optional[str] = None
     comprobante_gasto_url: Optional[str] = None
     fecha_pago: date
-    hora_pago: Optional[str] = "14:00"
+    hora_pago: Optional[str] = None
     fecha_limite_aportes: Optional[date] = None
     estado: str
     motivo_cancelacion: Optional[str] = None
@@ -534,7 +552,7 @@ def create_colecta(
         beneficiario_nombre=req.beneficiario_nombre or f"{org_member['user'].first_name} {org_member['user'].last_name or ''}".strip(),
         beneficiario_datos_pago=datos_pago_json,
         fecha_pago=req.fecha_pago,
-        hora_pago=req.hora_pago or "14:00",
+        hora_pago=req.hora_pago or get_default_hora_pago(req.fecha_pago),
         fecha_limite_aportes=req.fecha_limite_aportes or req.fecha_pago,
         estado=EstadoColecta.PROPUESTA
     )

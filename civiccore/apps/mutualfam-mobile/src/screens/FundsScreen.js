@@ -33,7 +33,7 @@ import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
-import { formatLocalDate, parseLocalDate, formatTimeAMPM } from '../utils/dates';
+import { formatLocalDate, parseLocalDate, formatTimeAMPM, getDefaultHoraPago, getDefaultTimeObj } from '../utils/dates';
 
 const normalizePaymentMethodName = (method) => {
   if (!method) return '';
@@ -365,7 +365,20 @@ export default function FundsScreen() {
     }
     if (selectedDate) {
       setDateObj(selectedDate);
-      setFechaPago(formatLocalDate(selectedDate));
+      const newFecha = formatLocalDate(selectedDate);
+      const prevFecha = fechaPago;
+      setFechaPago(newFecha);
+      const todayStr = formatLocalDate(new Date());
+      if (newFecha === todayStr) {
+        const newHora = getDefaultHoraPago(newFecha);
+        setHoraPago(newHora);
+        setTimeObj(getDefaultTimeObj(newFecha));
+      } else if (prevFecha === todayStr) {
+        setHoraPago('14:00');
+        const defaultT = new Date();
+        defaultT.setHours(14, 0, 0, 0);
+        setTimeObj(defaultT);
+      }
     }
   };
 
@@ -780,6 +793,16 @@ export default function FundsScreen() {
     if (currentUser && !beneficiarioNombre) {
       setBeneficiarioNombre(currentUser.nombre || currentUser.name || `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim());
     }
+    const todayStr = formatLocalDate(new Date());
+    if (!fechaPago) {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      setDateObj(d);
+      setFechaPago(formatLocalDate(d));
+    } else if (fechaPago === todayStr) {
+      setHoraPago(getDefaultHoraPago(fechaPago));
+      setTimeObj(getDefaultTimeObj(fechaPago));
+    }
     setShowRateInfo(false);
     setShowRulesInfo(false);
     setShowPmInfo(false);
@@ -860,7 +883,7 @@ export default function FundsScreen() {
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
-        hora_pago: horaPago || '14:00',
+        hora_pago: horaPago || getDefaultHoraPago(fechaPago),
         beneficiario_nombre: beneficiarioNombre.trim() || undefined,
         beneficiario_datos_pago: (Object.keys(filteredDatosPago).length > 0) ? filteredDatosPago : undefined,
       });
@@ -2633,7 +2656,7 @@ export default function FundsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={{ color: horaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
-                  ⏰ {formatTimeAMPM(horaPago || '14:00')} (Tocar para cambiar hora)
+                  ⏰ {formatTimeAMPM(horaPago || getDefaultHoraPago(fechaPago))} (Tocar para cambiar hora)
                 </Text>
               </TouchableOpacity>
               {showTimePicker && (
