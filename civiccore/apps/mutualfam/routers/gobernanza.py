@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
+import math
 
 from civiccore.core.database import get_db
 from civiccore.modules.membership.models import (
@@ -211,6 +212,59 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
             v_users = db.query(User).filter(User.id.in_(v_ids)).all()
             vetantes_names = [f"{u.first_name} {u.last_name}".strip() for u in v_users]
 
+    # Censo total de miembros activos de la mutual
+    if p.organization_id:
+        total_active_members = db.query(OrganizationMembership).filter(
+            OrganizationMembership.organization_id == p.organization_id,
+            OrganizationMembership.status == MemberStatus.ACTIVE
+        ).count()
+    else:
+        from civiccore.modules.governance.models import Member
+        total_active_members = db.query(Member).count()
+    total_active_members = max(total_active_members, 1)
+
+    votes = db.query(Vote).filter(Vote.proposal_id == p.id).all()
+    total_casted = len(votes)
+    pending_votes = max(0, total_active_members - total_casted)
+
+    deadline_passed = False
+    if p.voting_ends_at:
+        v_end = p.voting_ends_at.replace(tzinfo=timezone.utc) if p.voting_ends_at.tzinfo is None else p.voting_ends_at
+        deadline_passed = (now >= v_end)
+
+    yes_votes = float(getattr(p, "votes_yes", 0.0) or 0.0)
+    no_votes = float(getattr(p, "votes_no", 0.0) or 0.0)
+    abstain_votes = float(getattr(p, "votes_abstain", 0.0) or 0.0)
+
+    # Cálculo riguroso según tipo de propuesta
+    if p.proposal_type == ProposalType.MEMBER_ADMISSION:
+        threshold_ratio = float(ConfigService.get_value(db, "ADMISION_UMBRAL", "0.75"))
+        votes_yes_needed = int(math.ceil(total_active_members * threshold_ratio))
+        veto_enabled = str(ConfigService.get_value(db, "ADMISION_VETO_HABILITADO", "true")).lower() == "true"
+        has_veto = veto_enabled and (no_votes > 0)
+        threshold_reached = (yes_votes >= votes_yes_needed) and (not has_veto)
+        unanimidad_si = (yes_votes >= total_active_members)
+        can_conclude = deadline_passed or (pending_votes == 0) or unanimidad_si
+        threshold_label = f"≥{int(threshold_ratio*100)}% ({votes_yes_needed} de {total_active_members} SÍ) y 0 votos NO"
+    elif p.proposal_type == ProposalType.EXPULSION:
+        threshold_ratio = float(ConfigService.get_value(db, "EXPULSION_UMBRAL_APROBACION", "0.75"))
+        quorum_needed = getattr(p, "quorum_needed", 1)
+        quorum_met = (total_casted >= quorum_needed)
+        total_yes_no = yes_votes + no_votes
+        threshold_reached = quorum_met and (total_yes_no > 0) and ((yes_votes / total_yes_no) >= threshold_ratio)
+        can_conclude = deadline_passed or (pending_votes == 0)
+        votes_yes_needed = int(math.ceil(total_active_members * threshold_ratio))
+        has_veto = False
+        threshold_label = f"≥{int(threshold_ratio*100)}% de votos emitidos (Quórum mín: {quorum_needed})"
+    else:
+        quorum_needed = getattr(p, "quorum_needed", 1)
+        quorum_met = (total_casted >= quorum_needed)
+        threshold_reached = quorum_met and (yes_votes > no_votes)
+        can_conclude = deadline_passed or (pending_votes == 0)
+        votes_yes_needed = int(math.ceil(total_active_members * 0.50))
+        has_veto = False
+        threshold_label = f">50% mayoría simple (Quórum mín: {quorum_needed})"
+
     return {
         "id": p.id,
         "title": p.title,
@@ -232,10 +286,18 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "voting_starts_at": p.voting_starts_at.isoformat() if p.voting_starts_at else None,
         "voting_ends_at": p.voting_ends_at.isoformat() if p.voting_ends_at else None,
-        "votes_yes": getattr(p, "votes_yes", 0.0),
-        "votes_no": getattr(p, "votes_no", 0.0),
+        "votes_yes": yes_votes,
+        "votes_no": no_votes,
         "votes_null": getattr(p, "votes_null", 0.0),
-        "votes_abstain": getattr(p, "votes_abstain", 0.0),
+        "votes_abstain": abstain_votes,
+        "total_active_members": total_active_members,
+        "total_votes_casted": total_casted,
+        "pending_votes": pending_votes,
+        "votes_yes_needed": votes_yes_needed,
+        "threshold_reached": threshold_reached,
+        "threshold_label": threshold_label,
+        "can_conclude": can_conclude,
+        "has_veto": has_veto,
         "quorum_needed": getattr(p, "quorum_needed", 1),
         "my_vote": my_vote,
         "phase_label": phase_label,
@@ -617,6 +679,14 @@ def cerrar_propuesta(
 
     if proposal.status in (ProposalStatus.APPROVED, ProposalStatus.REJECTED):
         return _serialize_proposal(db, proposal, user.id)
+
+    serialized = _serialize_proposal(db, proposal, user.id)
+    if not serialized.get("can_conclude", False):
+        pending = serialized.get("pending_votes", 1)
+        raise HTTPException(
+            status_code=400,
+            detail=f"La votación aún está en curso. Faltan {pending} miembro(s) por emitir su voto y el plazo reglamentario no ha concluido. Cada miembro tiene derecho a deliberar y votar hasta el cierre."
+        )
 
     results = GovernanceService.calculate_proposal_results(db, proposal)
     dispatch_proposal_resolution_notifications(db, proposal, org.id)

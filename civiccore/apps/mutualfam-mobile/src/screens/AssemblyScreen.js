@@ -1201,9 +1201,23 @@ export default function AssemblyScreen({ embedded = false }) {
                       </View>
                     </View>
 
+                    {/* Avance del Censo y Participación */}
+                    <View style={styles.voteProgressStrip}>
+                      <Text style={styles.voteProgressText}>
+                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                        </Text>
+                        {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
+                          ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
+                          : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
+                            ? ' (100% del censo ha votado)'
+                            : ''}
+                      </Text>
+                    </View>
+
                     {proposalDetail.proposal_type === 'member_admission' && (
                       <Text style={styles.ruleNote}>
-                        * Regla de Admisión: Requiere ≥75% de aprobación y cero votos NO (Consenso con Veto).
+                        * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
                       </Text>
                     )}
                     {proposalDetail.proposal_type === 'expulsion' && (
@@ -1248,22 +1262,46 @@ export default function AssemblyScreen({ embedded = false }) {
 
                     {/* Botón para Concluir y Computar Votación */}
                     <View style={styles.concludeContainer}>
-                      <TouchableOpacity
-                        style={styles.concludeBtn}
-                        onPress={handleCerrarPropuesta}
-                        disabled={closingProposal}
-                        activeOpacity={0.8}
-                      >
-                        {closingProposal ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
-                        )}
-                      </TouchableOpacity>
-                      <Text style={styles.concludeNote}>
-                        {proposalDetail.votes_yes >= (proposalDetail.quorum_needed || 1)
-                          ? '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.'
-                          : 'Cierra la asamblea y registra el resultado oficial de la votación.'}
+                      {proposalDetail.can_conclude ? (
+                        <TouchableOpacity
+                          style={styles.concludeBtn}
+                          onPress={handleCerrarPropuesta}
+                          disabled={closingProposal}
+                          activeOpacity={0.8}
+                        >
+                          {closingProposal ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
+                          )}
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
+                        {(() => {
+                          if (proposalDetail.has_veto) {
+                            return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
+                          }
+                          if (proposalDetail.proposal_type === 'member_admission') {
+                            const needed = proposalDetail.votes_yes_needed || 2;
+                            const currentYes = proposalDetail.votes_yes || 0;
+                            const total = proposalDetail.total_active_members || 2;
+                            const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+
+                            if (proposalDetail.threshold_reached && pending === 0) {
+                              return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
+                            }
+                            if (currentYes >= total) {
+                              return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
+                            }
+                            return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                          }
+
+                          if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
+                            return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
+                          }
+                          return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
+                        })()}
                       </Text>
                     </View>
                   </View>
@@ -2207,6 +2245,21 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 11,
     marginTop: 6
+  },
+  voteProgressStrip: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(71, 85, 105, 0.4)',
+  },
+  voteProgressText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   votingActionContainer: {
     backgroundColor: '#0f172a',
