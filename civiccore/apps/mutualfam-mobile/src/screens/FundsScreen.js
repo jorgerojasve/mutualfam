@@ -33,7 +33,7 @@ import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
-import { formatLocalDate, parseLocalDate, formatTimeAMPM, getDefaultHoraPago, getDefaultTimeObj } from '../utils/dates';
+import { formatLocalDate, parseLocalDate, formatTimeAMPM, getDefaultHoraPago, getDefaultTimeObj, formatDateTime } from '../utils/dates';
 import {
   getPersistedPaymentConfig,
   setPersistedPaymentConfig,
@@ -1430,24 +1430,6 @@ export default function FundsScreen() {
     }
   };
 
-  // Helper para formatear fecha y hora en formato legible venezolano
-  const formatDateTime = (dateStr) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
-      return d.toLocaleString('es-VE', {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return '';
-    }
-  };
-
   // Helper para verificar si la fecha planificada de cobro ha llegado o pasado
   const isPlannedDateReached = (fechaPago) => {
     if (!fechaPago) return false;
@@ -1468,14 +1450,32 @@ export default function FundsScreen() {
   const contribStatusMap = {
     prometido:     { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
     notificado:    { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
-    pagado:        { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
-    paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
+    pagado:        { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'Por validar' },
+    paid:          { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'Por validar' },
     validado:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
     verified:      { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
     devuelto:      { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
   };
 
-  const renderGroupStatusBadges = (compromisos) => {
+  const getContribStatusConfig = (estado, isGestor = false) => {
+    const base = contribStatusMap[estado] || {
+      bg: 'rgba(100,116,139,0.08)',
+      border: '#475569',
+      badgeBg: '#334155',
+      badgeText: '#94a3b8',
+      icon: '📋',
+      label: estado,
+    };
+    if (estado === 'pagado' || estado === 'paid') {
+      return {
+        ...base,
+        label: isGestor ? 'Por validar' : 'En revisión por el gestor',
+      };
+    }
+    return base;
+  };
+
+  const renderGroupStatusBadges = (compromisos, isGestor = false) => {
     const counts = {};
     for (const c of compromisos) {
       const key = (c.estado === 'paid' ? 'pagado' : c.estado === 'verified' ? 'validado' : c.estado === 'notificado' ? 'prometido' : c.estado);
@@ -1485,8 +1485,8 @@ export default function FundsScreen() {
     if (keys.length === 1) {
       const st = keys[0];
       const n = counts[st];
-      const cfg = contribStatusMap[st] || contribStatusMap.prometido;
-      const label = n > 1 ? (st === 'prometido' ? `Pendientes (${n})` : st === 'pagado' ? `Por validar (${n})` : st === 'validado' ? `Validados (${n})` : `${cfg.label}s (${n})`) : cfg.label;
+      const cfg = getContribStatusConfig(st, isGestor);
+      const label = n > 1 ? (st === 'prometido' ? `Pendientes (${n})` : st === 'pagado' ? `${isGestor ? 'Por validar' : 'En revisión'} (${n})` : st === 'validado' ? `Validados (${n})` : `${cfg.label}s (${n})`) : cfg.label;
       return (
         <View style={[styles.contribStatusBadge, { backgroundColor: cfg.badgeBg }]}>
           <Text style={{ fontSize: 11 }}>{cfg.icon} </Text>
@@ -1500,7 +1500,7 @@ export default function FundsScreen() {
           <View style={[styles.contribStatusBadge, { backgroundColor: contribStatusMap.pagado.badgeBg }]}>
             <Text style={{ fontSize: 11 }}>{contribStatusMap.pagado.icon} </Text>
             <Text style={[styles.contribStatusBadgeText, { color: contribStatusMap.pagado.badgeText }]}>
-              {counts.pagado} por validar
+              {counts.pagado} {isGestor ? 'por validar' : 'en revisión'}
             </Text>
           </View>
         ) : null}
@@ -1533,9 +1533,9 @@ export default function FundsScreen() {
   };
 
   const renderCompromisoDetails = (comp, colectaItem, isSub = false, index = null) => {
-    const cs = contribStatusMap[comp.estado] || { bg: 'rgba(100,116,139,0.08)', border: '#475569', badgeBg: '#334155', badgeText: '#94a3b8', icon: '📋', label: comp.estado };
-    const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
     const isGestor = currentUser && (currentUser.id === (colectaItem.beneficiario_id || colectaItem.proponente_id));
+    const cs = getContribStatusConfig(comp.estado, isGestor);
+    const initial = comp.socio_name ? comp.socio_name.trim()[0].toUpperCase() : '?';
 
     return (
       <View
@@ -1597,9 +1597,13 @@ export default function FundsScreen() {
           <Text style={[styles.contribTimestampInfo, { color: '#60a5fa' }]}>
             ✅ Validado el {formatDateTime(comp.fecha_validacion)}
           </Text>
-        ) : comp.fecha_notificacion ? (
+        ) : comp.fecha_pago ? (
           <Text style={[styles.contribTimestampInfo, { color: '#facc15' }]}>
-            🕐 Notificado el {formatDateTime(comp.fecha_notificacion)}
+            🕐 Pago notificado el {formatDateTime(comp.fecha_pago)}
+          </Text>
+        ) : comp.fecha_notificacion ? (
+          <Text style={[styles.contribTimestampInfo, { color: '#fb923c' }]}>
+            🔔 Recordatorio enviado el {formatDateTime(comp.fecha_notificacion)}
           </Text>
         ) : null}
 
@@ -1769,6 +1773,40 @@ export default function FundsScreen() {
     );
   };
 
+  // Helper para determinar si una colecta está estancada y requiere rescate/impulso
+  const isColectaStalled = (colectaItem) => {
+    if (!colectaItem) return false;
+    if (colectaItem.estado !== 'propuesta' && colectaItem.estado !== 'activa') return false;
+    const stats = getColectaFinancialStats(colectaItem);
+    if (stats.restanteUsd <= 0) return false;
+
+    // Trigger 1: La fecha planificada de pago ya llegó o pasó
+    if (isPlannedDateReached(colectaItem.fecha_pago)) return true;
+
+    // Trigger 2: Watchdog de tiempo (más de 48 horas creada sin alcanzar la meta)
+    if (colectaItem.created_at) {
+      try {
+        let iso = String(colectaItem.created_at).trim();
+        if (!iso.endsWith('Z') && !/[+-]\d{2}(:?\d{2})?$/.test(iso)) {
+          iso = iso.replace(' ', 'T') + 'Z';
+        }
+        const createdMs = new Date(iso).getTime();
+        if (!isNaN(createdMs) && (Date.now() - createdMs) >= 48 * 3600 * 1000) {
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    // Trigger 3: Quórum de aportantes alcanzado (todos los miembros aportaron pero no se llegó a la meta)
+    const activeMembersCount = activeOrg?.members_count;
+    const totalAportantes = colectaItem.total_aportantes || (colectaItem.compromisos ? new Set(colectaItem.compromisos.map(c => c.socio_id)).size : 0);
+    if (activeMembersCount && activeMembersCount > 1 && totalAportantes >= activeMembersCount) {
+      return true;
+    }
+
+    return false;
+  };
+
   // Render Card de Colecta
   const renderColectaCard = ({ item }) => {
     const badge = getStatusBadge(item.estado, item);
@@ -1776,6 +1814,14 @@ export default function FundsScreen() {
     const isBeneficiary = currentUser && item.beneficiario_id === currentUser.id;
     const isGestor = currentUser && (currentUser.id === (item.beneficiario_id || item.proponente_id));
     const myPledge = item.mi_compromiso;
+    const stats = getColectaFinancialStats(item);
+    const hasAnyCommitment = Boolean((item.mis_compromisos && item.mis_compromisos.length > 0) || myPledge);
+    const hasPendingPayment = Boolean(
+      (myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado')) ||
+      (item.mis_compromisos && item.mis_compromisos.some(c => c.estado === 'prometido' || c.estado === 'notificado'))
+    );
+    const isStalled = isColectaStalled(item);
+    const canPledgeMore = (item.estado === 'propuesta' || item.estado === 'activa') && stats.restanteUsd > 0;
 
     return (
       <View style={styles.card}>
@@ -1860,15 +1906,7 @@ export default function FundsScreen() {
         {/* Estado de mi compromiso si existe (Homologado a Préstamos) */}
         {(() => {
           if (!myPledge) return null;
-          const myPledgeStateConfig = {
-            prometido:  { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
-            notificado: { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
-            pagado:     { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
-            paid:       { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'En validación' },
-            validado:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
-            verified:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
-          };
-          const myCfg = myPledgeStateConfig[myPledge.estado] || myPledgeStateConfig.prometido;
+          const myCfg = getContribStatusConfig(myPledge.estado, isGestor);
 
           return (
             <View style={[styles.myPledgeBox, { backgroundColor: myCfg.bg, borderColor: myCfg.border }]}>
@@ -2043,7 +2081,7 @@ export default function FundsScreen() {
                           </View>
 
                           {/* Resumen de estados */}
-                          {renderGroupStatusBadges(group.compromisos)}
+                          {renderGroupStatusBadges(group.compromisos, isGestor)}
                         </View>
 
                         {/* Botón(es) de Devolución Agrupados por Método de Pago en Colecta Cancelada */}
@@ -2139,27 +2177,38 @@ export default function FundsScreen() {
           </View>
         )}
 
+        {/* Banner de Rescate / Colecta Estancada (Watchdog) */}
+        {isStalled && canPledgeMore && (
+          <View style={styles.stalledColectaBanner}>
+            <View style={styles.stalledBannerHeader}>
+              <Text style={styles.stalledBannerIcon}>⏳</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stalledBannerTitle}>Meta aún no alcanzada</Text>
+                <Text style={styles.stalledBannerDesc}>
+                  Faltan ${formatVE(stats.restanteUsd)} USD para completar esta colecta. Cualquier miembro puede colaborar con un monto extra para alcanzar la meta y desbloquear el fondo.
+                </Text>
+              </View>
+            </View>
+            {!hasPendingPayment && (
+              <TouchableOpacity
+                style={styles.stalledBannerBtn}
+                onPress={() => {
+                  setTargetColecta(item);
+                  setShowPledgeRulesInfo(false);
+                  setShowPledgeModal(true);
+                }}
+              >
+                <Text style={styles.stalledBannerBtnText}>🤝 Aportar para completar meta</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* Botones de acción */}
         <View style={styles.cardActions}>
 
-          {/* Botón Aportar / Aportar más */}
-          {(item.estado === 'propuesta' || item.estado === 'activa') && (
-            <TouchableOpacity
-              style={styles.btnPrimary}
-              onPress={() => {
-                setTargetColecta(item);
-                setShowPledgeRulesInfo(false);
-                setShowPledgeModal(true);
-              }}
-            >
-              <Text style={styles.btnPrimaryText}>
-                {(item.mis_compromisos && item.mis_compromisos.length > 0) || myPledge ? '➕ Aportar más' : '🤝 Aportar'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Botón Pagar Mi Aporte si está prometido o notificado */}
-          {myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado') && (
+          {/* PRIORIDAD 1: Si el usuario tiene pago pendiente, la acción principal es Pagar */}
+          {hasPendingPayment && myPledge && (
             <TouchableOpacity
               style={styles.btnSuccess}
               onPress={() => openPaymentModalForComp(item, myPledge)}
@@ -2168,13 +2217,41 @@ export default function FundsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón Cancelar Mi Aporte (permitido antes de pagado) */}
-          {myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado') && (
+          {/* Cancelar Mi Aporte (permitido antes de pagado) */}
+          {hasPendingPayment && myPledge && (
             <TouchableOpacity
               style={styles.btnDangerOutline}
               onPress={() => handleCancelCommitment(item, myPledge)}
             >
               <Text style={styles.btnDangerOutlineText}>Cancelar aporte</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* PRIORIDAD 2: Si el usuario NO tiene compromisos y la colecta está abierta */}
+          {!hasAnyCommitment && (item.estado === 'propuesta' || item.estado === 'activa') && (
+            <TouchableOpacity
+              style={styles.btnPrimary}
+              onPress={() => {
+                setTargetColecta(item);
+                setShowPledgeRulesInfo(false);
+                setShowPledgeModal(true);
+              }}
+            >
+              <Text style={styles.btnPrimaryText}>🤝 Aportar a la Colecta</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* PRIORIDAD 3: Si el usuario ya aportó, no tiene pagos pendientes, la colecta sigue abierta y NO está en rescate */}
+          {hasAnyCommitment && !hasPendingPayment && canPledgeMore && !isStalled && (
+            <TouchableOpacity
+              style={styles.btnSecondaryOutline}
+              onPress={() => {
+                setTargetColecta(item);
+                setShowPledgeRulesInfo(false);
+                setShowPledgeModal(true);
+              }}
+            >
+              <Text style={styles.btnSecondaryOutlineText}>➕ Aportar monto adicional</Text>
             </TouchableOpacity>
           )}
 
@@ -4459,6 +4536,63 @@ const styles = StyleSheet.create({
     color: '#f87171',
     fontWeight: '600',
     fontSize: 12,
+  },
+  btnSecondaryOutline: {
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnSecondaryOutlineText: {
+    color: '#38bdf8',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  stalledColectaBanner: {
+    backgroundColor: 'rgba(234, 179, 8, 0.10)',
+    borderColor: 'rgba(234, 179, 8, 0.35)',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  stalledBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 8,
+  },
+  stalledBannerIcon: {
+    fontSize: 16,
+    marginTop: 1,
+  },
+  stalledBannerTitle: {
+    color: '#facc15',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  stalledBannerDesc: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  stalledBannerBtn: {
+    backgroundColor: '#ca8a04',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  stalledBannerBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyContainer: {
     alignItems: 'center',

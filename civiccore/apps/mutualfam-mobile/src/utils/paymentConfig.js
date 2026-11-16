@@ -171,3 +171,4 @@ export const loadUserPaymentConfig = async (fallbackConfig = null) => {
 
   return {};
 };
+
