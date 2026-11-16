@@ -18,12 +18,15 @@ import { formatVE, parseVEAmount } from '../utils/currency';
 import { formatLocalDate, parseLocalDate } from '../utils/dates';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
+import CashDeliveryCard from '../components/CashDeliveryCard';
+import CashPayrollInput from '../components/CashPayrollInput';
 import {
   getPersistedPaymentConfig,
   setPersistedPaymentConfig,
   loadUserPaymentConfig,
   hasConfiguredPaymentMethods as checkHasConfiguredPaymentMethods,
   getAvailablePaymentMethods,
+  formatCashPaymentSummary,
 } from '../utils/paymentConfig';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
@@ -73,6 +76,9 @@ export default function LoansScreen() {
   const [notifyMethod, setNotifyMethod] = useState('');
   const [receiptUri, setReceiptUri] = useState(null);
   const [referenceText, setReferenceText] = useState('');
+  const [cashPayroll, setCashPayroll] = useState({});
+  const [cashSerials, setCashSerials] = useState('');
+  const [cashDeliveryNote, setCashDeliveryNote] = useState('');
   const [notifying, setNotifying] = useState(false);
 
   // Devolver dinero
@@ -260,6 +266,9 @@ export default function LoansScreen() {
     setSelectedContrib(c);
     setSelectedLoan(loanItem);
     setNotifyMethod('');
+    setCashPayroll({});
+    setCashSerials('');
+    setCashDeliveryNote('');
     setShowNotifyModal(true);
   };
 
@@ -284,6 +293,9 @@ export default function LoansScreen() {
     setSelectedContrib(c);
     setSelectedLoan(loanItem);
     setNotifyMethod('');
+    setCashPayroll({});
+    setCashSerials('');
+    setCashDeliveryNote('');
     setRepayAmount(remaining > 0 ? remaining.toString() : c.amount_usd.toString());
     setShowRepayModal(true);
   };
@@ -454,6 +466,13 @@ export default function LoansScreen() {
             const tb = userConfig[m];
             return !tb || !tb.banco || !tb.numero_cuenta || String(tb.numero_cuenta).replace(/\D/g, '').length !== 20 || !tb.titular || !tb.cedula;
          }
+         if (m === 'Efectivo USD') {
+            const cash = userConfig[m];
+            if (typeof cash === 'object' && cash !== null) {
+              return !cash.telefono || (!cash.lugar && !cash.zona_entrega);
+            }
+            return !cash || cash.trim() === '';
+         }
          return !userConfig[m] || userConfig[m].trim() === '';
       });
       
@@ -584,15 +603,23 @@ export default function LoansScreen() {
          const uploadRes = await loansApi.uploadFile(receiptUri);
          finalReceiptUrl = uploadRes.url;
       }
+      let finalRef = referenceText.trim();
+      if (notifyMethod === 'Efectivo USD') {
+        const cashSummary = formatCashPaymentSummary(cashPayroll, cashSerials, cashDeliveryNote);
+        finalRef = finalRef || cashSummary.fullNote;
+      }
       await loansApi.notifyPayment(selectedContrib.id, {
         payment_method: notifyMethod,
         receipt_url: finalReceiptUrl,
-        reference_text: referenceText
+        reference_text: finalRef || undefined
       });
       setShowNotifyModal(false);
       setNotifyMethod('');
       setReceiptUri(null);
       setReferenceText('');
+      setCashPayroll({});
+      setCashSerials('');
+      setCashDeliveryNote('');
       setSelectedContrib(null);
       setSelectedLoan(null);
       Alert.alert('¡Notificado!', 'El pago ha sido notificado al receptor.');
@@ -672,17 +699,25 @@ export default function LoansScreen() {
          const uploadRes = await loansApi.uploadFile(receiptUri);
          finalReceiptUrl = uploadRes.url;
       }
+      let finalRef = referenceText.trim();
+      if (notifyMethod === 'Efectivo USD') {
+        const cashSummary = formatCashPaymentSummary(cashPayroll, cashSerials, cashDeliveryNote);
+        finalRef = finalRef || cashSummary.fullNote;
+      }
       await loansApi.notifyRepayment(selectedContrib.id, {
         amount_usd: parsedAmount,
         payment_method: notifyMethod,
         receipt_url: finalReceiptUrl,
-        reference_text: referenceText
+        reference_text: finalRef || undefined
       });
       setShowRepayModal(false);
       setNotifyMethod('');
       setRepayAmount('');
       setReceiptUri(null);
       setReferenceText('');
+      setCashPayroll({});
+      setCashSerials('');
+      setCashDeliveryNote('');
       setSelectedContrib(null);
       setSelectedLoan(null);
       Alert.alert('¡Notificado!', 'Tu devolución ha sido notificada al aportante.');
@@ -1392,7 +1427,10 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {AVAILABLE_PAYMENT_METHODS.map(method => {
                   const isSelected = acceptedMethods.includes(method);
-                  const isDisabled = method !== "Pago Móvil" && method !== "Transferencia Bancaria";
+                  const isDisabled =
+                    method !== "Pago Móvil" &&
+                    method !== "Transferencia Bancaria" &&
+                    method !== "Efectivo USD";
                   return (
                     <TouchableOpacity 
                       key={method} 
@@ -1501,7 +1539,10 @@ export default function LoansScreen() {
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20}}>
                 {(selectedLoan?.accepted_payment_methods?.length > 0 ? selectedLoan.accepted_payment_methods : AVAILABLE_PAYMENT_METHODS).map(method => {
                   const isSelected = notifyMethod === method;
-                  const isDisabled = method !== "Pago Móvil" && method !== "Transferencia Bancaria";
+                  const isDisabled =
+                    method !== "Pago Móvil" &&
+                    method !== "Transferencia Bancaria" &&
+                    method !== "Efectivo USD";
                   return (
                     <TouchableOpacity 
                       key={method} 
@@ -1533,6 +1574,15 @@ export default function LoansScreen() {
                     try {
                       const config = JSON.parse(selectedLoan.requester_payment_methods_json)[notifyMethod];
                       if (!config) return <Text style={{color: '#94a3b8'}}>El solicitante no configuró datos para este método. Deberás coordinar por otro medio.</Text>;
+                      if (notifyMethod === 'Efectivo USD' && typeof config === 'object') {
+                        return (
+                          <CashDeliveryCard
+                            data={config}
+                            montoUsd={selectedContrib?.amount_usd}
+                            recipientName={selectedLoan?.requester_name}
+                          />
+                        );
+                      }
                       if (notifyMethod === 'Transferencia Bancaria' && typeof config === 'object') {
                         const montoBs = effectiveBcvRate ? (selectedContrib?.amount_usd * effectiveBcvRate).toFixed(2) : null;
                         return (
@@ -1621,20 +1671,49 @@ export default function LoansScreen() {
                 </View>
               ) : null}
 
-              <Text style={styles.label}>Referencia (Opcional)</Text>
-              <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
+              {notifyMethod === 'Efectivo USD' ? (
+                <>
+                  <CashPayrollInput
+                    targetAmount={parseFloat(repayAmount) || selectedContrib?.amount_usd || 0}
+                    payroll={cashPayroll}
+                    onPayrollChange={setCashPayroll}
+                    serials={cashSerials}
+                    onSerialsChange={setCashSerials}
+                    deliveryNote={cashDeliveryNote}
+                    onDeliveryNoteChange={setCashDeliveryNote}
+                  />
 
-              <Text style={styles.label}>Comprobante (Opcional)</Text>
-              <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
-              </TouchableOpacity>
-              {receiptUri && (
-                <View style={{ marginBottom: 15 }}>
-                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
-                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
-                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  <Text style={styles.label}>Foto de los billetes o entrega (Opcional)</Text>
+                  <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+                    <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📷 Cambiar Foto de Billetes" : "📎 Adjuntar Foto de Billetes (Opcional)"}</Text>
                   </TouchableOpacity>
-                </View>
+                  {receiptUri && (
+                    <View style={{ marginBottom: 15 }}>
+                      <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                      <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar foto</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.label}>Referencia (Opcional)</Text>
+                  <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
+
+                  <Text style={styles.label}>Comprobante (Opcional)</Text>
+                  <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+                    <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
+                  </TouchableOpacity>
+                  {receiptUri && (
+                    <View style={{ marginBottom: 15 }}>
+                      <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                      <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               )}
               
               <View style={styles.modalActions}>
@@ -1735,6 +1814,15 @@ export default function LoansScreen() {
                     try {
                       const config = JSON.parse(selectedContrib.funder_payment_methods_json)[notifyMethod];
                       if (!config) return <Text style={{color: '#94a3b8'}}>No tiene este método bien configurado.</Text>;
+                      if (notifyMethod === 'Efectivo USD' && typeof config === 'object') {
+                        return (
+                          <CashDeliveryCard
+                            data={config}
+                            montoUsd={repayAmount || selectedContrib?.amount_usd}
+                            recipientName={selectedContrib?.funder_name}
+                          />
+                        );
+                      }
                       if (notifyMethod === 'Transferencia Bancaria' && typeof config === 'object') {
                         const montoBs = effectiveBcvRate && repayAmount ? (parseFloat(repayAmount) * effectiveBcvRate).toFixed(2) : null;
                         return (
@@ -1823,20 +1911,49 @@ export default function LoansScreen() {
                 </View>
               ) : null}
 
-              <Text style={styles.label}>Referencia (Opcional)</Text>
-              <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
+              {notifyMethod === 'Efectivo USD' ? (
+                <>
+                  <CashPayrollInput
+                    targetAmount={parseFloat(repayAmount) || selectedContrib?.amount_usd || 0}
+                    payroll={cashPayroll}
+                    onPayrollChange={setCashPayroll}
+                    serials={cashSerials}
+                    onSerialsChange={setCashSerials}
+                    deliveryNote={cashDeliveryNote}
+                    onDeliveryNoteChange={setCashDeliveryNote}
+                  />
 
-              <Text style={styles.label}>Comprobante (Opcional)</Text>
-              <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
-                <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
-              </TouchableOpacity>
-              {receiptUri && (
-                <View style={{ marginBottom: 15 }}>
-                  <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
-                  <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
-                    <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                  <Text style={styles.label}>Foto de los billetes o entrega (Opcional)</Text>
+                  <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+                    <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📷 Cambiar Foto de Billetes" : "📎 Adjuntar Foto de Billetes (Opcional)"}</Text>
                   </TouchableOpacity>
-                </View>
+                  {receiptUri && (
+                    <View style={{ marginBottom: 15 }}>
+                      <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                      <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar foto</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.label}>Referencia (Opcional)</Text>
+                  <TextInput style={[styles.input, {marginBottom: 10}]} value={referenceText} onChangeText={setReferenceText} placeholder="Ej. Número de referencia o nota" placeholderTextColor="#475569" />
+
+                  <Text style={styles.label}>Comprobante (Opcional)</Text>
+                  <TouchableOpacity style={[styles.input, {alignItems: 'center', backgroundColor: 'rgba(59, 130, 246, 0.1)'}]} onPress={pickImage}>
+                    <Text style={{color: '#60a5fa', fontWeight: 'bold'}}>{receiptUri ? "📎 Cambiar Comprobante" : "📎 Adjuntar Comprobante"}</Text>
+                  </TouchableOpacity>
+                  {receiptUri && (
+                    <View style={{ marginBottom: 15 }}>
+                      <Image source={{ uri: receiptUri }} style={{ width: '100%', height: 160, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.3)' }} resizeMode="contain" />
+                      <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 8, alignSelf: 'center' }}>
+                        <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar comprobante</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               )}
               
               <View style={styles.modalActions}>
