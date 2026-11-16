@@ -24,6 +24,7 @@ import {
   findBankByAccount,
 } from '../utils/banks';
 import theme from '../utils/theme';
+import { getPersistedPaymentConfig, setPersistedPaymentConfig } from '../utils/paymentConfig';
 
 const AVAILABLE_PAYMENT_METHODS = [
   'Pago Móvil',
@@ -132,12 +133,19 @@ export default function PaymentConfigModal({
 
       if (pmRes?.payment_methods_json) {
         try {
-          setPaymentConfig(JSON.parse(pmRes.payment_methods_json));
+          const parsed = JSON.parse(pmRes.payment_methods_json);
+          setPaymentConfig(parsed);
+          await setPersistedPaymentConfig(parsed);
         } catch (_) {
           setPaymentConfig({});
         }
-      } else if (initialConfig) {
+      } else if (initialConfig && Object.keys(initialConfig).length > 0) {
         setPaymentConfig(initialConfig);
+      } else {
+        const cached = await getPersistedPaymentConfig();
+        if (cached && Object.keys(cached).length > 0) {
+          setPaymentConfig(cached);
+        }
       }
 
       if (Array.isArray(banksRes) && banksRes.length > 0) {
@@ -321,6 +329,7 @@ export default function PaymentConfigModal({
 
     setSavingConfig(true);
     try {
+      await setPersistedPaymentConfig(configToSave);
       await loansApi.updatePaymentMethods(JSON.stringify(configToSave));
       setPaymentConfig(configToSave);
       Alert.alert('Guardado', 'Tus datos de pago han sido guardados exitosamente.');

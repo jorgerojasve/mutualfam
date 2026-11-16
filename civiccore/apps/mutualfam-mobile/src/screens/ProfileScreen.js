@@ -61,7 +61,7 @@ export default function ProfileScreen({ navigation }) {
       await unregisterPushNotificationsAsync();
     } catch (_) {}
     await clearOrg();
-    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'cached_user_profile']);
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'cached_user_profile', 'cached_user_payment_methods']);
     navigation.reset({
       index: 0,
       routes: [{ name: 'Login' }],

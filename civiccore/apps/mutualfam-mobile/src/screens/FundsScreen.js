@@ -34,6 +34,13 @@ import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
 import { VENEZUELAN_BANKS, getBankLabel } from '../utils/banks';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../utils/currency';
 import { formatLocalDate, parseLocalDate, formatTimeAMPM, getDefaultHoraPago, getDefaultTimeObj } from '../utils/dates';
+import {
+  getPersistedPaymentConfig,
+  setPersistedPaymentConfig,
+  loadUserPaymentConfig,
+  hasConfiguredPaymentMethods as checkHasConfiguredPaymentMethods,
+  getAvailablePaymentMethods as checkGetAvailablePaymentMethods,
+} from '../utils/paymentConfig';
 
 const normalizePaymentMethodName = (method) => {
   if (!method) return '';
@@ -395,7 +402,18 @@ export default function FundsScreen() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [userPaymentConfig, setUserPaymentConfig] = useState(null);
+  const [paymentConfigLoaded, setPaymentConfigLoaded] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
+
+  // Cargar métodos de pago guardados en persistencia inmediatamente al montar
+  useEffect(() => {
+    getPersistedPaymentConfig().then((cached) => {
+      if (cached && Object.keys(cached).length > 0) {
+        setUserPaymentConfig(cached);
+      }
+      setPaymentConfigLoaded(true);
+    });
+  }, []);
 
   const copyField = async (fieldKey, value) => {
     if (!value) return;
@@ -489,13 +507,15 @@ export default function FundsScreen() {
 
   const fetchUserPaymentConfig = async () => {
     try {
-      const res = await loansApi.getPaymentMethods();
-      const parsed = JSON.parse(res?.payment_methods_json || '{}');
-      setUserPaymentConfig(parsed);
-      return parsed;
+      const config = await loadUserPaymentConfig(userPaymentConfig);
+      if (config && Object.keys(config).length > 0) {
+        setUserPaymentConfig(config);
+      }
+      setPaymentConfigLoaded(true);
+      return config;
     } catch (e) {
       console.warn('Error loading user payment config in FundsScreen', e);
-      return {};
+      return userPaymentConfig || {};
     }
   };
 
@@ -2330,7 +2350,7 @@ export default function FundsScreen() {
         )}
       </View>
 
-      {!hasConfiguredPaymentMethods(userPaymentConfig) && (
+      {!isOffline && !connectionError && paymentConfigLoaded && !hasConfiguredPaymentMethods(userPaymentConfig) && (
         <TouchableOpacity
           style={styles.missingPmBanner}
           onPress={handleOpenConfig}
@@ -4043,7 +4063,10 @@ export default function FundsScreen() {
       <PaymentConfigModal
         visible={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSuccess={(savedConfig) => setUserPaymentConfig(savedConfig)}
+        onSuccess={(savedConfig) => {
+          setUserPaymentConfig(savedConfig);
+          setPaymentConfigLoaded(true);
+        }}
         initialConfig={userPaymentConfig}
       />
     </View>
