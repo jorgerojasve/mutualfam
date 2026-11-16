@@ -90,6 +90,9 @@ def user_has_payment_methods(user_id: int, db: Session) -> bool:
                 cuenta_clean = str(val.get("numero_cuenta") or "").replace(" ", "").replace("-", "")
                 if val.get("banco") and len(cuenta_clean) == 20 and val.get("cedula") and val.get("titular"):
                     return True
+            elif method in ["Efectivo USD", "efectivo_usd", "Efectivo"] and isinstance(val, dict):
+                if val.get("telefono") and (val.get("lugar") or val.get("zona_entrega")):
+                    return True
             elif isinstance(val, str) and val.strip():
                 return True
             elif isinstance(val, dict) and bool(val):

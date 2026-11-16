@@ -26,6 +26,8 @@ import { fundsApi, colectasApi, loansApi, authApi, baseURL } from '../api/client
 import ScreenTitle from '../components/ScreenTitle';
 import PaymentConfigModal from '../components/PaymentConfigModal';
 import BankTransferCard from '../components/BankTransferCard';
+import CashDeliveryCard from '../components/CashDeliveryCard';
+import CashPayrollInput from '../components/CashPayrollInput';
 import { OrgContext } from '../context/OrgContext';
 import { subscribeRealtime } from '../utils/realtime';
 import { getErrorMessage, isNetworkError } from '../utils/errors';
@@ -40,6 +42,7 @@ import {
   loadUserPaymentConfig,
   hasConfiguredPaymentMethods as checkHasConfiguredPaymentMethods,
   getAvailablePaymentMethods as checkGetAvailablePaymentMethods,
+  formatCashPaymentSummary,
 } from '../utils/paymentConfig';
 
 const normalizePaymentMethodName = (method) => {
@@ -399,6 +402,9 @@ export default function FundsScreen() {
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [receiptUri, setReceiptUri] = useState(null);
+  const [cashPayroll, setCashPayroll] = useState({});
+  const [cashSerials, setCashSerials] = useState('');
+  const [cashDeliveryNote, setCashDeliveryNote] = useState('');
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [userPaymentConfig, setUserPaymentConfig] = useState(null);
@@ -1069,14 +1075,24 @@ export default function FundsScreen() {
       }
 
       const compromisoId = activeComp.id;
+      const isEfectivoUsd = normalizePaymentMethodName(selectedMethod) === 'Efectivo USD';
+      let refToSave = paymentRef.trim() || undefined;
+      let noteToSave = paymentNote.trim() || undefined;
+
+      if (isEfectivoUsd) {
+        const cashSummary = formatCashPaymentSummary(cashPayroll, cashSerials, cashDeliveryNote);
+        refToSave = refToSave || cashSummary.shortRef;
+        noteToSave = cashSummary.fullNote;
+      }
+
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, {
         payment_method: selectedMethod,
         codigo_banco: undefined,
-        referencia_pago: isBeneficiarySelf ? 'Aporte directo de quien gestiona' : (paymentRef.trim() || undefined),
+        referencia_pago: isBeneficiarySelf ? 'Aporte directo de quien gestiona' : refToSave,
         comprobante_url: isBeneficiarySelf ? undefined : finalComprobanteUrl,
         nota_pago: isBeneficiarySelf
           ? (isHardCurrencyMethod(selectedMethod) ? 'Aporte propio directo en moneda dura' : 'Aporte propio directo')
-          : (paymentNote.trim() || undefined),
+          : noteToSave,
       });
 
       setShowPaymentModal(false);
@@ -1086,6 +1102,9 @@ export default function FundsScreen() {
       setPaymentRef('');
       setPaymentNote('');
       setReceiptUri(null);
+      setCashPayroll({});
+      setCashSerials('');
+      setCashDeliveryNote('');
       setTargetColecta(null);
       setTargetCompromiso(null);
       setConnectionError(false);
@@ -1295,6 +1314,9 @@ export default function FundsScreen() {
     setShowSelfPledgeInfo(false);
     setShowEarlyBsSelfInfo(false);
     setShowEarlyBsPaymentInfo(false);
+    setCashPayroll({});
+    setCashSerials('');
+    setCashDeliveryNote('');
     setShowPaymentModal(true);
   };
 
@@ -2840,7 +2862,10 @@ export default function FundsScreen() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   {AVAILABLE_PAYMENT_METHODS.map((method) => {
                     const isSelected = colectaAcceptedMethods.includes(method);
-                    const isDisabled = method !== 'Pago Móvil' && method !== 'Transferencia Bancaria';
+                    const isDisabled =
+                      method !== 'Pago Móvil' &&
+                      method !== 'Transferencia Bancaria' &&
+                      method !== 'Efectivo USD';
                     return (
                       <TouchableOpacity
                         key={method}
@@ -3410,8 +3435,17 @@ export default function FundsScreen() {
                           />
                         )}
 
-                        {/* Otros métodos registrados (Binance, Efectivo, etc.) */}
-                        {!isPagoMovil && !isTransferencia && (
+                        {/* Tarjeta de Datos para Entrega de Efectivo USD */}
+                        {selectedNormalized === 'Efectivo USD' && (
+                          <CashDeliveryCard
+                            data={getBeneficiaryMethodData(targetColecta.beneficiario_datos_pago, 'Efectivo USD')}
+                            montoUsd={formatVE(activeComp?.monto_usd)}
+                            recipientName={targetColecta.beneficiario_nombre}
+                          />
+                        )}
+
+                        {/* Otros métodos registrados (Binance, Efectivo Bolívares, etc.) */}
+                        {!isPagoMovil && !isTransferencia && selectedNormalized !== 'Efectivo USD' && (
                           <View style={styles.pmCard}>
                             <Text style={styles.pmCardTitle}>💳 Datos de {selectedNormalized}</Text>
                             {(() => {
@@ -3437,48 +3471,62 @@ export default function FundsScreen() {
                     );
                   })()}
 
-                  {/* Comentado: No se solicita banco emisor para agilizar el pago de aportes
-                  {(normalizePaymentMethodName(paymentMethod) === 'Pago Móvil' || normalizePaymentMethodName(paymentMethod) === 'Transferencia Bancaria') && (
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={styles.inputLabel}>Tu Banco Emisor (Venezuela)</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginVertical: 4 }}>
-                        {VENEZUELAN_BANKS.slice(0, 8).map((b) => (
-                          <TouchableOpacity
-                            key={b.code}
-                            style={[styles.rateTypeBtn, paymentBankCode === b.code && styles.rateTypeBtnActive, { marginRight: 6 }]}
-                            onPress={() => setPaymentBankCode(b.code)}
-                          >
-                            <Text style={[styles.rateTypeBtnText, paymentBankCode === b.code && styles.rateTypeBtnTextActive]}>
-                              {b.name.replace('Banco ', '')} ({b.code})
-                            </Text>
+                  {selectedNormalized === 'Efectivo USD' ? (
+                    <>
+                      <CashPayrollInput
+                        targetAmount={activeComp?.monto_usd || 0}
+                        payroll={cashPayroll}
+                        onPayrollChange={setCashPayroll}
+                        serials={cashSerials}
+                        onSerialsChange={setCashSerials}
+                        deliveryNote={cashDeliveryNote}
+                        onDeliveryNoteChange={setCashDeliveryNote}
+                      />
+
+                      <Text style={styles.inputLabel}>Foto de los billetes o comprobante (Opcional)</Text>
+                      <TouchableOpacity
+                        style={styles.btnUpload}
+                        onPress={() => pickImage((uri) => setReceiptUri(uri))}
+                      >
+                        <Text style={styles.btnUploadText}>
+                          {receiptUri ? '📷 Cambiar Foto de Billetes' : '📎 Adjuntar Foto de Billetes (Opcional)'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {receiptUri && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Image source={{ uri: receiptUri }} style={styles.receiptPreviewImage} />
+                          <TouchableOpacity onPress={() => setReceiptUri(null)} style={{ marginTop: 6, alignSelf: 'center' }}>
+                            <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '600' }}>🗑️ Quitar foto</Text>
                           </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                  */}
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.inputLabel}>Número de Referencia Bancaria</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={paymentRef}
+                        onChangeText={setPaymentRef}
+                        placeholder="Ej: 987654"
+                        placeholderTextColor="#64748b"
+                      />
 
-                  <Text style={styles.inputLabel}>Número de Referencia Bancaria</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={paymentRef}
-                    onChangeText={setPaymentRef}
-                    placeholder="Ej: 987654"
-                    placeholderTextColor="#64748b"
-                  />
+                      <Text style={styles.inputLabel}>Comprobante (Captura o Foto)</Text>
+                      <TouchableOpacity
+                        style={styles.btnUpload}
+                        onPress={() => pickImage((uri) => setReceiptUri(uri))}
+                      >
+                        <Text style={styles.btnUploadText}>
+                          {receiptUri ? '📷 Cambiar Comprobante' : '📎 Adjuntar Comprobante'}
+                        </Text>
+                      </TouchableOpacity>
 
-                  <Text style={styles.inputLabel}>Comprobante (Captura o Foto)</Text>
-                  <TouchableOpacity
-                    style={styles.btnUpload}
-                    onPress={() => pickImage((uri) => setReceiptUri(uri))}
-                  >
-                    <Text style={styles.btnUploadText}>
-                      {receiptUri ? '📷 Cambiar Comprobante' : '📎 Adjuntar Comprobante'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {receiptUri && (
-                    <Image source={{ uri: receiptUri }} style={styles.receiptPreviewImage} />
+                      {receiptUri && (
+                        <Image source={{ uri: receiptUri }} style={styles.receiptPreviewImage} />
+                      )}
+                    </>
                   )}
                     </>
                   )}

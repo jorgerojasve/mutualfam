@@ -995,8 +995,10 @@ def confirm_commitment_payment(
             f"🎯 Colecta: <b>{colecta.titulo}</b>\n"
             f"👤 {org_member['user'].first_name} notificó su pago de <b>${compromiso.monto_usd:,.2f} USD</b>.\n"
             f"Ref: <code>{req.referencia_pago or 'N/A'}</code>\n"
-            f"Total validado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
         )
+        if req.nota_pago and req.nota_pago != req.referencia_pago:
+            msg_pago += f"📝 Detalle: <i>{req.nota_pago}</i>\n"
+        msg_pago += f"Total validado: ${colecta.monto_recaudado_usd:,.2f} / ${colecta.monto_meta_usd:,.2f} USD."
 
     if compromiso.comprobante_url:
         import os

@@ -77,6 +77,21 @@ export const getDocTypeInfo = (tipo) => {
   return DOCUMENT_TYPES[0];
 };
 
+export const CASH_USD_TYPICAL_CONDITIONS = [
+  'Billetes en buen estado (sin roturas, manchas ni rayones)',
+  'Monto exacto (no se dispone de vuelto en divisas)',
+  'Series posteriores a 2013 (azules)',
+  'Acepto billetes de cualquier denominación ($1 a $100)',
+  'Preferiblemente billetes de $10, $20 o $50',
+];
+
+export const CASH_USD_QUICK_SCHEDULES = [
+  'Lunes a Viernes (9:00 am - 4:00 pm)',
+  'Fines de semana previa cita',
+  'Horario corrido (8:30 am - 5:30 pm)',
+  'A convenir por WhatsApp',
+];
+
 export default function PaymentConfigModal({
   visible,
   onClose,
@@ -92,6 +107,7 @@ export default function PaymentConfigModal({
   const [bankSearch, setBankSearch] = useState('');
   const [pmErrors, setPmErrors] = useState({});
   const [tbErrors, setTbErrors] = useState({});
+  const [usdErrors, setUsdErrors] = useState({});
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [docPickerTarget, setDocPickerTarget] = useState(null);
   const configScrollRef = useRef(null);
@@ -120,6 +136,7 @@ export default function PaymentConfigModal({
       setBankSearch('');
       setPmErrors({});
       setTbErrors({});
+      setUsdErrors({});
     }
   }, [visible]);
 
@@ -279,6 +296,59 @@ export default function PaymentConfigModal({
       return;
     }
 
+    if (selectedConfigMethod === 'Efectivo USD') {
+      const usd = typeof paymentConfig['Efectivo USD'] === 'object' && paymentConfig['Efectivo USD'] !== null
+        ? paymentConfig['Efectivo USD']
+        : {};
+      const telefono = (usd.telefono || '').trim().replace(/[-\s]/g, '');
+      const lugar = (usd.lugar || usd.zona_entrega || '').trim();
+      const horario = (usd.horario || '').trim();
+      const condiciones = Array.isArray(usd.condiciones) ? usd.condiciones : [];
+      const notas = (usd.notas || '').trim();
+
+      const isEmpty = !telefono && !lugar && !horario && condiciones.length === 0 && !notas;
+      if (isEmpty) {
+        setUsdErrors({});
+        const updatedConfig = { ...paymentConfig };
+        delete updatedConfig['Efectivo USD'];
+        setPaymentConfig(updatedConfig);
+        setSelectedConfigMethod(null);
+        return;
+      }
+
+      const errors = {};
+      if (!telefono) {
+        errors.telefono = 'Ingresa el teléfono o WhatsApp para coordinar la entrega.';
+      } else if (telefono.replace(/\D/g, '').length < 10) {
+        errors.telefono = 'El teléfono debe tener al menos 10 dígitos (ej. 04141234567).';
+      }
+
+      if (!lugar) {
+        errors.lugar = 'Ingresa el lugar o zona de preferencia para la entrega.';
+      } else if (lugar.length < 3) {
+        errors.lugar = 'Indica una zona o lugar válido (al menos 3 caracteres).';
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setUsdErrors(errors);
+        return;
+      }
+
+      setUsdErrors({});
+      setPaymentConfig({
+        ...paymentConfig,
+        'Efectivo USD': {
+          telefono: (usd.telefono || '').trim(),
+          lugar,
+          horario: horario || undefined,
+          condiciones: condiciones.length > 0 ? condiciones : undefined,
+          notas: notas || undefined,
+        },
+      });
+      setSelectedConfigMethod(null);
+      return;
+    }
+
     setSelectedConfigMethod(null);
   };
 
@@ -320,6 +390,20 @@ export default function PaymentConfigModal({
             return;
           }
         }
+      } else if (method === 'Efectivo USD') {
+        const usd = configToSave['Efectivo USD'];
+        if (typeof usd === 'object' && usd !== null) {
+          const isEmpty = !usd.telefono && !usd.lugar && !usd.zona_entrega && !usd.horario && !usd.notas;
+          if (isEmpty) {
+            delete configToSave['Efectivo USD'];
+          } else if (!usd.telefono || (!usd.lugar && !usd.zona_entrega)) {
+            Alert.alert(
+              'Incompleto',
+              'Por favor completa al menos el teléfono y lugar de entrega para Efectivo USD, o déjalos en blanco para eliminar el método.'
+            );
+            return;
+          }
+        }
       } else {
         if (!configToSave[method] || configToSave[method].trim() === '') {
           delete configToSave[method];
@@ -351,6 +435,7 @@ export default function PaymentConfigModal({
       setSelectedConfigMethod(null);
       setPmErrors({});
       setTbErrors({});
+      setUsdErrors({});
       setDocPickerTarget(null);
     } else {
       if (onClose) onClose();
@@ -403,7 +488,9 @@ export default function PaymentConfigModal({
                 {AVAILABLE_PAYMENT_METHODS.map((method) => {
                   const isConfigured = !!paymentConfig[method];
                   const isDisabled =
-                    method !== 'Pago Móvil' && method !== 'Transferencia Bancaria';
+                    method !== 'Pago Móvil' &&
+                    method !== 'Transferencia Bancaria' &&
+                    method !== 'Efectivo USD';
                   return (
                     <TouchableOpacity
                       key={method}
@@ -430,6 +517,8 @@ export default function PaymentConfigModal({
                           <Ionicons name="phone-portrait-outline" size={17} color="#38bdf8" />
                         ) : method === 'Transferencia Bancaria' ? (
                           <Ionicons name="swap-horizontal" size={19} color="#818cf8" />
+                        ) : method === 'Efectivo USD' ? (
+                          <Ionicons name="cash-outline" size={18} color="#10b981" />
                         ) : (
                           <Ionicons name="card-outline" size={17} color="#94a3b8" />
                         )}
@@ -1062,6 +1151,170 @@ export default function PaymentConfigModal({
                       <Text style={styles.errorText}>{tbErrors.email}</Text>
                     )}
                   </View>
+                ) : selectedConfigMethod === 'Efectivo USD' ? (
+                  <View>
+                    <View style={styles.usdHelpCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Ionicons name="cash-outline" size={17} color="#10b981" />
+                        <Text style={styles.usdHelpCardTitle}>Recepción de Dólares en Efectivo</Text>
+                      </View>
+                      <Text style={styles.usdHelpCardText}>
+                        Ingresa los datos para que quienes te transfieran o aporten puedan coordinar la entrega física del dinero en mano de forma segura.
+                      </Text>
+                    </View>
+
+                    <Text style={styles.label}>Teléfono o WhatsApp para coordinar *</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        usdErrors.telefono && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      keyboardType="phone-pad"
+                      value={paymentConfig['Efectivo USD']?.telefono || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Efectivo USD': {
+                            ...(paymentConfig['Efectivo USD'] || {}),
+                            telefono: text,
+                          },
+                        });
+                        if (usdErrors.telefono) setUsdErrors((prev) => ({ ...prev, telefono: null }));
+                      }}
+                      placeholder="Ej: 04141234567"
+                      placeholderTextColor="#475569"
+                    />
+                    {usdErrors.telefono && (
+                      <Text style={styles.errorText}>{usdErrors.telefono}</Text>
+                    )}
+
+                    <Text style={styles.label}>Lugar o Zona de Entrega de Preferencia *</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        usdErrors.lugar && {
+                          borderColor: '#ef4444',
+                          borderWidth: 1.5,
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                        },
+                      ]}
+                      value={paymentConfig['Efectivo USD']?.lugar || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Efectivo USD': {
+                            ...(paymentConfig['Efectivo USD'] || {}),
+                            lugar: text,
+                          },
+                        });
+                        if (usdErrors.lugar) setUsdErrors((prev) => ({ ...prev, lugar: null }));
+                      }}
+                      placeholder="Ej: Chacao / C.C. Líder / Mi domicilio"
+                      placeholderTextColor="#475569"
+                    />
+                    {usdErrors.lugar && (
+                      <Text style={styles.errorText}>{usdErrors.lugar}</Text>
+                    )}
+
+                    <Text style={styles.label}>Horario y Días Disponibles (Opcional)</Text>
+                    <View style={styles.usdChipsWrap}>
+                      {CASH_USD_QUICK_SCHEDULES.map((sched) => {
+                        const isCurrent = (paymentConfig['Efectivo USD']?.horario || '') === sched;
+                        return (
+                          <TouchableOpacity
+                            key={sched}
+                            style={[styles.usdChip, isCurrent && styles.usdChipActive]}
+                            onPress={() => {
+                              setPaymentConfig({
+                                ...paymentConfig,
+                                'Efectivo USD': {
+                                  ...(paymentConfig['Efectivo USD'] || {}),
+                                  horario: isCurrent ? '' : sched,
+                                },
+                              });
+                            }}
+                          >
+                            <Text style={[styles.usdChipText, isCurrent && styles.usdChipTextActive]}>
+                              {sched}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={paymentConfig['Efectivo USD']?.horario || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Efectivo USD': {
+                            ...(paymentConfig['Efectivo USD'] || {}),
+                            horario: text,
+                          },
+                        });
+                      }}
+                      placeholder="O escribe un horario personalizado..."
+                      placeholderTextColor="#475569"
+                    />
+
+                    <Text style={styles.label}>Condiciones de los Billetes (Opcional)</Text>
+                    <Text style={{ color: '#64748b', fontSize: 11.5, marginBottom: 6 }}>
+                      Toca para activar o desactivar las políticas que exiges para recibir efectivo:
+                    </Text>
+                    <View style={styles.usdChipsWrap}>
+                      {CASH_USD_TYPICAL_CONDITIONS.map((cond) => {
+                        const currentConds = Array.isArray(paymentConfig['Efectivo USD']?.condiciones)
+                          ? paymentConfig['Efectivo USD'].condiciones
+                          : [];
+                        const isSelected = currentConds.includes(cond);
+                        return (
+                          <TouchableOpacity
+                            key={cond}
+                            style={[styles.usdChip, isSelected && styles.usdChipActive]}
+                            onPress={() => {
+                              const nextConds = isSelected
+                                ? currentConds.filter((c) => c !== cond)
+                                : [...currentConds, cond];
+                              setPaymentConfig({
+                                ...paymentConfig,
+                                'Efectivo USD': {
+                                  ...(paymentConfig['Efectivo USD'] || {}),
+                                  condiciones: nextConds,
+                                },
+                              });
+                            }}
+                          >
+                            <Text style={[styles.usdChipText, isSelected && styles.usdChipTextActive]}>
+                              {isSelected ? '✓ ' : '+ '}
+                              {cond}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.label}>Notas o Instrucciones Adicionales (Opcional)</Text>
+                    <TextInput
+                      style={[styles.input, { height: 75, textAlignVertical: 'top' }]}
+                      multiline
+                      value={paymentConfig['Efectivo USD']?.notas || ''}
+                      onChangeText={(text) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Efectivo USD': {
+                            ...(paymentConfig['Efectivo USD'] || {}),
+                            notas: text,
+                          },
+                        });
+                      }}
+                      placeholder="Ej: Confirmar antes de salir al punto de encuentro..."
+                      placeholderTextColor="#475569"
+                    />
+                  </View>
                 ) : (
                   <View>
                     <Text style={styles.label}>Detalles de {selectedConfigMethod}</Text>
@@ -1405,5 +1658,49 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#475569',
+  },
+  usdHelpCard: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    marginBottom: 14,
+  },
+  usdHelpCardTitle: {
+    color: '#34d399',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  usdHelpCardText: {
+    color: '#cbd5e1',
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  usdChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  usdChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  usdChipActive: {
+    borderColor: '#10b981',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  usdChipText: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  usdChipTextActive: {
+    color: '#34d399',
+    fontWeight: '700',
   },
 });
