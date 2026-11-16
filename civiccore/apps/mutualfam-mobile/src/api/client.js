@@ -69,7 +69,7 @@ apiClient.interceptors.request.use(
 
 const forceLogout = async () => {
   try {
-    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'active_org_id', 'org_id']);
+    await AsyncStorage.multiRemove(['jwt_token', 'refresh_token', 'active_org_id', 'org_id', 'cached_user_payment_methods']);
     const { navigationRef } = require('../../App');
     if (navigationRef.isReady()) {
       navigationRef.reset({

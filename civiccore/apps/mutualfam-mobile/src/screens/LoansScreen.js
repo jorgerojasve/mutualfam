@@ -18,6 +18,13 @@ import { formatVE, parseVEAmount } from '../utils/currency';
 import { formatLocalDate, parseLocalDate } from '../utils/dates';
 import theme from '../utils/theme';
 import { OfflineEmptyState, OfflineNotice } from '../components/OfflineNotice';
+import {
+  getPersistedPaymentConfig,
+  setPersistedPaymentConfig,
+  loadUserPaymentConfig,
+  hasConfiguredPaymentMethods as checkHasConfiguredPaymentMethods,
+  getAvailablePaymentMethods,
+} from '../utils/paymentConfig';
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
@@ -83,6 +90,7 @@ export default function LoansScreen() {
   // Configurar Métodos de Pago
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [paymentConfig, setPaymentConfig] = useState({});
+  const [paymentConfigLoaded, setPaymentConfigLoaded] = useState(false);
   const [banks, setBanks] = useState(VENEZUELAN_BANKS);
   const [copiedField, setCopiedField] = useState(null);
   const [bcvRate, setBcvRate] = useState(null);
@@ -90,6 +98,16 @@ export default function LoansScreen() {
   const [isBcvOutdated, setIsBcvOutdated] = useState(false);
   const [manualBcvRate, setManualBcvRate] = useState('');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Cargar métodos de pago guardados en persistencia inmediatamente al montar
+  useEffect(() => {
+    getPersistedPaymentConfig().then((cached) => {
+      if (cached && Object.keys(cached).length > 0) {
+        setPaymentConfig(cached);
+      }
+      setPaymentConfigLoaded(true);
+    });
+  }, []);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -147,35 +165,20 @@ export default function LoansScreen() {
 
   const fetchPaymentConfig = async () => {
     try {
-      const res = await loansApi.getPaymentMethods();
-      const parsed = JSON.parse(res.payment_methods_json || "{}");
-      setPaymentConfig(parsed);
-      return parsed;
+      const config = await loadUserPaymentConfig(paymentConfig);
+      if (config && Object.keys(config).length > 0) {
+        setPaymentConfig(config);
+      }
+      setPaymentConfigLoaded(true);
+      return config;
     } catch (e) {
       console.warn("Could not fetch payment methods", e);
-      return {};
+      return paymentConfig || {};
     }
   };
 
   const hasConfiguredPaymentMethods = (config = paymentConfig) => {
-    if (!config || typeof config !== 'object') return false;
-    return Object.entries(config).some(([method, val]) => {
-      if (method === 'Pago Móvil') {
-        return val && typeof val === 'object' && Boolean(val.banco) && Boolean(val.cedula) && Boolean(val.telefono);
-      }
-      if (method === 'Transferencia Bancaria') {
-        return (
-          val &&
-          typeof val === 'object' &&
-          Boolean(val.banco) &&
-          Boolean(val.numero_cuenta) &&
-          String(val.numero_cuenta).replace(/\D/g, '').length === 20 &&
-          Boolean(val.cedula) &&
-          Boolean(val.titular)
-        );
-      }
-      return typeof val === 'string' && val.trim().length > 0;
-    });
+    return checkHasConfiguredPaymentMethods(config);
   };
 
   const openReceiptViewer = (receiptUrl, title = 'Comprobante de Pago', extraInfo = {}) => {
@@ -426,9 +429,8 @@ export default function LoansScreen() {
     
     setSubmitting(true);
     try {
-      // Validar que los métodos aceptados estén configurados
-      const res = await loansApi.getPaymentMethods();
-      const userConfig = JSON.parse(res.payment_methods_json || "{}");
+      // Validar que los métodos aceptados estén configurados (con soporte de persistencia local)
+      const userConfig = await fetchPaymentConfig();
       
       if (!hasConfiguredPaymentMethods(userConfig)) {
         Alert.alert(
@@ -1195,7 +1197,7 @@ export default function LoansScreen() {
         ) : null}
       </View>
 
-      {!hasConfiguredPaymentMethods() && (
+      {!isOffline && !connectionError && paymentConfigLoaded && !hasConfiguredPaymentMethods() && (
         <TouchableOpacity 
           style={styles.missingPmBanner} 
           onPress={handleOpenConfig}
@@ -1429,7 +1431,10 @@ export default function LoansScreen() {
       <PaymentConfigModal
         visible={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSuccess={(savedConfig) => setPaymentConfig(savedConfig)}
+        onSuccess={(savedConfig) => {
+          setPaymentConfig(savedConfig);
+          setPaymentConfigLoaded(true);
+        }}
         initialConfig={paymentConfig}
       />
 
