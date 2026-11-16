@@ -64,6 +64,34 @@ export const formatTimeAMPM = (timeStr) => {
 };
 
 /**
+ * Formatea una fecha/hora ISO (almacenada en UTC) a formato legible venezolano (hora local).
+ * Normaliza strings sin sufijo 'Z' para asegurar que se interpreten en UTC y se conviertan
+ * a la zona horaria local venezolana, evitando adelantos de fecha no deseados.
+ * @param {string|Date} dateStr
+ * @returns {string} Fecha y hora legible (ej. '15 nov., 8:54 p. m.')
+ */
+export const formatDateTime = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    let clean = String(dateStr).trim();
+    if (!clean.endsWith('Z') && !/[+-]\d{2}(:?\d{2})?$/.test(clean)) {
+      clean = clean.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(clean);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('es-VE', {
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return '';
+  }
+};
+
+/**
  * Retorna la hora por defecto para una fecha de pago ('YYYY-MM-DD').
  * Si la colecta es para hoy: coloca por defecto la hora una hora después,
  * redondeando hacia arriba (más tarde) para que queden en cero los minutos (:00).

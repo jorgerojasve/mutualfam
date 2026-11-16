@@ -656,6 +656,19 @@ def pledge_commitment(
         pledge_usd = float(req.monto_usd)
         pledge_ves = round(pledge_usd * rate_val, 2)
 
+    # Bloquear creación si el usuario ya tiene un aporte pendiente de pago en esta colecta
+    compromiso_pendiente = db.query(CompromisoColecta).filter(
+        CompromisoColecta.colecta_id == colecta.id,
+        CompromisoColecta.socio_id == org_member["user"].id,
+        CompromisoColecta.estado.in_([EstadoCompromiso.PROMETIDO, EstadoCompromiso.NOTIFICADO])
+    ).first()
+
+    if compromiso_pendiente:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya tienes un aporte pendiente de pago en esta colecta. Por favor realiza el pago de tu compromiso pendiente o cancélalo antes de registrar un nuevo aporte."
+        )
+
     # Crear compromiso
     nuevo_compromiso = CompromisoColecta(
         colecta_id=colecta.id,
