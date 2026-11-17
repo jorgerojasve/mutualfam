@@ -455,6 +455,7 @@ def proponer_ingreso(
 
     # Notificaciones según estado (auto-aprobado vs asamblea en debate)
     if proposal.status == ProposalStatus.APPROVED:
+        notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "member_admission", "status": "approved"})
         notify_org(org.id, "PROPUESTA_APROBADA", {"proposal_id": proposal.id, "type": "member_admission"})
     else:
         other_members = db.query(OrganizationMembership).filter(
@@ -695,6 +696,7 @@ def votar_propuesta(
         raise HTTPException(status_code=400, detail=str(e))
 
     notify_org(org.id, "VOTO_EMITIDO", {"proposal_id": proposal.id, "voter_id": user.id})
+    notify_org(org.id, "PROPUESTA_ACTUALIZADA", {"proposal_id": proposal.id, "status": proposal.status.value})
 
     # Cierre anticipado tras registrar el voto si se alcanzó unanimidad o fin de censo (Opción 3)
     db.refresh(proposal)

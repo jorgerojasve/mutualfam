@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { fundsApi, colectasApi, loansApi, useAuthStore } from '@civiccore/sdk';
+import { fundsApi, colectasApi, loansApi, useAuthStore, eventBus } from '@civiccore/sdk';
 import { Plus, X, AlertCircle, CheckCircle, Clock, ChevronRight, DollarSign, Wallet, ShieldCheck, FileText, Check, AlertTriangle } from 'lucide-react';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
@@ -179,14 +179,14 @@ export default function FundsDashboard() {
   const [submittingFund, setSubmittingFund] = useState(false);
 
   // Cargar Colectas y Tasas
-  const fetchColectas = async () => {
+  const fetchColectas = async (silent = false) => {
     if (!activeOrg?.id) {
       setColectas([]);
       setLoadingColectas(false);
       return;
     }
     try {
-      setLoadingColectas(true);
+      if (!silent) setLoadingColectas(true);
       setConnectionError(false);
       const [data, ratesData] = await Promise.all([
         colectasApi.getColectas(),
@@ -216,19 +216,19 @@ export default function FundsDashboard() {
         } catch (_) {}
       }
     } finally {
-      setLoadingColectas(false);
+      if (!silent) setLoadingColectas(false);
     }
   };
 
   // Cargar Fondos Comunes
-  const fetchFunds = async () => {
+  const fetchFunds = async (silent = false) => {
     if (!activeOrg?.id) {
       setFunds([]);
       setLoadingFunds(false);
       return;
     }
     try {
-      setLoadingFunds(true);
+      if (!silent) setLoadingFunds(true);
       setConnectionError(false);
       const data = await fundsApi.getFunds();
       const list = Array.isArray(data) ? data : [];
@@ -254,13 +254,32 @@ export default function FundsDashboard() {
         } catch (_) {}
       }
     } finally {
-      setLoadingFunds(false);
+      if (!silent) setLoadingFunds(false);
     }
   };
 
   useEffect(() => {
     fetchColectas();
     fetchFunds();
+  }, [activeOrg?.id]);
+
+  // Suscripción WebSocket a eventos de fondos y colectas en vivo
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    const handleFundsUpdate = () => {
+      fetchColectas(true);
+      fetchFunds(true);
+    };
+
+    const unsubs = [
+      eventBus.subscribe('COLECTAS_CHANGED', handleFundsUpdate),
+      eventBus.subscribe('FUNDS_CHANGED', handleFundsUpdate),
+      eventBus.subscribe('RECONNECTED', handleFundsUpdate),
+    ];
+
+    return () => {
+      unsubs.forEach(unsub => unsub && unsub());
+    };
   }, [activeOrg?.id]);
 
   const handleRetryAll = async () => {

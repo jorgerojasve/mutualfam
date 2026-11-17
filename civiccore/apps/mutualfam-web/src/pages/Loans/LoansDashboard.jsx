@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { loansApi, useAuthStore } from '@civiccore/sdk';
+import { loansApi, useAuthStore, eventBus } from '@civiccore/sdk';
 import { X, Check, Copy, WifiOff, RefreshCw } from 'lucide-react';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 import { formatVE, parseVEAmount } from '../../utils/currency.js';
@@ -75,8 +75,8 @@ export default function LoansDashboard() {
   const { user, activeOrg, isOffline } = useAuthStore();
   const [connectionError, setConnectionError] = useState(false);
 
-  const fetchLoans = async () => {
-    setLoading(true);
+  const fetchLoans = async (silent = false) => {
+    if (!silent) setLoading(true);
     setConnectionError(false);
     setError('');
     try {
@@ -110,7 +110,7 @@ export default function LoansDashboard() {
         setError(err.message || 'Error al cargar los préstamos.');
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -145,6 +145,24 @@ export default function LoansDashboard() {
       setLoans([]);
       setLoading(false);
     }
+  }, [activeOrg?.id]);
+
+  // Suscripción WebSocket a eventos de préstamos en vivo
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    const handleLoansUpdate = () => {
+      fetchLoans(true);
+      fetchPaymentConfig();
+    };
+
+    const unsubs = [
+      eventBus.subscribe('LOANS_CHANGED', handleLoansUpdate),
+      eventBus.subscribe('RECONNECTED', handleLoansUpdate),
+    ];
+
+    return () => {
+      unsubs.forEach(unsub => unsub && unsub());
+    };
   }, [activeOrg?.id]);
 
   useEffect(() => {

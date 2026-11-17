@@ -19,12 +19,22 @@ let wasOpenBefore = false;
 let pongTimer = null;
 
 const emit = (type, payload) => {
+  const fullEvent = { type, payload };
   (listeners.get(type) || []).forEach((cb) => {
-    try { cb(payload); } catch (e) { console.warn('[RT] listener error', e); }
+    try { cb(payload, fullEvent); } catch (e) { console.warn('[RT] listener error', e); }
+  });
+  (listeners.get('*') || []).forEach((cb) => {
+    try { cb(fullEvent); } catch (e) { console.warn('[RT] listener error', e); }
   });
 };
 
-export const subscribeRealtime = (type, cb) => {
+export const subscribeRealtime = (typeOrCb, maybeCb) => {
+  let type = typeOrCb;
+  let cb = maybeCb;
+  if (typeof typeOrCb === 'function') {
+    type = '*';
+    cb = typeOrCb;
+  }
   if (!listeners.has(type)) listeners.set(type, new Set());
   listeners.get(type).add(cb);
   return () => listeners.get(type)?.delete(cb);

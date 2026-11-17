@@ -254,12 +254,17 @@ export default function AssemblyScreen({ embedded = false }) {
   useEffect(() => {
     if (!activeOrg?.id) return;
     const unsubscribe = subscribeRealtime((event) => {
+      const type = event?.type;
       if (
-        event?.type === 'PROPUESTA_CREADA' ||
-        event?.type === 'VOTO_EMITIDO' ||
-        event?.type === 'DEFENSA_PUBLICADA' ||
-        event?.type === 'PROPUESTA_RESUELTA' ||
-        event?.type === 'PROPUESTA_COMENTADA'
+        type === 'PROPUESTA_CREADA' ||
+        type === 'PROPUESTA_APROBADA' ||
+        type === 'PROPUESTA_ACTUALIZADA' ||
+        type === 'VOTO_EMITIDO' ||
+        type === 'DEFENSA_PUBLICADA' ||
+        type === 'PROPUESTA_RESUELTA' ||
+        type === 'PROPUESTA_COMENTADA' ||
+        type === 'MIEMBRO_INGRESADO' ||
+        type === 'RECONNECTED'
       ) {
         fetchPropuestas(true);
         if (selectedProposal && event.payload?.proposal_id === selectedProposal.id) {
