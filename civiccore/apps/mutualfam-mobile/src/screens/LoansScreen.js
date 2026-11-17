@@ -31,7 +31,7 @@ import {
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
-export default function LoansScreen() {
+export default function LoansScreen({ navigation }) {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
