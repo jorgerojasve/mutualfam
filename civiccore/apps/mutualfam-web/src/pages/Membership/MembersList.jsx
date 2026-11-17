@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { membershipApi, asambleasApi, useAuthStore, eventBus } from '@civiccore/sdk';
-import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2, Landmark, CheckCircle, XCircle, AlertCircle, Clock, ShieldAlert, Vote, X } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2, Landmark, CheckCircle, XCircle, AlertCircle, Clock, ShieldAlert, Vote, X, RefreshCw, Send, MessageCircle } from 'lucide-react';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
 const MembersList = () => {
@@ -30,11 +30,28 @@ const MembersList = () => {
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedPropuesta, setSelectedPropuesta] = useState(null);
 
+  // Modal Detalle de Propuesta y Debate (Homologado con Móvil)
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [proposalDetail, setProposalDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [commentStance, setCommentStance] = useState('opinión');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [submittingVote, setSubmittingVote] = useState(false);
+  const [closingProposal, setClosingProposal] = useState(false);
+  const [defenseInput, setDefenseInput] = useState('');
+  const commentInputRef = useRef(null);
+
   // Form: Proponer Ingreso
   const [candidateName, setCandidateName] = useState('');
-  const [candidateEmail, setCandidateEmail] = useState('');
+  const [candidateRelation, setCandidateRelation] = useState('');
+  const [candidatePhone, setCandidatePhone] = useState('');
   const [candidateMotive, setCandidateMotive] = useState('');
   const [submittingIngreso, setSubmittingIngreso] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState(null);
 
   // Form: Proponer Expulsión
   const [targetMemberId, setTargetMemberId] = useState('');
@@ -44,6 +61,23 @@ const MembersList = () => {
   // Form: Publicar Defensa
   const [defenseText, setDefenseText] = useState('');
   const [submittingDefense, setSubmittingDefense] = useState(false);
+
+  // Formateador de tiempo restante homologado con móvil
+  const formatRemainingTime = (seconds) => {
+    if (seconds === undefined || seconds === null) return '';
+    if (seconds <= 0) return 'Plazo concluido';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+
+    if (d > 0) {
+      return h > 0 ? `${d}d ${h}h restantes` : `${d}d restantes`;
+    }
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m restantes` : `${h}h restantes`;
+    }
+    return `${Math.max(1, m)}m restantes`;
+  };
 
   // Cargar Miembros
   const fetchMembers = async (silent = false) => {
@@ -150,9 +184,12 @@ const MembersList = () => {
     const handleRealtimeUpdate = (payload) => {
       fetchPropuestas(true);
       fetchMembers(true);
-      if (selectedPropuesta && payload?.proposal_id === selectedPropuesta.id) {
-        asambleasApi.getPropuesta(selectedPropuesta.id).then(updated => {
-          if (updated) setSelectedPropuesta(updated);
+      if (proposalDetail && payload?.proposal_id === proposalDetail.id) {
+        asambleasApi.getPropuesta(proposalDetail.id).then(updated => {
+          if (updated) setProposalDetail(updated);
+        }).catch(() => {});
+        asambleasApi.getComentarios(proposalDetail.id).then(updatedComments => {
+          if (updatedComments) setComments(updatedComments);
         }).catch(() => {});
       }
     };
@@ -172,10 +209,212 @@ const MembersList = () => {
     return () => {
       unsubs.forEach(unsub => unsub && unsub());
     };
-  }, [activeOrg?.id, selectedPropuesta?.id]);
+  }, [activeOrg?.id, proposalDetail?.id]);
+
+  // Polling silencioso de comentarios mientras esté abierto el modal de detalle
+  const fetchCommentsSilent = async (propId) => {
+    try {
+      const list = await asambleasApi.getComentarios(propId);
+      if (Array.isArray(list)) {
+        setComments((prev) => {
+          if (
+            list.length !== prev.length ||
+            list.some((item, idx) => item.id !== prev[idx]?.id || item.content !== prev[idx]?.content)
+          ) {
+            return list;
+          }
+          return prev;
+        });
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    let interval = null;
+    if (showDetailModal && proposalDetail?.id) {
+      interval = setInterval(() => {
+        fetchCommentsSilent(proposalDetail.id);
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showDetailModal, proposalDetail?.id]);
 
   const handleRetryAll = async () => {
     await Promise.all([fetchMembers(), fetchPropuestas()]);
+  };
+
+  // Abrir Modal de Detalle de Asamblea
+  const openProposalDetail = async (proposal) => {
+    setSelectedPropuesta(proposal);
+    setShowDetailModal(true);
+    setLoadingDetail(true);
+    setCommentText('');
+    setReplyingTo(null);
+    try {
+      const [full, commentList] = await Promise.all([
+        asambleasApi.getPropuesta(proposal.id),
+        asambleasApi.getComentarios(proposal.id).catch(() => [])
+      ]);
+      setProposalDetail(full);
+      setDefenseInput(full.defense_text || '');
+      setComments(commentList);
+    } catch (e) {
+      alert(e?.message || 'No se pudo cargar el detalle de la propuesta');
+      setShowDetailModal(false);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  // Responder a un autor específico con mención @
+  const handleReplyToAuthor = (authorName) => {
+    if (!authorName) return;
+    const cleanName = authorName.trim();
+    const mention = `@${cleanName} `;
+    setReplyingTo(cleanName);
+    setCommentText((prev) => {
+      if (prev.includes(`@${cleanName}`)) return prev;
+      return prev ? `${mention}${prev}` : mention;
+    });
+    setTimeout(() => {
+      commentInputRef.current?.focus();
+    }, 150);
+  };
+
+  // Publicar Comentario en el Foro de Debate
+  const handleSendComment = async (e) => {
+    if (e) e.preventDefault();
+    if (!proposalDetail) return;
+    const text = commentText.trim();
+    if (!text) {
+      alert('Por favor escribe tu opinión o argumento');
+      return;
+    }
+    setSubmittingComment(true);
+    try {
+      await asambleasApi.agregarComentario(proposalDetail.id, {
+        content: text,
+        stance: commentStance
+      });
+      setCommentText('');
+      setReplyingTo(null);
+      const updated = await asambleasApi.getComentarios(proposalDetail.id);
+      setComments(updated);
+    } catch (err) {
+      alert(err?.message || 'Error al publicar comentario');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  // Emitir Voto en el Modal de Detalle
+  const handleVotarInDetail = async (voto) => {
+    if (!proposalDetail) return;
+    let confirmMsg = `¿Deseas registrar tu voto como "${voto.toUpperCase()}"?`;
+    if (voto === 'no' && (proposalDetail.proposal_type === 'member_admission' || proposalDetail.category === 'ADMISSION')) {
+      confirmMsg = '⚠️ ATENCIÓN: Un voto en contra (NO) en una propuesta de ingreso activará el VETO nominativo del grupo y rechazará la admisión. ¿Confirmas tu voto?';
+    }
+    if (!window.confirm(confirmMsg)) return;
+
+    setSubmittingVote(true);
+    try {
+      const res = await asambleasApi.votar(proposalDetail.id, voto);
+      if (res?.proposal_status === 'approved') {
+        alert('🎉 ¡Propuesta Aprobada! ¡Consenso unánime alcanzado!');
+      } else if (res?.proposal_status === 'rejected') {
+        alert('🚫 Propuesta Rechazada por la asamblea.');
+      } else {
+        alert(`¡Voto Registrado: ${voto.toUpperCase()}!`);
+      }
+      const updated = await asambleasApi.getPropuesta(proposalDetail.id);
+      setProposalDetail(updated);
+      fetchPropuestas(true);
+    } catch (err) {
+      alert(err?.message || 'Error al registrar el voto');
+    } finally {
+      setSubmittingVote(false);
+    }
+  };
+
+  // Concluir Propuesta en el Modal de Detalle
+  const handleCerrarInDetail = async () => {
+    if (!proposalDetail) return;
+    if (!window.confirm('¿Deseas cerrar la propuesta y registrar la resolución oficial ahora?')) return;
+    setClosingProposal(true);
+    try {
+      const res = await asambleasApi.cerrarPropuesta(proposalDetail.id);
+      alert(res.status === 'approved' ? '🎉 Propuesta Aprobada exitosamente' : '🚫 Propuesta Rechazada');
+      const updated = await asambleasApi.getPropuesta(proposalDetail.id);
+      setProposalDetail(updated);
+      fetchPropuestas(true);
+    } catch (err) {
+      alert(err?.message || 'No se pudo cerrar la propuesta');
+    } finally {
+      setClosingProposal(false);
+    }
+  };
+
+  // Publicar o Actualizar Defensa en Modal
+  const handlePublicarDefensaInDetail = async (e) => {
+    if (e) e.preventDefault();
+    if (!proposalDetail || !defenseInput.trim()) return;
+    try {
+      await asambleasApi.publicarDefensa(proposalDetail.id, defenseInput.trim());
+      alert('Tu alegato de defensa ha sido publicado ante la asamblea familiar.');
+      const updated = await asambleasApi.getPropuesta(proposalDetail.id);
+      setProposalDetail(updated);
+      fetchPropuestas(true);
+    } catch (err) {
+      alert(err?.message || 'Error al publicar defensa');
+    }
+  };
+
+  // Cancelar Invitación de Ingreso en Modal
+  const handleCancelarIngresoInDetail = async () => {
+    if (!proposalDetail) return;
+    if (!window.confirm('¿Deseas cancelar esta invitación de ingreso? El código se invalidará y la propuesta pasará al historial.')) return;
+    try {
+      await asambleasApi.cancelarIngreso(proposalDetail.id);
+      alert('Ingreso cancelado exitosamente');
+      const updated = await asambleasApi.getPropuesta(proposalDetail.id);
+      setProposalDetail(updated);
+      fetchPropuestas(true);
+    } catch (err) {
+      alert(err?.message || 'Error al cancelar ingreso');
+    }
+  };
+
+  // Renderizar contenido de comentario destacando menciones @
+  const renderCommentContent = (content) => {
+    if (!content) return null;
+    const authorNames = Array.from(new Set(comments.map((c) => c.author_name).filter(Boolean)));
+    const patterns = authorNames
+      .sort((a, b) => b.length - a.length)
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const patternStr = patterns.length > 0
+      ? `(@(?:${patterns.join('|')}|[A-Za-z0-9_]+))`
+      : '(@[A-Za-z0-9_]+)';
+    const regex = new RegExp(patternStr, 'g');
+    const parts = content.split(regex);
+    if (!parts || parts.length <= 1) {
+      return <p style={{ color: '#e2e8f0', fontSize: '0.88rem', margin: '4px 0 0 0', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}>{content}</p>;
+    }
+    return (
+      <p style={{ color: '#e2e8f0', fontSize: '0.88rem', margin: '4px 0 0 0', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}>
+        {parts.map((part, idx) => {
+          if (part && part.startsWith('@')) {
+            return (
+              <span key={idx} style={{ color: '#38bdf8', fontWeight: '700' }}>
+                {part}
+              </span>
+            );
+          }
+          return part;
+        })}
+      </p>
+    );
   };
 
   // Generar Invitación de Período de Gracia
@@ -218,26 +457,37 @@ const MembersList = () => {
     } catch (_) {}
   };
 
+  // Compartir invitación por WhatsApp
+  const handleShareInvite = (token, name, codeFormatted) => {
+    const code = codeFormatted || token;
+    const targetName = name ? ` ${name}` : '';
+    const shareMessage = `¡Hola${targetName}! 👋\n\n¡Has sido aprobado para unirte a nuestra Mutual Familiar en la app MutualFam 🤝!\n\n1️⃣ Abre este enlace en la web:\n${window.location.origin}/join/${token}\n\n2️⃣ O ingresa con este código de invitación:\n*${code}*\n\n⏱️ Este código de invitación es válido por 15 días. ¡Bienvenido a la mutual!`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareMessage)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
   // Proponer Ingreso
   const handleProponerIngreso = async (e) => {
     e.preventDefault();
-    if (!candidateName.trim() || !candidateEmail.trim() || !candidateMotive.trim()) {
-      alert('Por favor completa todos los campos del candidato');
+    if (!candidateName.trim() || !candidateMotive.trim()) {
+      alert('Por favor completa el nombre del familiar y la justificación');
       return;
     }
     setSubmittingIngreso(true);
     try {
-      await asambleasApi.proponerIngreso({
+      const res = await asambleasApi.proponerIngreso({
         candidate_name: candidateName.trim(),
-        candidate_email: candidateEmail.trim(),
-        motive: candidateMotive.trim()
+        candidate_relation: candidateRelation.trim() || undefined,
+        candidate_phone: candidatePhone.trim() || undefined,
+        justificacion: candidateMotive.trim()
       });
       setShowIngresoModal(false);
       setCandidateName('');
-      setCandidateEmail('');
+      setCandidateRelation('');
+      setCandidatePhone('');
       setCandidateMotive('');
       await fetchPropuestas();
-      alert('¡Propuesta de admisión creada! Se ha abierto el período de deliberación de 15 días en la asamblea familiar.');
+      alert('¡Propuesta de admisión creada! Se ha abierto el período en la asamblea familiar.');
     } catch (err) {
       alert(err.message || 'Error al proponer ingreso');
     } finally {
@@ -255,7 +505,9 @@ const MembersList = () => {
     setSubmittingExpulsion(true);
     try {
       await asambleasApi.proponerExpulsion({
+        target_user_id: parseInt(targetMemberId, 10),
         target_member_id: parseInt(targetMemberId, 10),
+        motivo: expulsionMotive.trim(),
         motive: expulsionMotive.trim()
       });
       setShowExpulsionModal(false);
@@ -267,54 +519,6 @@ const MembersList = () => {
       alert(err.message || 'Error al proponer expulsión');
     } finally {
       setSubmittingExpulsion(false);
-    }
-  };
-
-  // Votar en Asamblea
-  const handleVote = async (proposalId, voteValue) => {
-    const confirmMsg = voteValue === 'veto'
-      ? '⚠️ ¿Confirmas tu VETO a esta propuesta? Cualquier veto desaprueba la propuesta inmediatamente según el pacto familiar.'
-      : `¿Deseas emitir tu voto "${voteValue === 'for' ? 'A Favor' : 'Abstención'}"?`;
-    
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      await asambleasApi.votar(proposalId, voteValue);
-      await fetchPropuestas();
-      alert('¡Tu voto fue registrado exitosamente!');
-    } catch (err) {
-      alert(err.message || 'Error al emitir voto');
-    }
-  };
-
-  // Publicar Defensa
-  const handlePublicarDefensa = async (e) => {
-    e.preventDefault();
-    if (!selectedPropuesta || !defenseText.trim()) return;
-    setSubmittingDefense(true);
-    try {
-      await asambleasApi.publicarDefensa(selectedPropuesta.id, defenseText.trim());
-      setShowDefenseModal(false);
-      setDefenseText('');
-      setSelectedPropuesta(null);
-      await fetchPropuestas();
-      alert('Tu alegato de defensa ha sido publicado ante la asamblea familiar.');
-    } catch (err) {
-      alert(err.message || 'Error al publicar defensa');
-    } finally {
-      setSubmittingDefense(false);
-    }
-  };
-
-  // Concluir Propuesta
-  const handleCerrarPropuesta = async (proposalId) => {
-    if (!window.confirm('¿Deseas evaluar el quórum y dar por concluida esta asamblea familiar?')) return;
-    try {
-      await asambleasApi.cerrarPropuesta(proposalId);
-      await fetchPropuestas();
-      alert('Asamblea concluida y resolución registrada.');
-    } catch (err) {
-      alert(err.message || 'No se pudo cerrar la propuesta');
     }
   };
 
@@ -336,8 +540,8 @@ const MembersList = () => {
       }
       return !hasJoined && !isCancelled && !isExpired;
     }
-    const st = String(p.status || '').toUpperCase();
-    return st === 'DEBATE' || st === 'VOTING';
+    const st = String(p.status || '').toLowerCase();
+    return st === 'debate' || st === 'voting';
   };
 
   const activeProposals = propuestas.filter(isProposalActive);
@@ -346,7 +550,7 @@ const MembersList = () => {
 
   return (
     <div className="page-panel animate-fade-in pb-12" style={{ padding: '1.25rem 1rem' }}>
-      {/* Cabecera Principal */}
+      {/* Cabecera Principal Homologada con Android */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -365,65 +569,16 @@ const MembersList = () => {
             Comunidad de miembros, asambleas soberanas y acuerdos familiares
           </p>
         </div>
-
-        {activeMainTab === 'asamblea' && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => setShowIngresoModal(true)}
-              style={{
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '8px 14px',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 10px rgba(16, 185, 129, 0.35)',
-              }}
-            >
-              <UserPlus size={15} />
-              + Proponer Ingreso
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                fetchExpulsables();
-                setShowExpulsionModal(true);
-              }}
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                color: '#f87171',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                borderRadius: '8px',
-                padding: '8px 14px',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <ShieldAlert size={15} />
-              Proponer Expulsión
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Control Segmentado de Sub-pestañas: Miembros vs Asambleas (Homologado con Móvil) */}
+      {/* Control Segmentado de Sub-pestañas: Miembros vs Asamblea (Homologado con Móvil) */}
       <div style={{
         display: 'flex',
-        backgroundColor: 'rgba(15, 23, 42, 0.7)',
+        backgroundColor: '#1e293b',
         padding: '4px',
-        borderRadius: '10px',
+        borderRadius: '12px',
         border: '1px solid rgba(255, 255, 255, 0.08)',
-        marginBottom: '1.5rem',
+        marginBottom: '1.25rem',
       }}>
         <button
           type="button"
@@ -433,9 +588,9 @@ const MembersList = () => {
             padding: '10px 14px',
             borderRadius: '8px',
             border: 'none',
-            backgroundColor: activeMainTab === 'miembros' ? '#2563eb' : 'transparent',
+            backgroundColor: activeMainTab === 'miembros' ? '#334155' : 'transparent',
             color: activeMainTab === 'miembros' ? '#ffffff' : '#94a3b8',
-            fontWeight: '600',
+            fontWeight: activeMainTab === 'miembros' ? '700' : '600',
             fontSize: '0.9rem',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
@@ -451,9 +606,9 @@ const MembersList = () => {
             padding: '10px 14px',
             borderRadius: '8px',
             border: 'none',
-            backgroundColor: activeMainTab === 'asamblea' ? '#10b981' : 'transparent',
+            backgroundColor: activeMainTab === 'asamblea' ? '#334155' : 'transparent',
             color: activeMainTab === 'asamblea' ? '#ffffff' : '#94a3b8',
-            fontWeight: '600',
+            fontWeight: activeMainTab === 'asamblea' ? '700' : '600',
             fontSize: '0.9rem',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
@@ -564,6 +719,7 @@ const MembersList = () => {
                                   fontSize: '0.72rem',
                                   fontWeight: '700',
                                   letterSpacing: '0.02em',
+                                  whiteSpace: 'nowrap'
                                 }}>
                                   Tú
                                 </span>
@@ -591,7 +747,7 @@ const MembersList = () => {
                   Invitar Nuevo Miembro a la Mutual
                 </h3>
                 <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: '1.45', marginBottom: '1rem' }}>
-                  Durante las primeras 24 horas (período de gracia), el fundador puede invitar directamente. Concluida esa etapa, los ingresos se procesan mediante <strong>Asamblea Familiar (15 días de deliberación con regla de consenso y veto nominativo)</strong>.
+                  Durante las primeras 24 horas (período de gracia), el fundador puede invitar directamente. Concluida esa etapa, los ingresos se procesan mediante <strong>Asamblea Familiar (consenso unánime con veto nominativo)</strong>.
                 </p>
 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -618,8 +774,8 @@ const MembersList = () => {
                       padding: '0.75rem 1.25rem',
                       fontSize: '0.9rem',
                       fontWeight: '600',
-                      borderColor: '#10b981',
-                      color: '#10b981',
+                      borderColor: '#0284c7',
+                      color: '#38bdf8',
                     }}
                     onClick={() => {
                       setActiveMainTab('asamblea');
@@ -640,39 +796,107 @@ const MembersList = () => {
       {/* ========================================================= */}
       {activeMainTab === 'asamblea' && (
         <div>
-          {/* Subfiltro Activas vs Historial */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
+          {/* Botones de acción principales Homologados con Android */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setCreatedInvite(null);
+                setShowIngresoModal(true);
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                padding: '12px',
+                borderRadius: '12px',
+                gap: '6px',
+                fontWeight: '700',
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxShadow: '0 3px 6px rgba(2, 132, 199, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>📥</span>
+              <span>Proponer Ingreso</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                fetchExpulsables();
+                setShowExpulsionModal(true);
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #ef4444',
+                color: '#f87171',
+                padding: '12px',
+                borderRadius: '12px',
+                gap: '6px',
+                fontWeight: '700',
+                fontSize: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>⚠️</span>
+              <span>Proponer Expulsión</span>
+            </button>
+          </div>
+
+          {/* Sub-tabs Activas vs Historial Homologadas con Android */}
+          <div style={{
+            display: 'flex',
+            backgroundColor: '#1e293b',
+            borderRadius: '12px',
+            padding: '4px',
+            marginBottom: '16px'
+          }}>
             <button
               type="button"
               onClick={() => setAsambleaFilter('activas')}
               style={{
-                padding: '6px 14px',
+                flex: 1,
+                padding: '8px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: asambleaFilter === 'activas' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                color: asambleaFilter === 'activas' ? '#10b981' : '#94a3b8',
-                fontWeight: '600',
-                fontSize: '0.85rem',
+                backgroundColor: asambleaFilter === 'activas' ? '#334155' : 'transparent',
+                color: asambleaFilter === 'activas' ? '#ffffff' : '#94a3b8',
+                fontWeight: asambleaFilter === 'activas' ? '700' : '600',
+                fontSize: '14px',
                 cursor: 'pointer',
+                transition: 'all 0.15s ease'
               }}
             >
-              En Curso ({activeProposals.length})
+              Activas ({activeProposals.length})
             </button>
             <button
               type="button"
               onClick={() => setAsambleaFilter('historial')}
               style={{
-                padding: '6px 14px',
+                flex: 1,
+                padding: '8px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: asambleaFilter === 'historial' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                color: asambleaFilter === 'historial' ? '#60a5fa' : '#94a3b8',
-                fontWeight: '600',
-                fontSize: '0.85rem',
+                backgroundColor: asambleaFilter === 'historial' ? '#334155' : 'transparent',
+                color: asambleaFilter === 'historial' ? '#ffffff' : '#94a3b8',
+                fontWeight: asambleaFilter === 'historial' ? '700' : '600',
+                fontSize: '14px',
                 cursor: 'pointer',
+                transition: 'all 0.15s ease'
               }}
             >
-              Historial Concluido ({historyProposals.length})
+              Historial ({historyProposals.length})
             </button>
           </div>
 
@@ -690,24 +914,26 @@ const MembersList = () => {
             ) : (
               <div style={{
                 textAlign: 'center',
-                padding: '4rem 1.5rem',
-                background: 'rgba(30, 41, 59, 0.4)',
+                padding: '3rem 1.5rem',
+                backgroundColor: '#1e293b',
                 borderRadius: '16px',
                 border: '1px dashed rgba(255, 255, 255, 0.1)',
               }}>
-                <Landmark size={48} className="text-muted mx-auto mb-3" style={{ opacity: 0.5 }} />
-                <h3 style={{ color: '#f8fafc', fontSize: '1.2rem', fontWeight: '700', margin: '0 0 0.5rem 0' }}>
-                  No hay asambleas {asambleaFilter === 'activas' ? 'en curso' : 'en el historial'}
+                <div style={{ fontSize: '42px', marginBottom: '12px' }}>🏛️</div>
+                <h3 style={{ color: '#f8fafc', fontSize: '1.1rem', fontWeight: '700', margin: '0 0 0.5rem 0' }}>
+                  {asambleaFilter === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
                 </h3>
-                <p style={{ color: '#94a3b8', maxWidth: '420px', margin: '0 auto 1.5rem auto', fontSize: '0.875rem', lineHeight: '1.5' }}>
-                  Las decisiones de incorporación tras las primeras 24h y de expulsión se debaten en asamblea por 15 días con regla de consenso (75% de aceptación y 0 vetos).
+                <p style={{ color: '#94a3b8', maxWidth: '420px', margin: '0 auto 1.5rem auto', fontSize: '0.85rem', lineHeight: '1.5' }}>
+                  {asambleaFilter === 'activas'
+                    ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
+                    : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
                 </p>
                 {asambleaFilter === 'activas' && (
                   <button
                     type="button"
                     onClick={() => setShowIngresoModal(true)}
                     style={{
-                      backgroundColor: '#10b981',
+                      backgroundColor: '#0284c7',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '8px',
@@ -717,354 +943,1110 @@ const MembersList = () => {
                       cursor: 'pointer',
                     }}
                   >
-                    + Proponer Ingreso de Familiar
+                    + Proponer Ingreso
                   </button>
                 )}
               </div>
             )
           ) : (
-            <div className="dashboard-grid">
-              {displayedPropuestas.map((p) => {
-                const isAdmission = p.proposal_type === 'ADMISSION' || p.category === 'ADMISSION' || p.proposal_type === 'member_admission';
-                const isExpulsion = p.proposal_type === 'EXPULSION' || p.category === 'EXPULSION';
-                const votesFor = p.votes_for || p.tally?.for || 0;
-                const votesAgainst = p.votes_against || p.tally?.against || 0;
-                const votesVeto = p.votes_veto || p.tally?.veto || 0;
-                const totalVotes = (votesFor + votesAgainst + votesVeto) || 1;
-                const forPct = Math.round((votesFor / totalVotes) * 100);
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {displayedPropuestas.map((item) => {
+                const isAdmission = item.proposal_type === 'member_admission' || item.category === 'ADMISSION' || item.proposal_type === 'ADMISSION';
+                const st = String(item.status || '').toLowerCase();
+                const isDebate = st === 'debate';
+                const isVoting = st === 'voting';
+                const isApproved = st === 'approved';
+                const isRejected = st === 'rejected';
 
-                const isTarget = user && (p.target_member_id === user.id);
-                const hasVoted = p.user_voted || p.mi_voto;
+                const isAuthor = Boolean(item.is_author ?? (user?.id && (item.author_id === user.id || item.author_user_id === user.id)));
+                const hasJoined = Boolean(item.member_joined || item.redeemed_by_name);
+                const isAdmissionCancelled = Boolean(item.admission_cancelled);
+                const isWaitingEntry = isAdmission && isApproved && !hasJoined && !isAdmissionCancelled;
 
-                const isAuthor = Boolean(user && (p.author_id === user.id || p.author_user_id === user.id));
-                const hasJoined = Boolean(p.member_joined || p.redeemed_by_name);
-                const isAdmissionCancelled = Boolean(p.admission_cancelled);
-                const isWaitingEntry = isAdmission && (p.status === 'APPROVED' || p.status === 'approved') && !hasJoined && !isAdmissionCancelled;
+                let statusColor = '#f59e0b';
+                let statusLabel = '⏳ Debate';
+                if (isVoting) {
+                  statusColor = '#3b82f6';
+                  statusLabel = '🗳️ Votación';
+                } else if (isApproved) {
+                  if (isWaitingEntry) {
+                    statusColor = '#0284c7';
+                    statusLabel = '⏳ Esperando Ingreso';
+                  } else if (isAdmission && isAdmissionCancelled) {
+                    statusColor = '#64748b';
+                    statusLabel = '⏱️ Ingreso Cancelado';
+                  } else {
+                    statusColor = '#10b981';
+                    statusLabel = isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada';
+                  }
+                } else if (isRejected) {
+                  statusColor = '#ef4444';
+                  statusLabel = item.veto_activated ? '🚫 Vetada' : '❌ Rechazada';
+                }
 
                 return (
                   <div
-                    key={p.id}
-                    className="glass-card"
+                    key={item.id}
+                    onClick={() => openProposalDetail(item)}
                     style={{
-                      backgroundColor: 'rgba(30, 41, 59, 0.7)',
+                      backgroundColor: '#1e293b',
+                      borderRadius: '16px',
+                      padding: '16px',
                       border: '1px solid rgba(255, 255, 255, 0.08)',
-                      borderRadius: '14px',
-                      padding: '1.25rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.875rem',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s ease',
                     }}
                   >
-                    {/* Header de la Propuesta */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.72rem',
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            backgroundColor: isAdmission ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                            color: isAdmission ? '#34d399' : '#f87171',
-                            border: `1px solid ${isAdmission ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                          }}>
-                            {isAdmission ? '🏛️ Admisión' : '🛡️ Expulsión'}
-                          </span>
-                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                            {p.days_remaining != null ? `Quedan ${p.days_remaining} días` : 'Plazo de 15 días'}
-                          </span>
-                        </div>
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#f8fafc', margin: 0 }}>
-                          {p.title || (isAdmission ? `Ingreso de ${p.candidate_name || 'Nuevo Familiar'}` : `Expulsión de ${p.target_member_name || 'Miembro'}`)}
-                        </h3>
-                      </div>
-
-                      {/* Pill de Estado */}
-                      <span style={{
-                        padding: '4px 8px',
-                        borderRadius: '20px',
-                        fontSize: '0.72rem',
-                        fontWeight: '700',
-                        backgroundColor: isWaitingEntry
-                          ? '#0284c7'
-                          : isAdmission && isAdmissionCancelled
-                          ? '#64748b'
-                          : p.status === 'APPROVED' || p.status === 'approved'
-                          ? '#10b981'
-                          : p.status === 'REJECTED' || p.status === 'rejected'
-                          ? '#ef4444'
-                          : '#3b82f6',
+                    {/* Header Row: Type Badge + Outlined Status Pill */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{
+                        backgroundColor: isAdmission ? '#0369a1' : '#be123c',
+                        padding: '4px 10px',
+                        borderRadius: '8px',
                         color: '#ffffff',
-                      }}>
-                        {isWaitingEntry
-                          ? '⏳ Esperando Ingreso'
-                          : isAdmission && isAdmissionCancelled
-                          ? '⏱️ Ingreso Cancelado'
-                          : p.status === 'APPROVED' || p.status === 'approved'
-                          ? (isAdmission ? '✅ Ingreso Completado' : 'Aprobada')
-                          : p.status === 'REJECTED' || p.status === 'rejected'
-                          ? (votesVeto > 0 ? '🚫 Vetada' : '❌ Rechazada')
-                          : 'En Deliberación'}
-                      </span>
-                    </div>
-
-                    <p style={{ color: '#cbd5e1', fontSize: '0.85rem', margin: 0, lineHeight: '1.4' }}>
-                      {p.description || p.motive || 'Deliberación familiar para decisión soberana.'}
-                    </p>
-
-                    {/* Veto Alert si hubo veto */}
-                    {votesVeto > 0 && (
-                      <div style={{
-                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                        border: '1px solid rgba(239, 68, 68, 0.35)',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        fontSize: '0.8rem',
-                        color: '#fca5a5',
-                        display: 'flex',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px',
                       }}>
-                        <ShieldAlert size={16} />
-                        <span><strong>Veto Nominativo Ejercido:</strong> La propuesta ha sido bloqueada.</span>
+                        {isAdmission ? '📥 Admisión de Miembro' : '⚠️ Expulsión de Miembro'}
                       </div>
-                    )}
-
-                    {/* Barra de Votación y Reglas */}
-                    <div style={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                      padding: '0.875rem',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.06)',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '6px' }}>
-                        <span style={{ color: '#94a3b8' }}>Aprobación Actual</span>
-                        <span style={{ color: '#f8fafc', fontWeight: '700' }}>{forPct}% (Mínimo 75%)</span>
-                      </div>
-
                       <div style={{
-                        width: '100%',
-                        height: '6px',
-                        backgroundColor: '#334155',
-                        borderRadius: '3px',
-                        overflow: 'hidden',
-                        marginBottom: '6px',
+                        border: `1px solid ${statusColor}`,
+                        color: statusColor,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        whiteSpace: 'nowrap',
+                        backgroundColor: 'transparent',
+                        display: 'inline-flex',
+                        alignItems: 'center',
                       }}>
-                        <div style={{
-                          width: `${forPct}%`,
-                          height: '100%',
-                          backgroundColor: forPct >= 75 && votesVeto === 0 ? '#10b981' : '#f59e0b',
-                        }} />
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#94a3b8' }}>
-                        <span>👍 {votesFor} A Favor</span>
-                        <span>🚫 {votesVeto} Vetos</span>
-                        <span>⚪ {votesAgainst} En Contra</span>
+                        {statusLabel}
                       </div>
                     </div>
 
-                    {/* Alegato de Defensa en caso de Expulsión */}
-                    {p.defense_text && (
+                    {/* Card Title */}
+                    <h3 style={{ color: '#f8fafc', fontSize: '16px', fontWeight: '700', margin: '0 0 8px 0' }}>
+                      {item.title || (isAdmission ? `Admisión de ${item.candidate_name || 'Familiar'}` : `Expulsión de ${item.target_member_name || 'Miembro'}`)}
+                    </h3>
+
+                    {/* Meta Row: Autor y Temporizador */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '4px' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                        👤 Propuesto por: <strong style={{ color: '#e2e8f0' }}>{item.author_name || 'Miembro'}</strong>
+                      </span>
+                      {isVoting && (
+                        <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '600' }}>
+                          ⏱️ {item.time_remaining_seconds > 0 ? formatRemainingTime(item.time_remaining_seconds) : 'Votación concluida'}
+                        </span>
+                      )}
+                      {isDebate && item.time_remaining_seconds > 0 && (
+                        <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '600' }}>
+                          💬 Debate ({formatRemainingTime(item.time_remaining_seconds)})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Snippet de Admisión de Miembro */}
+                    {isAdmission && (
                       <div style={{
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        fontSize: '0.8rem',
-                        color: '#93c5fd',
+                        backgroundColor: '#0f172a',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        marginBottom: '10px',
+                        fontSize: '13px',
                       }}>
-                        <strong>Alegato de Defensa del Imputado:</strong>
-                        <p style={{ margin: '4px 0 0 0', color: '#e2e8f0' }}>{p.defense_text}</p>
+                        {item.candidate_relation ? (
+                          <div style={{ color: '#cbd5e1', marginBottom: '6px' }}>
+                            🤝 Parentesco: <strong style={{ color: '#f8fafc' }}>{item.candidate_relation}</strong>
+                          </div>
+                        ) : null}
+
+                        {hasJoined ? (
+                          <div style={{ color: '#94a3b8' }}>
+                            👤 Miembro incorporado: <strong style={{ color: '#38bdf8' }}>{item.redeemed_by_name || item.candidate_name}</strong>
+                          </div>
+                        ) : isAdmissionCancelled ? (
+                          <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '12px' }}>
+                            ⏱️ Invitación expirada • Ingreso cancelado por falta de canje en 15 días
+                          </div>
+                        ) : isWaitingEntry ? (
+                          isAuthor && item.invite_token ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                                <div style={{
+                                  backgroundColor: '#1e293b',
+                                  border: '1px solid #38bdf8',
+                                  color: '#38bdf8',
+                                  padding: '4px 10px',
+                                  borderRadius: '8px',
+                                  fontFamily: 'monospace',
+                                  fontWeight: '700',
+                                  fontSize: '14px',
+                                }}>
+                                  🔑 {item.invite_code_formatted || item.invite_token}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShareInvite(item.invite_token, item.candidate_name, item.invite_code_formatted);
+                                  }}
+                                  style={{
+                                    backgroundColor: '#16a34a',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '5px 12px',
+                                    fontSize: '12px',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  💬 Compartir
+                                </button>
+                              </div>
+                              <div style={{ color: '#fbbf24', fontStyle: 'italic', fontSize: '12px' }}>
+                                ⏳ Invitación de 15 días aprobada y lista para canje.
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ color: '#38bdf8', fontSize: '12px' }}>
+                              ⏳ Aprobada por la asamblea. Código entregado al proponente ({item.author_name}). En espera del ingreso del nuevo miembro.
+                            </div>
+                          )
+                        ) : (isDebate || isVoting) ? (
+                          <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '12px' }}>
+                            ⚖️ En proceso de asamblea (El enlace se generará una vez aprobado)
+                          </div>
+                        ) : null}
                       </div>
                     )}
 
-                    {/* Tarjeta de Código de Invitación cuando está aprobada y en espera de ingreso */}
-                    {isWaitingEntry && (
-                      isAuthor ? (
-                        <div style={{
-                          backgroundColor: 'rgba(2, 132, 199, 0.15)',
-                          border: '1px solid rgba(56, 189, 248, 0.4)',
-                          borderRadius: '10px',
-                          padding: '12px',
-                          marginTop: '6px',
-                        }}>
-                          <div style={{ fontSize: '0.78rem', color: '#93c5fd', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                            🔑 Código Oficial de Invitación
-                          </div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '0.1em', color: '#38bdf8', fontFamily: 'monospace', margin: '4px 0' }}>
-                            {p.invite_code_formatted || p.invite_token}
-                          </div>
-                          <p style={{ fontSize: '0.78rem', color: '#cbd5e1', margin: '0 0 10px 0' }}>
-                            ⏳ Invitación de 15 días aprobada. Exclusiva para que tú se la entregues al familiar.
-                          </p>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ flex: 1, backgroundColor: '#16a34a', border: 'none', fontSize: '0.82rem', padding: '6px 10px' }}
-                              onClick={() => {
-                                const text = encodeURIComponent(`¡Hola ${p.candidate_name}! La asamblea de la Mutual Familiar ha aprobado tu ingreso. Usa este código de invitación en la app: ${p.invite_code_formatted || p.invite_token}`);
-                                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-                              }}
-                            >
-                              💬 WhatsApp
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ flex: 1, fontSize: '0.82rem', padding: '6px 10px' }}
-                              onClick={() => {
-                                navigator.clipboard.writeText(p.invite_code_formatted || p.invite_token);
-                                alert('Código copiado al portapapeles');
-                              }}
-                            >
-                              📋 Copiar
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            style={{
-                              marginTop: '8px',
-                              width: '100%',
-                              backgroundColor: 'transparent',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              color: '#f87171',
-                              borderRadius: '6px',
-                              padding: '5px',
-                              fontSize: '0.75rem',
-                              cursor: 'pointer'
-                            }}
-                            onClick={async () => {
-                              if (window.confirm('¿Deseas cancelar esta invitación de ingreso? La propuesta pasará al historial.')) {
-                                try {
-                                  await asambleasApi.cancelarIngreso(p.id);
-                                  alert('Ingreso cancelado');
-                                  fetchPropuestas();
-                                } catch (e) {
-                                  alert(e.message || 'Error al cancelar');
-                                }
-                              }
-                            }}
-                          >
-                            ⚠️ Cancelar Invitación de Ingreso
-                          </button>
-                        </div>
-                      ) : (
-                        <div style={{
-                          backgroundColor: 'rgba(2, 132, 199, 0.1)',
-                          border: '1px solid rgba(56, 189, 248, 0.25)',
-                          borderRadius: '10px',
-                          padding: '10px 12px',
-                          fontSize: '0.8rem',
-                          color: '#bae6fd',
-                          marginTop: '6px',
-                        }}>
-                          ⏳ <strong>Ingreso Aprobado • En Espera:</strong> La asamblea familiar aprobó el ingreso de {p.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {p.author_name || 'quien hizo la propuesta'} para su entrega al nuevo miembro.
-                        </div>
-                      )
-                    )}
-
-                    {/* Botonera de Votación y Acciones */}
-                    {(p.status === 'DEBATE' || p.status === 'VOTING') && (
+                    {/* Resumen de Votos */}
+                    {!isDebate ? (
                       <div style={{
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                        paddingTop: '0.75rem',
-                        marginTop: 'auto',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        backgroundColor: '#0f172a',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        marginBottom: '10px',
                       }}>
-                        {!hasVoted ? (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-                            <button
-                              type="button"
-                              style={{
-                                padding: '8px 4px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: '#10b981',
-                                color: '#ffffff',
-                                fontSize: '0.8rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                              }}
-                              onClick={() => handleVote(p.id, 'for')}
-                            >
-                              👍 A Favor
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                padding: '8px 4px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: '#ef4444',
-                                color: '#ffffff',
-                                fontSize: '0.8rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                              }}
-                              onClick={() => handleVote(p.id, 'veto')}
-                            >
-                              🚫 Veto
-                            </button>
-                            <button
-                              type="button"
-                              style={{
-                                padding: '8px 4px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                backgroundColor: '#475569',
-                                color: '#ffffff',
-                                fontSize: '0.8rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                              }}
-                              onClick={() => handleVote(p.id, 'abstain')}
-                            >
-                              ⚪ Abstención
-                            </button>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.8rem', color: '#34d399', textAlign: 'center', fontWeight: '600' }}>
-                            ✓ Ya has emitido tu voto en esta asamblea
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#cbd5e1' }}>
+                          <span>👍 <strong style={{ color: '#10b981' }}>{item.votes_yes || 0}</strong> SÍ</span>
+                          <span>👎 <strong style={{ color: '#ef4444' }}>{item.votes_no || 0}</strong> NO</span>
+                          <span>⬜ <strong style={{ color: '#94a3b8' }}>{item.votes_abstain || 0}</strong> Abst.</span>
+                        </div>
+                        {item.my_vote && (
+                          <div style={{
+                            backgroundColor: '#334155',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            color: '#e2e8f0',
+                          }}>
+                            Tu voto: <strong style={{
+                              color: item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#94a3b8'
+                            }}>{item.my_vote.toUpperCase()}</strong>
                           </div>
                         )}
-
-                        {/* Publicar defensa si es el objetivo de expulsión y no ha publicado */}
-                        {isExpulsion && isTarget && !p.defense_text && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ fontSize: '0.8rem', borderColor: '#3b82f6', color: '#60a5fa' }}
-                            onClick={() => {
-                              setSelectedPropuesta(p);
-                              setShowDefenseModal(true);
-                            }}
-                          >
-                            ✍️ Publicar mi Defensa ante la Asamblea
-                          </button>
-                        )}
-
-                        {/* Concluir Asamblea */}
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          style={{ fontSize: '0.78rem', color: '#94a3b8' }}
-                          onClick={() => handleCerrarPropuesta(p.id)}
-                        >
-                          Concluir / Registrar Resolución
-                        </button>
+                      </div>
+                    ) : (
+                      <div style={{
+                        backgroundColor: '#0f172a',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        marginBottom: '10px',
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                        fontStyle: 'italic',
+                      }}>
+                        💬 En debate • Votación aún no iniciada
                       </div>
                     )}
+
+                    {/* Banner de Veto si aplica */}
+                    {item.veto_activated && item.vetantes_names?.length > 0 && (
+                      <div style={{
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        marginBottom: '10px',
+                        border: '1px solid #ef4444',
+                        color: '#fca5a5',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                      }}>
+                        🚫 Vetada nominativamente por: {item.vetantes_names.join(', ')}
+                      </div>
+                    )}
+
+                    {/* Botón de Acción Principal Homologado con Android */}
+                    <div style={{ marginTop: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openProposalDetail(item);
+                        }}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '12px 16px',
+                          borderRadius: '12px',
+                          borderWidth: '1.5px',
+                          borderStyle: 'solid',
+                          gap: '8px',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          ...(isVoting
+                            ? (!item.my_vote
+                              ? { backgroundColor: '#0284c7', borderColor: '#38bdf8', color: '#ffffff', boxShadow: '0 3px 6px rgba(2, 132, 199, 0.35)' }
+                              : { backgroundColor: '#0369a1', borderColor: '#38bdf8', color: '#ffffff' })
+                            : isDebate
+                            ? { backgroundColor: 'rgba(245, 158, 11, 0.18)', borderColor: '#f59e0b', color: '#fbbf24' }
+                            : isWaitingEntry
+                            ? (isAuthor
+                              ? { backgroundColor: '#0284c7', borderColor: '#38bdf8', color: '#ffffff', boxShadow: '0 3px 6px rgba(2, 132, 199, 0.35)' }
+                              : { backgroundColor: 'rgba(2, 132, 199, 0.25)', borderColor: '#0284c7', color: '#38bdf8' })
+                            : { backgroundColor: 'rgba(51, 65, 85, 0.5)', borderColor: 'rgba(148, 163, 184, 0.25)', color: '#cbd5e1' })
+                        }}
+                      >
+                        <span style={{ fontSize: '16px' }}>
+                          {isVoting ? '🗳️' : isDebate ? '💬' : isWaitingEntry ? (isAuthor ? '🔑' : '⏳') : '📜'}
+                        </span>
+                        <span>
+                          {isVoting
+                            ? (!item.my_vote
+                              ? 'Ver y Votar (Voto Pendiente) →'
+                              : 'Ver y Votar →')
+                            : isDebate
+                            ? 'Ver y Participar en Debate →'
+                            : isWaitingEntry
+                            ? (isAuthor ? 'Ver Invitación y Compartir →' : 'Ver Detalle de Asamblea →')
+                            : 'Ver Detalle de Asamblea →'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DETALLE Y DEBATE (HOMOLOGADO CON ANDROID)          */}
+      {/* ======================================================== */}
+      {showDetailModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'grid',
+          placeItems: 'center',
+          zIndex: 99999,
+          padding: '1rem',
+          overflowY: 'auto'
+        }} onClick={() => setShowDetailModal(false)}>
+          <div style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '20px',
+            padding: '1.5rem',
+            maxWidth: '38rem',
+            width: '100%',
+            color: '#f8fafc',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }} onClick={(e) => e.stopPropagation()}>
+            {loadingDetail || !proposalDetail ? (
+              <div style={{ padding: '3rem', textAlign: 'center' }}>
+                <div className="loader mx-auto mb-3" />
+                <p style={{ color: '#94a3b8' }}>Cargando detalle de asamblea...</p>
+              </div>
+            ) : (
+              <div style={{ overflowY: 'auto', paddingRight: '4px' }}>
+                {/* Header Modal */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{
+                    backgroundColor: proposalDetail.proposal_type === 'member_admission' ? '#0369a1' : '#be123c',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                  }}>
+                    {proposalDetail.proposal_type === 'member_admission' ? '📥 Ingreso' : '⚠️ Expulsión'}
+                  </div>
+                  <button
+                    type="button"
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '20px', cursor: 'pointer', padding: '4px' }}
+                    onClick={() => setShowDetailModal(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', margin: '0 0 12px 0', color: '#f8fafc' }}>
+                  {proposalDetail.title}
+                </h2>
+
+                {/* Fase y Tiempo */}
+                <div style={{
+                  backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  marginBottom: '14px',
+                }}>
+                  <div style={{ color: '#38bdf8', fontWeight: '700', fontSize: '14px', marginBottom: '4px' }}>
+                    {proposalDetail.phase_label}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#cbd5e1' }}>
+                    {proposalDetail.status === 'voting' ? (
+                      proposalDetail.time_remaining_seconds > 0
+                        ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                        : '⏱️ Plazo concluido • Votación lista para computar resolución'
+                    ) : proposalDetail.status === 'debate' ? (
+                      proposalDetail.time_remaining_seconds > 0
+                        ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                        : '💬 Deliberación concluida • Pasando a votación'
+                    ) : proposalDetail.status === 'approved' ? (
+                      <span style={{ color: '#34d399' }}>✅ Propuesta aprobada por la asamblea familiar</span>
+                    ) : proposalDetail.status === 'rejected' ? (
+                      <span style={{ color: '#f87171' }}>
+                        {proposalDetail.veto_activated
+                          ? '🚫 Propuesta rechazada por veto nominativo'
+                          : '❌ Propuesta no aprobada por la asamblea'}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Sección Motivo / Justificación */}
+                <div style={{
+                  backgroundColor: '#0f172a',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  marginBottom: '14px',
+                }}>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Motivo / Justificación:
+                  </div>
+                  <p style={{ color: '#e2e8f0', fontSize: '14px', margin: '0 0 8px 0', lineHeight: '1.5' }}>
+                    {proposalDetail.content || proposalDetail.motive}
+                  </p>
+                  {proposalDetail.candidate_relation ? (
+                    <div style={{ fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
+                      🤝 Parentesco / Vínculo: <strong style={{ color: '#f8fafc' }}>{proposalDetail.candidate_relation}</strong>
+                    </div>
+                  ) : null}
+                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                    👤 Propuesto por: <strong style={{ color: '#e2e8f0' }}>{proposalDetail.author_name}</strong>
+                  </div>
+                </div>
+
+                {/* Enlace de Invitación Oficial (Admisión) */}
+                {proposalDetail.proposal_type === 'member_admission' && (
+                  proposalDetail.status === 'approved' ? (
+                    (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
+                      <div style={{
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid #10b981',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        marginBottom: '14px',
+                        color: '#a7f3d0',
+                        fontSize: '13px'
+                      }}>
+                        ✅ <strong>Ingreso Concretado:</strong> El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                      </div>
+                    ) : proposalDetail.admission_cancelled ? (
+                      <div style={{
+                        backgroundColor: 'rgba(100, 116, 139, 0.2)',
+                        border: '1px solid #64748b',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        marginBottom: '14px',
+                        color: '#cbd5e1',
+                        fontSize: '13px'
+                      }}>
+                        ⏱️ <strong>Ingreso Cancelado:</strong> La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
+                      </div>
+                    ) : (proposalDetail.is_author || (user?.id && proposalDetail.author_id === user.id) || proposalDetail.invite_token) ? (
+                      <div style={{
+                        backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                        border: '1px solid #0284c7',
+                        borderRadius: '12px',
+                        padding: '14px',
+                        marginBottom: '14px',
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>
+                          Enlace de Invitación Oficial:
+                        </div>
+                        <div style={{
+                          fontSize: '22px',
+                          fontWeight: '800',
+                          letterSpacing: '0.1em',
+                          fontFamily: 'monospace',
+                          color: '#38bdf8',
+                          margin: '8px 0',
+                          textAlign: 'center',
+                          backgroundColor: '#0f172a',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(56, 189, 248, 0.3)'
+                        }}>
+                          {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                        </div>
+                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: '0 0 12px 0', textAlign: 'center' }}>
+                          ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleShareInvite(proposalDetail.invite_token, proposalDetail.candidate_name, proposalDetail.invite_code_formatted)}
+                            style={{
+                              flex: 1,
+                              backgroundColor: '#16a34a',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '8px',
+                              padding: '10px',
+                              fontWeight: '700',
+                              fontSize: '13px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💬 WhatsApp
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(proposalDetail.invite_code_formatted || proposalDetail.invite_token);
+                              alert('Código copiado al portapapeles');
+                            }}
+                            style={{
+                              flex: 1,
+                              backgroundColor: '#334155',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '8px',
+                              padding: '10px',
+                              fontWeight: '700',
+                              fontSize: '13px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            📋 Copiar
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCancelarIngresoInDetail}
+                          style={{
+                            width: '100%',
+                            marginTop: '10px',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
+                            color: '#f87171',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⚠️ Cancelar Invitación de Ingreso
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{
+                        backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        marginBottom: '14px',
+                        color: '#bae6fd',
+                        fontSize: '13px'
+                      }}>
+                        ⏳ <strong>Ingreso Aprobado • En Espera:</strong> La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
+                      </div>
+                    )
+                  ) : null
+                )}
+
+                {/* Sección de Defensa (Expulsión) */}
+                {proposalDetail.proposal_type === 'expulsion' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Defensa del Miembro Acusado:
+                    </div>
+                    {proposalDetail.defense_text ? (
+                      <div style={{
+                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                        borderLeft: '4px solid #3b82f6',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        fontStyle: 'italic',
+                        color: '#93c5fd',
+                        fontSize: '13px',
+                      }}>
+                        "{proposalDetail.defense_text}"
+                      </div>
+                    ) : (
+                      <div style={{ color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' }}>
+                        El miembro aún no ha publicado su texto de defensa.
+                      </div>
+                    )}
+
+                    {/* Formulario si el usuario actual es el acusado */}
+                    {user?.id === proposalDetail.target_member_id && proposalDetail.status === 'debate' && (
+                      <div style={{ marginTop: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
+                          Tu texto de defensa:
+                        </label>
+                        <textarea
+                          rows={3}
+                          className="form-input"
+                          style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#1e293b', border: '1px solid #334155', color: '#fff', fontSize: '13px' }}
+                          placeholder="Escribe tus argumentos o explicaciones para la asamblea..."
+                          value={defenseInput}
+                          onChange={(e) => setDefenseInput(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={handlePublicarDefensaInDetail}
+                          style={{
+                            marginTop: '8px',
+                            backgroundColor: '#2563eb',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '13px',
+                            fontWeight: '700',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {proposalDetail.defense_text ? 'Actualizar Mi Defensa' : 'Publicar Mi Defensa'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Conteo de Votos y Resultados (Solo visible una vez iniciado el período de votación) */}
+                {proposalDetail.status !== 'debate' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>
+                      Estado de Votación
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      <div style={{
+                        border: '1.5px solid #10b981',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                      }}>
+                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #ef4444',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                      }}>
+                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #94a3b8',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
+                      }}>
+                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
+                      </div>
+                    </div>
+
+                    {/* Avance del Censo y Participación */}
+                    <div style={{
+                      backgroundColor: '#1e293b',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: '#cbd5e1',
+                      marginBottom: '8px',
+                    }}>
+                      👥 Participación: <strong style={{ color: '#f8fafc' }}>
+                        {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                      </strong>
+                      {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
+                        ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
+                        : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
+                          ? ' (100% del censo ha votado)'
+                          : ''}
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', lineHeight: '1.4' }}>
+                      {proposalDetail.proposal_type === 'member_admission'
+                        ? `* Regla de Admisión: Requiere ≥75% de aprobación (${proposalDetail.votes_yes_needed || 2} de ${proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).`
+                        : '* Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Botones de Voto si está en fase de votación */}
+                {proposalDetail.status === 'voting' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700', marginBottom: '10px' }}>
+                      Emite tu voto (nominativo):
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('si')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : '#10b981',
+                          border: proposalDetail.my_vote === 'si' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        👍 SÍ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('no')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'no' ? '#dc2626' : '#ef4444',
+                          border: proposalDetail.my_vote === 'no' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('abstencion')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'abstencion' ? '#475569' : '#64748b',
+                          border: proposalDetail.my_vote === 'abstencion' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ⬜ Abstención
+                      </button>
+                    </div>
+
+                    {/* Concluir Votación */}
+                    {proposalDetail.can_conclude && (
+                      <button
+                        type="button"
+                        onClick={handleCerrarInDetail}
+                        disabled={closingProposal}
+                        style={{
+                          width: '100%',
+                          backgroundColor: '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        {closingProposal ? 'Computando resolución...' : '⚖️ Computar y Concluir Votación'}
+                      </button>
+                    )}
+
+                    <div style={{
+                      fontSize: '11px',
+                      color: proposalDetail.threshold_reached ? '#4ade80' : '#94a3b8',
+                      lineHeight: '1.4'
+                    }}>
+                      {(() => {
+                        if (proposalDetail.has_veto) {
+                          return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
+                        }
+                        if (proposalDetail.proposal_type === 'member_admission') {
+                          const needed = proposalDetail.votes_yes_needed || 2;
+                          const currentYes = proposalDetail.votes_yes || 0;
+                          const total = proposalDetail.total_active_members || 2;
+                          const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+
+                          if (proposalDetail.threshold_reached && pending === 0) {
+                            return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
+                          }
+                          if (currentYes >= total) {
+                            return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
+                          }
+                          return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                        }
+                        if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
+                          return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
+                        }
+                        return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* FORO DE DEBATE Y DELIBERACIÓN */}
+                <div style={{
+                  backgroundColor: '#0f172a',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  marginBottom: '14px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700' }}>
+                      💬 Foro de Debate ({comments.length})
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openProposalDetail(proposalDetail)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '6px',
+                        color: '#38bdf8',
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🔄 Actualizar
+                    </button>
+                  </div>
+
+                  {proposalDetail.status === 'debate' && (
+                    <div style={{
+                      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      marginBottom: '10px',
+                      fontSize: '12px',
+                      color: '#fbbf24',
+                    }}>
+                      💬 <strong>Período de Deliberación Activo:</strong> Expresa tus argumentos, dudas o preguntas antes de la votación formal.
+                    </div>
+                  )}
+
+                  {comments.length === 0 ? (
+                    <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                      Aún no hay comentarios en este debate. ¡Sé el primero en compartir tu opinión con la familia!
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                      {comments.map((c) => {
+                        let stanceColor = '#38bdf8';
+                        let stanceBg = '#075985';
+                        let stanceText = '💬 Opinión';
+                        if (c.stance === 'favor') {
+                          stanceColor = '#34d399';
+                          stanceBg = '#065f46';
+                          stanceText = '👍 A favor';
+                        } else if (c.stance === 'contra') {
+                          stanceColor = '#f87171';
+                          stanceBg = '#881337';
+                          stanceText = '👎 En contra';
+                        } else if (c.stance === 'duda') {
+                          stanceColor = '#facc15';
+                          stanceBg = '#854d0e';
+                          stanceText = '🤔 Con dudas';
+                        }
+
+                        return (
+                          <div
+                            key={c.id}
+                            style={{
+                              backgroundColor: c.is_mine ? 'rgba(59, 130, 246, 0.1)' : '#1e293b',
+                              border: c.is_mine ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.05)',
+                              borderRadius: '10px',
+                              padding: '10px 12px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: '700', color: '#f8fafc' }}>
+                                <span>👤 {c.author_name}</span>
+                                {c.is_mine && <span style={{ color: '#38bdf8', fontSize: '11px' }}>(Tú)</span>}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReplyToAuthor(c.author_name)}
+                                  style={{
+                                    backgroundColor: 'transparent',
+                                    border: 'none',
+                                    color: '#38bdf8',
+                                    fontSize: '11px',
+                                    cursor: 'pointer',
+                                    padding: '2px 4px',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  @ Responder
+                                </button>
+                                {c.stance && (
+                                  <span style={{
+                                    backgroundColor: stanceBg,
+                                    color: stanceColor,
+                                    padding: '2px 6px',
+                                    borderRadius: '6px',
+                                    fontSize: '10px',
+                                    fontWeight: '700',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    {stanceText}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {renderCommentContent(c.content)}
+
+                            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>
+                              {c.created_at ? new Date(c.created_at).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Formulario de Comentario */}
+                  {(proposalDetail.status === 'debate' || proposalDetail.status === 'voting') && (
+                    <form onSubmit={handleSendComment} style={{ marginTop: '10px' }}>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>Tu postura o intervención:</div>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                        {[
+                          { key: 'favor', label: '👍 A favor' },
+                          { key: 'contra', label: '👎 En contra' },
+                          { key: 'duda', label: '🤔 Con dudas' },
+                          { key: 'opinión', label: '💬 Opinión' },
+                        ].map((s) => (
+                          <button
+                            key={s.key}
+                            type="button"
+                            onClick={() => setCommentStance(s.key)}
+                            style={{
+                              backgroundColor: commentStance === s.key ? '#2563eb' : '#1e293b',
+                              border: commentStance === s.key ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                              color: commentStance === s.key ? '#ffffff' : '#94a3b8',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {replyingTo && (
+                        <div style={{
+                          backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          color: '#38bdf8',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '6px'
+                        }}>
+                          <span>↩️ Respondiendo a <strong>@{replyingTo}</strong></span>
+                          <button
+                            type="button"
+                            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}
+                            onClick={() => {
+                              setReplyingTo(null);
+                              setCommentText(prev => prev.replace(`@${replyingTo} `, '').replace(`@${replyingTo}`, ''));
+                            }}
+                          >
+                            ✕ Cancelar
+                          </button>
+                        </div>
+                      )}
+
+                      <textarea
+                        ref={commentInputRef}
+                        rows={2}
+                        className="form-input"
+                        placeholder={replyingTo ? `Responde a @${replyingTo}...` : "Escribe tu argumento o pregunta para la asamblea..."}
+                        value={commentText}
+                        onChange={(e) => {
+                          setCommentText(e.target.value);
+                          if (replyingTo && !e.target.value.includes(`@${replyingTo}`)) {
+                            setReplyingTo(null);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          backgroundColor: '#1e293b',
+                          border: '1px solid #334155',
+                          color: '#fff',
+                          fontSize: '13px',
+                          marginBottom: '8px',
+                        }}
+                      />
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="submit"
+                          disabled={submittingComment || !commentText.trim()}
+                          style={{
+                            backgroundColor: '#0284c7',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            opacity: (!commentText.trim() || submittingComment) ? 0.6 : 1,
+                          }}
+                        >
+                          {submittingComment ? 'Publicando...' : 'Publicar en Foro'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {/* Desglose Nominativo de Votos */}
+                {proposalDetail.status !== 'debate' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Registro de Votantes (Nominativo)
+                    </div>
+                    {!proposalDetail.votes_list || proposalDetail.votes_list.length === 0 ? (
+                      <div style={{ color: '#64748b', fontSize: '12px', fontStyle: 'italic' }}>
+                        Aún no se han emitido votos en esta asamblea.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {proposalDetail.votes_list.map((v, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              backgroundColor: '#1e293b',
+                              borderRadius: '8px',
+                              padding: '6px 10px',
+                              fontSize: '12px',
+                            }}
+                          >
+                            <span style={{ color: '#f8fafc', fontWeight: '600' }}>👤 {v.voter_name}</span>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              backgroundColor: v.choice === 'si' ? '#065f46' : v.choice === 'no' ? '#881337' : '#334155',
+                              color: v.choice === 'si' ? '#34d399' : v.choice === 'no' ? '#f87171' : '#cbd5e1',
+                            }}>
+                              {v.choice.toUpperCase()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowDetailModal(false)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#334155',
+                    color: '#f8fafc',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    marginTop: '8px'
+                  }}
+                >
+                  Volver a la Lista
+                </button>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================= */}
@@ -1180,28 +2162,42 @@ const MembersList = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Correo Electrónico *
+                  Parentesco / Vínculo *
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   className="form-input"
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="familiar@correo.com"
-                  value={candidateEmail}
-                  onChange={(e) => setCandidateEmail(e.target.value)}
+                  placeholder="Ej: Hermano, Hijo, Tío, Primo"
+                  value={candidateRelation}
+                  onChange={(e) => setCandidateRelation(e.target.value)}
                   required
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Parentesco / Justificación *
+                  Teléfono de Contacto (opcional)
+                </label>
+                <input
+                  type="tel"
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                  placeholder="Ej: +58 412 1234567"
+                  value={candidatePhone}
+                  onChange={(e) => setCandidatePhone(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
+                  Motivo / Justificación *
                 </label>
                 <textarea
                   className="form-input"
                   rows={3}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="Explica el grado de parentesco o afinidad con la familia y por qué se propone su ingreso"
+                  placeholder="Explica las razones para proponer el ingreso de este familiar a la mutual"
                   value={candidateMotive}
                   onChange={(e) => setCandidateMotive(e.target.value)}
                   required
@@ -1219,7 +2215,7 @@ const MembersList = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ backgroundColor: '#10b981', border: 'none' }}
+                  style={{ backgroundColor: '#0284c7', border: 'none' }}
                   disabled={submittingIngreso}
                 >
                   {submittingIngreso ? 'Procesando...' : 'Iniciar Asamblea (15 días)'}
@@ -1255,7 +2251,7 @@ const MembersList = () => {
             color: '#f8fafc',
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700', color: '#f87171' }}>🛡️ Proponer Expulsión de Miembro</h3>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700', color: '#f87171' }}>⚠️ Proponer Expulsión de Miembro</h3>
               <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => setShowExpulsionModal(false)}>
                 <X size={20} />
               </button>
@@ -1316,76 +2312,6 @@ const MembersList = () => {
                   disabled={submittingExpulsion}
                 >
                   {submittingExpulsion ? 'Procesando...' : 'Iniciar Proceso de Asamblea'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL 4: PUBLICAR DEFENSA ANTE ASAMBLEA                   */}
-      {/* ========================================================= */}
-      {showDefenseModal && selectedPropuesta && createPortal(
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
-          display: 'grid',
-          placeItems: 'center',
-          zIndex: 99999,
-          padding: '1rem',
-        }} onClick={() => setShowDefenseModal(false)}>
-          <div style={{
-            backgroundColor: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            padding: '1.5rem',
-            maxWidth: '26rem',
-            width: '100%',
-            color: '#f8fafc',
-          }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>✍️ Tu Alegato de Defensa</h3>
-              <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => setShowDefenseModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <p style={{ color: '#cbd5e1', fontSize: '0.85rem', marginBottom: '1rem' }}>
-              Escribe aquí tus descargos o razones para que toda la familia los lea antes de emitir su voto.
-            </p>
-
-            <form onSubmit={handlePublicarDefensa} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <textarea
-                  className="form-input"
-                  rows={4}
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="Expresa tus descargos de forma respetuosa..."
-                  value={defenseText}
-                  onChange={(e) => setDefenseText(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowDefenseModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ backgroundColor: '#2563eb', border: 'none' }}
-                  disabled={submittingDefense}
-                >
-                  {submittingDefense ? 'Publicando...' : 'Publicar Defensa'}
                 </button>
               </div>
             </form>
