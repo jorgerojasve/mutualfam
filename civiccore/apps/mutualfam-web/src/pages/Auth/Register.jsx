@@ -75,6 +75,9 @@ const Register = () => {
             }
           } catch (_) {}
           setSuccessInfo("¡Cuenta creada y unido a tu mutual exitosamente!");
+          setTimeout(() => {
+            navigate('/loans', { replace: true });
+          }, 1000);
         } catch (joinErr) {
           console.warn("Auto-join error:", joinErr);
           const detail = joinErr?.response?.data?.detail || joinErr?.message || '';
@@ -82,14 +85,16 @@ const Register = () => {
             alert(detail);
           }
           setSuccessInfo("¡Cuenta creada exitosamente!");
+          setTimeout(() => {
+            navigate('/select-mutual', { replace: true });
+          }, 1000);
         }
       } else {
         setSuccessInfo("¡Cuenta creada exitosamente!");
+        setTimeout(() => {
+          navigate('/select-mutual', { replace: true });
+        }, 1000);
       }
-
-      setTimeout(() => {
-        navigate('/', { replace: true });
-      }, 1000);
     } catch (err) {
       const errorMsg = typeof err === 'string' ? err : (err?.message || "Error al crear la cuenta");
       setError(errorMsg);
@@ -101,21 +106,15 @@ const Register = () => {
   return (
     <div className="auth-container">
       <div className="glass-card auth-card animate-slide-up" style={{ maxWidth: '460px', padding: '1.25rem 1.15rem' }}>
-        {/* Encabezado ultra compacto para mobile */}
-        <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+        {/* Encabezado homologado con Android */}
+        <div style={{ textAlign: 'center', marginBottom: '0.85rem' }}>
+          <img
+            src={envConfig.isQA ? '/logo-qa.png' : '/logo.png'}
+            alt="Mutual Familiar"
+            style={{ width: '56px', height: '56px', borderRadius: '14px', marginBottom: '8px', objectFit: 'contain' }}
+          />
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-            <div style={{
-              width: '2rem',
-              height: '2rem',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <UserPlus color="white" size={16} />
-            </div>
-            <h2 className="text-gradient" style={{ fontSize: '1.35rem', margin: 0 }}>MutualFam</h2>
+            <h2 className="text-gradient" style={{ fontSize: '1.45rem', margin: 0, fontWeight: 700 }}>Mutual Familiar</h2>
             <EnvBadge size="small" />
           </div>
           <p className="text-muted" style={{ fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
@@ -293,7 +292,10 @@ const Register = () => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
-              boxShadow: '0 4px 14px 0 rgba(59, 130, 246, 0.45)',
+              backgroundColor: 'var(--accent-primary)',
+              borderColor: 'transparent',
+              color: '#ffffff',
+              boxShadow: '0 4px 14px 0 var(--shadow-glow, rgba(16, 185, 129, 0.4))',
               cursor: 'pointer'
             }}
             disabled={isLoading || Boolean(successInfo)}

@@ -5,6 +5,16 @@ import { Plus, X, AlertCircle, CheckCircle, Clock, ChevronRight, DollarSign, Wal
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 import { parseVEAmount, formatVE, formatCurrencyVE } from '../../utils/currency.js';
+import { formatLocalDate, formatTimeAMPM, getDefaultHoraPago, formatDateTime } from '../../utils/dates.js';
+import {
+  normalizePaymentMethodKey,
+  hasConfiguredPaymentMethods,
+  loadUserPaymentConfig,
+  formatCashPaymentSummary,
+} from '../../utils/paymentConfig.js';
+import CashDeliveryCard from '../../components/Common/CashDeliveryCard.jsx';
+import CashPayrollInput from '../../components/Common/CashPayrollInput.jsx';
+import PaymentConfigModal from '../../components/Common/PaymentConfigModal.jsx';
 
 /** Calcula meta, comprometido total, restante y promedio real de aportes vigentes. */
 const getColectaFinancialStats = (colecta) => {
@@ -114,6 +124,8 @@ export default function FundsDashboard() {
   const [showPledgeModal, setShowPledgeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [userPaymentConfig, setUserPaymentConfig] = useState({});
   const [targetColecta, setTargetColecta] = useState(null);
 
   // Form: Proponer Colecta
@@ -123,9 +135,21 @@ export default function FundsDashboard() {
   const [colectaCurrency, setColectaCurrency] = useState('USD'); // 'USD' | 'VES'
   const [tipoTasa, setTipoTasa] = useState('bcv');
   const [tasaFijaValor, setTasaFijaValor] = useState('');
-  const [fechaPago, setFechaPago] = useState('');
+  const [fechaPago, setFechaPago] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return formatLocalDate(d);
+  });
+  const [horaPago, setHoraPago] = useState('14:00');
+  const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([
+    'Pago Móvil',
+    'Transferencia Bancaria',
+  ]);
   const [beneficiarioNombre, setBeneficiarioNombre] = useState('');
   const [submittingColecta, setSubmittingColecta] = useState(false);
+
+  // Desglose de aportes expandidos
+  const [expandedBreakdown, setExpandedBreakdown] = useState({});
 
   // Form: Comprometer Aporte
   const [pledgeAmount, setPledgeAmount] = useState('');
@@ -137,6 +161,9 @@ export default function FundsDashboard() {
   const [paymentBankCode, setPaymentBankCode] = useState('0102');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentReceiptUrl, setPaymentReceiptUrl] = useState('');
+  const [cashPayroll, setCashPayroll] = useState({});
+  const [cashSerials, setCashSerials] = useState('');
+  const [cashDeliveryNote, setCashDeliveryNote] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [showEarlyBsNotice, setShowEarlyBsNotice] = useState(false);
 
@@ -308,6 +335,25 @@ export default function FundsDashboard() {
       alert('El monto meta debe ser mayor a 0');
       return;
     }
+    if (!colectaAcceptedMethods || colectaAcceptedMethods.length === 0) {
+      alert('Debes seleccionar al menos un método de pago que aceptas para la colecta.');
+      return;
+    }
+
+    const latestConfig = await loadUserPaymentConfig(userPaymentConfig);
+    if (!hasConfiguredPaymentMethods(latestConfig)) {
+      if (window.confirm('Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.\n\n¿Deseas configurarlos ahora?')) {
+        setShowConfigModal(true);
+      }
+      return;
+    }
+
+    const filteredDatosPago = {};
+    for (const m of (colectaAcceptedMethods || [])) {
+      if (latestConfig && latestConfig[m]) {
+        filteredDatosPago[m] = latestConfig[m];
+      }
+    }
 
     setSubmittingColecta(true);
     try {
@@ -323,9 +369,11 @@ export default function FundsDashboard() {
         currency: colectaCurrency,
         tipo_tasa: tipoTasa,
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) || null : null,
-        fecha_pago: fechaPago || new Date().toISOString().split('T')[0],
+        fecha_pago: fechaPago || formatLocalDate(new Date()),
+        hora_pago: horaPago || getDefaultHoraPago(fechaPago),
         fecha_limite_aportes: fechaPago || null,
-        beneficiario_nombre: beneficiarioNombre.trim() || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Familia'
+        beneficiario_nombre: beneficiarioNombre.trim() || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'Familia',
+        beneficiario_datos_pago: Object.keys(filteredDatosPago).length > 0 ? filteredDatosPago : undefined,
       };
       await colectasApi.createColecta(payload);
       setShowCreateColectaModal(false);
@@ -333,13 +381,24 @@ export default function FundsDashboard() {
       setProposito('');
       setMontoMeta('');
       setColectaCurrency('USD');
-      setFechaPago('');
       setBeneficiarioNombre('');
       await fetchColectas();
     } catch (err) {
       alert(err.message || 'Error al proponer la colecta');
     } finally {
       setSubmittingColecta(false);
+    }
+  };
+
+  // Validar Aporte Recibido (Gestor)
+  const handleValidatePayment = async (colectaId, compromisoId) => {
+    if (!window.confirm('¿Confirmas que recibiste el dinero correspondiente a este aporte?')) return;
+    try {
+      await colectasApi.validatePayment(colectaId, compromisoId);
+      alert('¡Aporte validado exitosamente!');
+      await fetchColectas();
+    } catch (err) {
+      alert('Error al validar aporte: ' + (err.message || 'Error desconocido'));
     }
   };
 
@@ -384,8 +443,19 @@ export default function FundsDashboard() {
       alert(getEarlyBsPaymentMessage(targetColecta.fecha_pago, 'pay'));
       return;
     }
-    if (!paymentRef.trim()) {
-      alert('Por favor ingresa el número de referencia del pago');
+
+    const isEfectivoUsd = paymentMethod === 'efectivo' || normalizePaymentMethodKey(paymentMethod) === 'Efectivo USD';
+    let refToSave = paymentRef.trim();
+    let noteToSave = undefined;
+
+    if (isEfectivoUsd) {
+      const cashSummary = formatCashPaymentSummary(cashPayroll, cashSerials, cashDeliveryNote);
+      refToSave = refToSave || cashSummary.shortRef;
+      noteToSave = cashSummary.fullNote;
+    }
+
+    if (!refToSave) {
+      alert('Por favor ingresa el número de referencia del pago o desglose en efectivo');
       return;
     }
 
@@ -397,16 +467,19 @@ export default function FundsDashboard() {
       }
       const payload = {
         payment_method: paymentMethod,
-        referencia_pago: paymentRef.trim(),
+        referencia_pago: refToSave,
         comprobante_url: paymentReceiptUrl.trim() || null,
-        nota_pago: (paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && paymentBankCode
+        nota_pago: noteToSave || ((paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && paymentBankCode
           ? `Banco emisor: ${paymentBankCode}`
-          : undefined,
+          : undefined),
       };
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, payload);
       setShowPaymentModal(false);
       setPaymentRef('');
       setPaymentReceiptUrl('');
+      setCashPayroll({});
+      setCashSerials('');
+      setCashDeliveryNote('');
       setTargetColecta(null);
       await fetchColectas();
       alert('¡Pago notificado exitosamente a la familia!');
@@ -540,29 +613,50 @@ export default function FundsDashboard() {
         </div>
 
         {/* Acciones principales */}
-        <div>
+        <div style={{ display: 'flex', gap: '8px' }}>
           {activeTab === 'colectas' ? (
-            <button
-              type="button"
-              onClick={() => setShowCreateColectaModal(true)}
-              style={{
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-              }}
-            >
-              <Plus size={16} />
-              + Proponer Colecta
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(true)}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                  color: '#f8fafc',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '8px',
+                  padding: '8px 14px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                ⚙️ Datos
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateColectaModal(true)}
+                style={{
+                  backgroundColor: '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+                }}
+              >
+                <Plus size={16} />
+                + Colecta
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -781,6 +875,11 @@ export default function FundsDashboard() {
                         <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
                           Gestionado por: <strong style={{ color: '#f1f5f9' }}>{item.beneficiario_nombre || 'Familiar'}</strong> • Propuesto por: {item.proponente_nombre || 'Familiar'}
                         </p>
+                        {item.fecha_pago && (
+                          <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
+                            📅 Fecha de pago: <strong style={{ color: '#f1f5f9' }}>{item.fecha_pago}{item.hora_pago ? ` (${formatTimeAMPM(item.hora_pago)})` : ''}</strong>
+                          </p>
+                        )}
                       </div>
 
                       {/* Pill de Estado */}
@@ -938,6 +1037,138 @@ export default function FundsDashboard() {
                         }}>
                           {myPledge.estado === 'confirmado' ? 'Confirmado' : myPledge.estado === 'pagado' ? 'En Revisión' : 'Por Pagar'}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Desglose de todos los aportes de los miembros */}
+                    {item.compromisos && item.compromisos.length > 0 && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedBreakdown((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '8px',
+                            padding: '6px 10px',
+                            color: '#38bdf8',
+                            fontSize: '0.8rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {expandedBreakdown[item.id] ? '▲ Ocultar desglose de aportes' : `▼ Ver desglose (${item.compromisos.length} aportes)`}
+                        </button>
+                        {expandedBreakdown[item.id] && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                            {item.compromisos.map((comp, idx) => (
+                              <div
+                                key={comp.id || idx}
+                                style={{
+                                  backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                                  borderRadius: '8px',
+                                  padding: '10px 12px',
+                                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                                  borderLeft: `4px solid ${
+                                    comp.estado === 'confirmado' ? '#10b981' : comp.estado === 'pagado' ? '#eab308' : '#f97316'
+                                  }`,
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>
+                                      Aporte #{idx + 1} • {comp.socio_name || 'Miembro'}
+                                    </span>
+                                    {comp.fecha_compromiso && (
+                                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
+                                        📅 Prometido: {formatDateTime(comp.fecha_compromiso)}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 'bold',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: comp.estado === 'confirmado'
+                                      ? 'rgba(16, 185, 129, 0.2)'
+                                      : comp.estado === 'pagado'
+                                      ? 'rgba(234, 179, 8, 0.2)'
+                                      : 'rgba(249, 115, 22, 0.2)',
+                                    color: comp.estado === 'confirmado'
+                                      ? '#34d399'
+                                      : comp.estado === 'pagado'
+                                      ? '#facc15'
+                                      : '#fb923c',
+                                  }}>
+                                    {comp.estado === 'confirmado' ? '✅ Confirmado' : comp.estado === 'pagado' ? '⏳ En validación' : '⏳ Pendiente de pago'}
+                                  </span>
+                                </div>
+
+                                <div style={{ marginTop: '6px' }}>
+                                  <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#10b981' }}>
+                                    ${formatVE(comp.monto_usd)} USD
+                                  </span>
+                                  <span style={{ fontSize: '0.8rem', color: '#38bdf8', marginLeft: '6px' }}>
+                                    ~Bs {formatVE(comp.monto_bs || (comp.monto_usd * (item.tasa_actual || 1)))}
+                                  </span>
+                                </div>
+
+                                {comp.fecha_pago && (
+                                  <div style={{ fontSize: '0.72rem', color: '#facc15', marginTop: '4px' }}>
+                                    🕐 Notificado el {formatDateTime(comp.fecha_pago)}
+                                  </div>
+                                )}
+
+                                {comp.payment_method && (
+                                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                                      color: '#38bdf8',
+                                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    }}>
+                                      {comp.payment_method}
+                                    </span>
+                                    {comp.referencia_pago && (
+                                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
+                                        Ref: {comp.referencia_pago}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {isBeneficiary && comp.estado === 'pagado' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleValidatePayment(item.id, comp.id)}
+                                    style={{
+                                      marginTop: '8px',
+                                      width: '100%',
+                                      padding: '6px',
+                                      backgroundColor: '#10b981',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      color: '#fff',
+                                      fontSize: '0.8rem',
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    ✓ Validar Aporte Recibido
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1320,17 +1551,73 @@ export default function FundsDashboard() {
                 />
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
+                    Fecha de Pago / Liquidación *
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                    value={fechaPago}
+                    onChange={(e) => {
+                      setFechaPago(e.target.value);
+                      setHoraPago(getDefaultHoraPago(e.target.value));
+                    }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
+                    Hora de Pago ({formatTimeAMPM(horaPago)}) *
+                  </label>
+                  <input
+                    type="time"
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                    value={horaPago}
+                    onChange={(e) => setHoraPago(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Fecha Límite Opcional
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Métodos de Pago que Aceptas para esta Colecta *
                 </label>
-                <input
-                  type="date"
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  value={fechaPago}
-                  onChange={(e) => setFechaPago(e.target.value)}
-                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD'].map((m) => {
+                    const isSelected = colectaAcceptedMethods.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setColectaAcceptedMethods((prev) =>
+                            isSelected ? prev.filter((item) => item !== m) : [...prev, m]
+                          );
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '1px solid #10b981' : '1px solid #334155',
+                          backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: isSelected ? '#34d399' : '#94a3b8',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isSelected ? '✓ ' : '+ '}{m}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '4px' }}>
+                  Los aportantes verán tus datos guardados correspondientes a estos métodos para transferirte o coordinar entrega.
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '1rem' }}>
@@ -1728,6 +2015,27 @@ export default function FundsDashboard() {
                 )
               )}
 
+              {/* Tarjeta de Coordinación de Efectivo USD */}
+              {(paymentMethod === 'efectivo' || normalizePaymentMethodKey(paymentMethod) === 'Efectivo USD') && (
+                <div>
+                  <CashDeliveryCard
+                    data={targetColecta.beneficiario_datos_pago?.['Efectivo USD'] || targetColecta.beneficiario_datos_pago?.efectivo}
+                    montoUsd={targetColecta.mi_compromiso?.monto_usd}
+                    recipientName={targetColecta.beneficiario_nombre}
+                  />
+
+                  <CashPayrollInput
+                    targetAmount={targetColecta.mi_compromiso?.monto_usd || 0}
+                    payroll={cashPayroll}
+                    onPayrollChange={setCashPayroll}
+                    serials={cashSerials}
+                    onSerialsChange={setCashSerials}
+                    deliveryNote={cashDeliveryNote}
+                    onDeliveryNoteChange={setCashDeliveryNote}
+                  />
+                </div>
+              )}
+
               {(paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
@@ -1748,20 +2056,22 @@ export default function FundsDashboard() {
                 </div>
               )}
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Número de Referencia Bancaria *
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="Ej: 987654 (últimos 6 dígitos)"
-                  value={paymentRef}
-                  onChange={(e) => setPaymentRef(e.target.value)}
-                  required
-                />
-              </div>
+              {paymentMethod !== 'efectivo' && normalizePaymentMethodKey(paymentMethod) !== 'Efectivo USD' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
+                    Número de Referencia Bancaria *
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
+                    placeholder="Ej: 987654 (últimos 6 dígitos)"
+                    value={paymentRef}
+                    onChange={(e) => setPaymentRef(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
@@ -1988,6 +2298,14 @@ export default function FundsDashboard() {
         </div>,
         document.body
       )}
+
+      {/* Modal de Configuración de Datos de Pago */}
+      <PaymentConfigModal
+        visible={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSuccess={(cfg) => setUserPaymentConfig(cfg)}
+        initialConfig={userPaymentConfig}
+      />
     </div>
   );
 }

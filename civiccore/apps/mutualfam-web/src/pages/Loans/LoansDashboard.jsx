@@ -4,6 +4,15 @@ import { loansApi, useAuthStore } from '@civiccore/sdk';
 import { X, Check, Copy, WifiOff, RefreshCw } from 'lucide-react';
 import { VENEZUELAN_BANKS, getBankLabel } from '../../utils/banks.js';
 import { formatVE, parseVEAmount } from '../../utils/currency.js';
+import { formatDateTime } from '../../utils/dates.js';
+import {
+  formatCashPaymentSummary,
+  hasConfiguredPaymentMethods as checkConfiguredPaymentMethods,
+  loadUserPaymentConfig,
+} from '../../utils/paymentConfig.js';
+import CashDeliveryCard from '../../components/Common/CashDeliveryCard.jsx';
+import CashPayrollInput from '../../components/Common/CashPayrollInput.jsx';
+import PaymentConfigModal from '../../components/Common/PaymentConfigModal.jsx';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
 export default function LoansDashboard() {
@@ -38,6 +47,9 @@ export default function LoansDashboard() {
   const [selectedContrib, setSelectedContrib] = useState(null);
   const [notifyMethod, setNotifyMethod] = useState('Pago Móvil');
   const [referenceText, setReferenceText] = useState('');
+  const [cashPayroll, setCashPayroll] = useState({});
+  const [cashSerials, setCashSerials] = useState('');
+  const [cashDeliveryNote, setCashDeliveryNote] = useState('');
   const [notifying, setNotifying] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [receiptFile, setReceiptFile] = useState(null);
@@ -49,6 +61,9 @@ export default function LoansDashboard() {
   const [repayAmount, setRepayAmount] = useState('');
   const [repayMethod, setRepayMethod] = useState('Pago Móvil');
   const [repayReference, setRepayReference] = useState('');
+  const [repayCashPayroll, setRepayCashPayroll] = useState({});
+  const [repayCashSerials, setRepayCashSerials] = useState('');
+  const [repayCashDeliveryNote, setRepayCashDeliveryNote] = useState('');
   const [repayReceiptFile, setRepayReceiptFile] = useState(null);
   const [repayReceiptPreview, setRepayReceiptPreview] = useState(null);
   const [repaying, setRepaying] = useState(false);
@@ -119,13 +134,7 @@ export default function LoansDashboard() {
   };
 
   const hasConfiguredPaymentMethods = (config = paymentConfig) => {
-    if (!config || typeof config !== 'object') return false;
-    return Object.entries(config).some(([method, val]) => {
-      if (method === 'Pago Móvil') {
-        return val && typeof val === 'object' && Boolean(val.banco) && Boolean(val.cedula) && Boolean(val.telefono);
-      }
-      return typeof val === 'string' && val.trim().length > 0;
-    });
+    return checkConfiguredPaymentMethods(config);
   };
 
   useEffect(() => {
@@ -349,8 +358,19 @@ export default function LoansDashboard() {
       alert("Debes seleccionar el método de pago.");
       return;
     }
-    if (!referenceText.trim() && !receiptFile) {
-      alert("Por favor ingresa el número de referencia del pago.");
+
+    const isEfectivoUsd = notifyMethod === 'Efectivo USD';
+    let refToSave = referenceText.trim();
+    if (isEfectivoUsd) {
+      const cashSummary = formatCashPaymentSummary(cashPayroll, cashSerials, cashDeliveryNote);
+      refToSave = refToSave || cashSummary.shortRef;
+      if (cashSummary.fullNote && !refToSave.includes(cashSummary.fullNote)) {
+        refToSave = `${refToSave} [${cashSummary.fullNote}]`;
+      }
+    }
+
+    if (!refToSave && !receiptFile) {
+      alert("Por favor ingresa el número de referencia del pago o desglose de efectivo.");
       return;
     }
 
@@ -364,13 +384,16 @@ export default function LoansDashboard() {
 
       await loansApi.notifyPayment(selectedContrib.id, {
         payment_method: notifyMethod,
-        reference_text: referenceText.trim() || undefined,
+        reference_text: refToSave || undefined,
         receipt_url: finalReceiptUrl || undefined
       });
       setShowNotifyModal(false);
       setSelectedContrib(null);
       setSelectedLoan(null);
       setReferenceText('');
+      setCashPayroll({});
+      setCashSerials('');
+      setCashDeliveryNote('');
       setReceiptFile(null);
       setReceiptPreview(null);
       alert("¡Pago notificado exitosamente! El solicitante verificará la recepción del dinero.");
@@ -443,6 +466,16 @@ export default function LoansDashboard() {
       return;
     }
 
+    const isEfectivoUsd = repayMethod === 'Efectivo USD';
+    let refToSave = repayReference.trim();
+    if (isEfectivoUsd) {
+      const cashSummary = formatCashPaymentSummary(repayCashPayroll, repayCashSerials, repayCashDeliveryNote);
+      refToSave = refToSave || cashSummary.shortRef;
+      if (cashSummary.fullNote && !refToSave.includes(cashSummary.fullNote)) {
+        refToSave = `${refToSave} [${cashSummary.fullNote}]`;
+      }
+    }
+
     setRepaying(true);
     try {
       let finalReceiptUrl = null;
@@ -454,7 +487,7 @@ export default function LoansDashboard() {
       await loansApi.notifyRepayment(selectedRepayContrib.id, {
         amount_usd: parsedAmount,
         payment_method: repayMethod,
-        reference_text: repayReference.trim() || undefined,
+        reference_text: refToSave || undefined,
         receipt_url: finalReceiptUrl || undefined
       });
       setShowRepayModal(false);
@@ -462,6 +495,9 @@ export default function LoansDashboard() {
       setSelectedLoan(null);
       setRepayAmount('');
       setRepayReference('');
+      setRepayCashPayroll({});
+      setRepayCashSerials('');
+      setRepayCashDeliveryNote('');
       setRepayReceiptFile(null);
       setRepayReceiptPreview(null);
       alert("¡Devolución notificada! El aportante validará la recepción.");
@@ -1237,169 +1273,12 @@ export default function LoansDashboard() {
       )}
 
       {/* Modal Configurar Datos de Pago */}
-      {showConfigModal && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 99999,
-            padding: '1rem',
-          }}
-          onClick={() => setShowConfigModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: '#1e293b',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '16px',
-              padding: '1.5rem',
-              maxWidth: '28rem',
-              width: '100%',
-              color: '#f8fafc',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>Datos de Pago</h3>
-              <button
-                type="button"
-                onClick={() => setShowConfigModal(false)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePaymentConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <p style={{ fontSize: '0.825rem', color: '#94a3b8', margin: 0 }}>
-                Registra tus métodos de pago para poder recibir y transferir aportes en la mutual.
-              </p>
-
-              <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <strong style={{ fontSize: '0.9rem', color: '#38bdf8', display: 'block', marginBottom: '0.5rem' }}>
-                  📲 Pago Móvil (Venezuela)
-                </strong>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <select
-                    value={pagoMovilBanco}
-                    onChange={(e) => setPagoMovilBanco(e.target.value)}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#0f172a',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: '8px',
-                      padding: '0.5rem 0.75rem',
-                      color: '#f8fafc',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <option value="">Selecciona tu banco...</option>
-                    {VENEZUELAN_BANKS.map((b) => (
-                      <option key={b.code} value={b.code}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Cédula / Documento (ej. 12345678)"
-                    value={pagoMovilCedula}
-                    onChange={(e) => setPagoMovilCedula(e.target.value)}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#0f172a',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: '8px',
-                      padding: '0.5rem 0.75rem',
-                      color: '#f8fafc',
-                      fontSize: '0.85rem',
-                    }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Teléfono (ej. 04121234567)"
-                    value={pagoMovilTelefono}
-                    onChange={(e) => setPagoMovilTelefono(e.target.value)}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#0f172a',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      borderRadius: '8px',
-                      padding: '0.5rem 0.75rem',
-                      color: '#f8fafc',
-                      fontSize: '0.85rem',
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '0.85rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <strong style={{ fontSize: '0.9rem', color: '#a78bfa', display: 'block', marginBottom: '0.5rem' }}>
-                  💵 Zelle / Correo
-                </strong>
-                <input
-                  type="email"
-                  placeholder="Correo Zelle (ej. correo@ejemplo.com)"
-                  value={zelleEmail}
-                  onChange={(e) => setZelleEmail(e.target.value)}
-                  style={{
-                    width: '100%',
-                    backgroundColor: '#0f172a',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '8px',
-                    padding: '0.5rem 0.75rem',
-                    color: '#f8fafc',
-                    fontSize: '0.85rem',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowConfigModal(false)}
-                  style={{
-                    flex: 1,
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    padding: '0.65rem',
-                    color: '#f8fafc',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingPayment}
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#2563eb',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0.65rem',
-                    color: '#ffffff',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
-                  }}
-                >
-                  {savingPayment ? 'Guardando...' : 'Guardar Datos'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      <PaymentConfigModal
+        visible={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSuccess={(newCfg) => setPaymentConfig(newCfg)}
+        initialConfig={paymentConfig}
+      />
 
       {/* Modal Notificar Pago (Homologado con Android) */}
       {showNotifyModal && selectedContrib && selectedLoan && createPortal(
@@ -1623,6 +1502,28 @@ export default function LoansDashboard() {
                   );
                 }
 
+                if (notifyMethod === 'Efectivo USD') {
+                  const usd = reqConfig['Efectivo USD'];
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <CashDeliveryCard
+                        data={usd}
+                        montoUsd={selectedContrib?.amount_usd}
+                        recipientName={selectedLoan.requester_name}
+                      />
+                      <CashPayrollInput
+                        targetAmount={selectedContrib?.amount_usd || 0}
+                        payroll={cashPayroll}
+                        onPayrollChange={setCashPayroll}
+                        serials={cashSerials}
+                        onSerialsChange={setCashSerials}
+                        deliveryNote={cashDeliveryNote}
+                        onDeliveryNoteChange={setCashDeliveryNote}
+                      />
+                    </div>
+                  );
+                }
+
                 return (
                   <div style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '10px', padding: '0.85rem', fontSize: '0.85rem', color: '#94a3b8' }}>
                     ℹ️ Realiza el pago o entrega acordada y escribe el número de referencia a continuación.
@@ -1635,12 +1536,12 @@ export default function LoansDashboard() {
             <form onSubmit={handleSubmitNotify} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#cbd5e1', display: 'block', marginBottom: '0.4rem' }}>
-                  Número de Referencia
+                  Número de Referencia {notifyMethod === 'Efectivo USD' ? '(Opcional)' : '*'}
                 </label>
                 <input
                   type="text"
-                  required
-                  placeholder="Ej. 12345678 (últimos dígitos del comprobante)"
+                  required={notifyMethod !== 'Efectivo USD'}
+                  placeholder={notifyMethod === 'Efectivo USD' ? "Ej. Entrega en mano / acordado" : "Ej. 12345678 (últimos dígitos del comprobante)"}
                   value={referenceText}
                   onChange={(e) => setReferenceText(e.target.value)}
                   style={{
@@ -2013,6 +1914,27 @@ export default function LoansDashboard() {
                               {copiedField === 'zelle' ? '✓' : '📋'}
                             </span>
                           </div>
+                        </div>
+                      );
+                    }
+
+                    if (repayMethod === 'Efectivo USD') {
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          <CashDeliveryCard
+                            data={config}
+                            montoUsd={repayAmount}
+                            recipientName={selectedRepayContrib.funder_name}
+                          />
+                          <CashPayrollInput
+                            targetAmount={parseFloat(repayAmount) || 0}
+                            payroll={repayCashPayroll}
+                            onPayrollChange={setRepayCashPayroll}
+                            serials={repayCashSerials}
+                            onSerialsChange={setRepayCashSerials}
+                            deliveryNote={repayCashDeliveryNote}
+                            onDeliveryNoteChange={setRepayCashDeliveryNote}
+                          />
                         </div>
                       );
                     }

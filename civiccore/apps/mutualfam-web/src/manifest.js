@@ -1,16 +1,14 @@
 const manifest = {
-  name: "MutualFam",
-  shortName: "MFam",
+  name: "Mutual Familiar",
+  shortName: "Mutual Familiar",
   tagline: "Gestión de préstamos y aportes familiares",
   description: "Plataforma de gestión y gobernanza democrática para mutuales familiares.",
 
-  logo: null,
+  logo: "/logo.png",
   coverImage: null,
   faviconUrl: "/favicon.ico",
 
   theme: {
-    primaryColor: "#7c3aed",      // var(--accent-primary)
-    secondaryColor: "#a855f7",    // var(--accent-secondary)
     fontFamily: "Inter, system-ui, sans-serif",
   },
 

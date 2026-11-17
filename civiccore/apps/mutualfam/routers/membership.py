@@ -147,6 +147,23 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     
+    clean_identifier = (req.identifier or "").strip().upper()
+    if clean_identifier:
+        try:
+            import json
+            from models import UserPaymentConfig
+            initial_pm = {
+                "Pago Móvil": {
+                    "cedula": clean_identifier,
+                    "telefono": (req.phone or "").strip()
+                }
+            }
+            cfg = UserPaymentConfig(user_id=new_user.id, payment_methods_json=json.dumps(initial_pm))
+            db.add(cfg)
+            db.commit()
+        except Exception as e:
+            print(f"Warning initializing UserPaymentConfig on register: {e}")
+
     return {"message": "Usuario registrado exitosamente", "user_id": new_user.id}
 
 from services.limits import (

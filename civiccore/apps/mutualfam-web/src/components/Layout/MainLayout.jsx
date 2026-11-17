@@ -8,7 +8,7 @@ import { EnvTopBanner } from '../Common/EnvBadge';
 import { WifiOff, RefreshCw } from 'lucide-react';
 
 const MainLayout = () => {
-  const { isAuthenticated, isLoading, isOffline } = useAuthStore();
+  const { isAuthenticated, isLoading, isOffline, activeOrg, organizations } = useAuthStore();
 
   if (isLoading) {
     return (
@@ -20,6 +20,10 @@ const MainLayout = () => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!activeOrg && (!organizations || organizations.length === 0)) {
+    return <Navigate to="/select-mutual" replace />;
   }
 
   return (

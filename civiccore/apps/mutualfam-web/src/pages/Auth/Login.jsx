@@ -10,14 +10,20 @@ const Login = () => {
   const manifest = useManifest();
   const envConfig = getEnvironmentConfig();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@mutualsol.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      navigate('/', { replace: true });
+      const authState = useAuthStore.getState();
+      const orgs = authState.organizations || [];
+      if (orgs.length === 0) {
+        navigate('/select-mutual', { replace: true });
+      } else {
+        navigate('/loans', { replace: true });
+      }
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -40,12 +46,24 @@ const Login = () => {
             localStorage.setItem('organizationId', String(joinRes.organization_id));
             localStorage.setItem('active_org_id', String(joinRes.organization_id));
           }
+          navigate('/loans', { replace: true });
+          return;
         } catch (joinErr) {
           console.warn("Auto-join post-login error:", joinErr);
         }
       }
 
-      navigate('/', { replace: true });
+      // Comprobar si el usuario tiene mutuales
+      const authState = useAuthStore.getState();
+      const orgs = authState.organizations || [];
+      if (orgs.length === 0) {
+        navigate('/select-mutual', { replace: true });
+      } else if (orgs.length === 1) {
+        navigate('/loans', { replace: true });
+      } else {
+        const stored = localStorage.getItem('active_org_id');
+        navigate(stored ? '/loans' : '/select-mutual', { replace: true });
+      }
     } catch (err) {
       setError(err?.message || "Error al iniciar sesión");
     } finally {
@@ -57,18 +75,16 @@ const Login = () => {
     <div className="auth-container">
       <div className="glass-card auth-card animate-slide-up" style={manifest.coverImage ? { backgroundImage: `url(${manifest.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
         <div className="auth-logo">
-          {manifest.logo ? (
-            <img src={manifest.logo} alt={manifest.shortName} className="auth-logo-img mb-4 mx-auto" style={{ maxHeight: '80px' }} />
-          ) : (
-            <div className="auth-logo-icon flex items-center justify-center">
-              <LogIn color="white" size={28} />
-            </div>
-          )}
+          <img
+            src={envConfig.isQA ? '/logo-qa.png' : '/logo.png'}
+            alt="Mutual Familiar"
+            style={{ width: '72px', height: '72px', borderRadius: '16px', marginBottom: '12px', objectFit: 'contain' }}
+          />
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', justifyContent: 'center' }}>
-            <h2 className="text-gradient">{manifest.name || 'MutualFam'}</h2>
+            <h2 className="text-gradient" style={{ fontSize: '1.6rem', margin: 0, fontWeight: 700 }}>Mutual Familiar</h2>
             <EnvBadge size="medium" />
           </div>
-          <p className="text-muted">{envConfig.tagline || manifest.tagline || 'Acceso a la Plataforma'}</p>
+          <p className="text-muted" style={{ marginTop: '4px' }}>{envConfig.tagline || 'Acceso a la Plataforma'}</p>
         </div>
 
         {!envConfig.isProd && (

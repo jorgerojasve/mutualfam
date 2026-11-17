@@ -19,7 +19,9 @@ export default function LoginScreen({ route, navigation }) {
     ? require('../../assets/icon-qa.png')
     : require('../../assets/icon.png');
   const [isRegistering, setIsRegistering] = useState(route?.params?.intent === 'register');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [cedula, setCedula] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -56,7 +58,7 @@ export default function LoginScreen({ route, navigation }) {
   };
 
   const handleSubmit = async () => {
-    if (!email || !password || (isRegistering && !fullName)) {
+    if (!email || !password || (isRegistering && (!firstName.trim() || !lastName.trim() || !cedula.trim()))) {
       Alert.alert('Error', 'Por favor llena todos los campos');
       return;
     }
@@ -82,16 +84,21 @@ export default function LoginScreen({ route, navigation }) {
     setLoading(true);
     try {
       if (isRegistering) {
-        await authApi.register(email, password, fullName);
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        await authApi.register(email.trim(), password, fullName, firstName.trim(), lastName.trim(), cedula.trim());
         Alert.alert('Éxito', 'Cuenta creada exitosamente. Iniciando sesión...');
         
         // Auto login
-        const data = await authApi.login(email, password);
+        const data = await authApi.login(email.trim(), password);
         await AsyncStorage.multiSet([
           ['jwt_token', data.access_token],
           ['refresh_token', data.refresh_token]
         ]);
         registerForPushNotificationsAsync().catch(() => {});
+        
+        try {
+          await AsyncStorage.setItem('user_cedula', cedula.trim());
+        } catch (_) {}
         
         // Check for pending join token first
         const pendingToken = await AsyncStorage.getItem('pending_join_token');
@@ -190,14 +197,41 @@ export default function LoginScreen({ route, navigation }) {
         </View>
         
         {isRegistering && (
-          <TextInput
-            style={styles.input}
-            placeholder="Nombre completo"
-            placeholderTextColor="#94a3b8"
-            autoCapitalize="words"
-            value={fullName}
-            onChangeText={setFullName}
-          />
+          <>
+            <View style={styles.nameRow}>
+              <TextInput
+                style={[styles.input, styles.halfInput]}
+                placeholder="Nombre"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="words"
+                value={firstName}
+                onChangeText={setFirstName}
+              />
+              <TextInput
+                style={[styles.input, styles.halfInput]}
+                placeholder="Apellido"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="words"
+                value={lastName}
+                onChangeText={setLastName}
+              />
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Cédula de Identidad (ej. V-12345678)"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="characters"
+              value={cedula}
+              onChangeText={(text) => {
+                let clean = text.toUpperCase();
+                if (clean.length === 1 && /^[0-9]$/.test(clean)) {
+                  clean = 'V-' + clean;
+                }
+                setCedula(clean);
+              }}
+            />
+          </>
         )}
         
         <TextInput
@@ -371,6 +405,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     color: '#f8fafc',
     fontSize: 16,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+  },
+  halfInput: {
+    flex: 1,
   },
   passwordContainer: {
     width: '100%',
