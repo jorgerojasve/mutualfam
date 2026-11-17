@@ -11,6 +11,7 @@ import {
   loadUserPaymentConfig,
 } from '../../utils/paymentConfig.js';
 import CashDeliveryCard from '../../components/Common/CashDeliveryCard.jsx';
+import BankTransferCard from '../../components/Common/BankTransferCard.jsx';
 import CashPayrollInput from '../../components/Common/CashPayrollInput.jsx';
 import PaymentConfigModal from '../../components/Common/PaymentConfigModal.jsx';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
@@ -1392,25 +1393,35 @@ export default function LoansDashboard() {
                 ¿Cómo transfieres?
               </label>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {['Pago Móvil', 'Zelle', 'Efectivo USD', 'Transferencia'].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setNotifyMethod(m)}
-                    style={{
-                      backgroundColor: notifyMethod === m ? '#2563eb' : 'rgba(15, 23, 42, 0.6)',
-                      border: notifyMethod === m ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
-                      color: notifyMethod === m ? '#ffffff' : '#94a3b8',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      fontSize: '0.8rem',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {m}
-                  </button>
-                ))}
+                {['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD', 'Efectivo Bolívares', 'Binance'].map((m) => {
+                  const isDisabled = m !== 'Pago Móvil' && m !== 'Transferencia Bancaria' && m !== 'Efectivo USD';
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        if (isDisabled) {
+                          alert('Esta opción de pago aún está en desarrollo.');
+                          return;
+                        }
+                        setNotifyMethod(m);
+                      }}
+                      style={{
+                        backgroundColor: notifyMethod === m ? '#2563eb' : 'rgba(15, 23, 42, 0.6)',
+                        border: notifyMethod === m ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                        color: notifyMethod === m ? '#ffffff' : '#94a3b8',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        opacity: isDisabled ? 0.5 : 1,
+                      }}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1516,6 +1527,26 @@ export default function LoansDashboard() {
                         {copiedField === 'all' ? '✅ ¡Copiado al portapapeles!' : '📋 Copiar todo para el banco'}
                       </button>
                     </div>
+                  );
+                }
+
+                if (notifyMethod === 'Transferencia Bancaria') {
+                  const tb = reqConfig['Transferencia Bancaria'];
+                  if (!tb || !tb.numero_cuenta) {
+                    return (
+                      <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem', color: '#fde047' }}>
+                        ⚠️ El solicitante no configuró datos de Transferencia Bancaria. Por favor coordina directamente con {selectedLoan.requester_name}.
+                      </div>
+                    );
+                  }
+                  const montoBsStr = bcvRate && selectedContrib?.amount_usd ? (selectedContrib.amount_usd * parseFloat(bcvRate)).toFixed(2) : null;
+                  return (
+                    <BankTransferCard
+                      data={tb}
+                      montoBs={montoBsStr}
+                      recipientName={selectedLoan.requester_name}
+                      tasaLabel={bcvRate ? `Tasa BCV: ${bcvRate}` : null}
+                    />
                   );
                 }
 
@@ -1775,7 +1806,7 @@ export default function LoansDashboard() {
                       } catch (_) {}
                     }
                     if (availableMethods.length === 0) {
-                      availableMethods = ['Pago Móvil', 'Zelle', 'Efectivo USD', 'Transferencia'];
+                      availableMethods = ['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD'];
                     }
                     return availableMethods.map((m) => {
                       const isSelected = repayMethod === m;
@@ -1930,6 +1961,21 @@ export default function LoansDashboard() {
                             {copiedField === 'all' ? '✅ ¡Copiado al portapapeles!' : '📋  Copiar todo para el banco'}
                           </button>
                         </div>
+                      );
+                    }
+
+                    if (repayMethod === 'Transferencia Bancaria' && typeof config === 'object') {
+                      const parsedMonto = parseFloat(repayAmount);
+                      const montoBsStr = bcvRate && !isNaN(parsedMonto) && parsedMonto > 0 
+                        ? (parsedMonto * parseFloat(bcvRate)).toFixed(2) 
+                        : null;
+                      return (
+                        <BankTransferCard
+                          data={config}
+                          montoBs={montoBsStr}
+                          recipientName={selectedRepayContrib.funder_name}
+                          tasaLabel={bcvRate ? `Tasa BCV: ${bcvRate}` : null}
+                        />
                       );
                     }
 
