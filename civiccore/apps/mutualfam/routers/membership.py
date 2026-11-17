@@ -255,7 +255,7 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
         OrganizationMembership.user_id != current_user.id
     ).first()
     
-    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_by_other:
+    if (invite.max_uses and invite.uses_count >= invite.max_uses) or used_by_other or invite.status == InviteStatus.USED:
         raise HTTPException(
             status_code=400,
             detail="Esta invitación ya fue utilizada por otra persona. Comunícate con el fundador de la mutual para que te genere una nueva invitación."
@@ -305,6 +305,21 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
                 )
                 db.add(membership)
             db.commit()
+
+            try:
+                from services.realtime import notify_org
+                notify_org(invite.organization_id, "MIEMBRO_INGRESADO", {
+                    "user_id": current_user.id,
+                    "proposal_id": invite.proposal_id,
+                    "name": f"{current_user.first_name} {current_user.last_name}".strip()
+                })
+                notify_org(invite.organization_id, "PROPUESTA_ACTUALIZADA", {
+                    "proposal_id": invite.proposal_id,
+                    "member_joined": True
+                })
+            except Exception as e:
+                print(f"⚠️ [MEMBERSHIP] Error notificando ingreso: {e}", flush=True)
+
             return {
                 "message": "¡Bienvenido a la mutual! Tu ingreso ha sido aprobado por la asamblea familiar.",
                 "organization_id": invite.organization_id,
@@ -341,6 +356,8 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
 
     # Flujo regular de invitación directa (período de gracia)
     invite.uses_count = (invite.uses_count or 0) + 1
+    if invite.max_uses and invite.uses_count >= invite.max_uses:
+        invite.status = InviteStatus.USED
     
     if existing_membership:
         existing_membership.status = MemberStatus.ACTIVE
@@ -354,6 +371,15 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
         )
         db.add(membership)
     db.commit()
+
+    try:
+        from services.realtime import notify_org
+        notify_org(invite.organization_id, "MIEMBRO_INGRESADO", {
+            "user_id": current_user.id,
+            "name": f"{current_user.first_name} {current_user.last_name}".strip()
+        })
+    except Exception as e:
+        print(f"⚠️ [MEMBERSHIP] Error notificando ingreso directo: {e}", flush=True)
     
     return {"message": "Te has unido exitosamente a la mutual", "organization_id": invite.organization_id, "status": "ACTIVE"}
 

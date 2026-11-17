@@ -42,12 +42,12 @@ export default function SelectMutual() {
     setJoinError('');
     setJoinSuccess('');
     try {
-      await joinOrg(inviteCode.trim());
-      setJoinSuccess('¡Te has unido exitosamente!');
+      const res = await joinOrg(inviteCode.trim());
+      setJoinSuccess(res?.message || '¡Te has unido exitosamente!');
       setTimeout(() => {
         setModalMode(null);
         navigate('/loans');
-      }, 900);
+      }, 1200);
     } catch (err) {
       setJoinError(err?.message || 'Código de invitación inválido o expirado');
     } finally {

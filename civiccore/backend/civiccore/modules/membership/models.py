@@ -25,6 +25,7 @@ class InviteStatus(str, enum.Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     REVOKED = "revoked"
+    USED = "used"
 
 class Organization(Base):
     __tablename__ = "organizations"
