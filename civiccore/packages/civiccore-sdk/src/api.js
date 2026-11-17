@@ -167,7 +167,14 @@ export const loansApi = {
     return request('/upload/', { method: 'POST', body: formData });
   },
   getPaymentMethods: () => request('/config/payment_methods'),
-  savePaymentMethods: (data) => request('/config/payment_methods', { method: 'POST', body: JSON.stringify(data) })
+  savePaymentMethods: (data) => request('/config/payment_methods', { method: 'POST', body: JSON.stringify(data) }),
+  updatePaymentMethods: (data) => {
+    const payload = typeof data === 'string'
+      ? { payment_methods_json: data }
+      : (data && data.payment_methods_json !== undefined ? data : { payment_methods_json: JSON.stringify(data || {}) });
+    return request('/config/payment_methods', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  getBanks: () => request('/config/banks')
 };
 
 // ─────────────────────────────────────────────

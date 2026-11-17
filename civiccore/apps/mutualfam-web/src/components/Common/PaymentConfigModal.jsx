@@ -372,7 +372,12 @@ export default function PaymentConfigModal({
     setSavingConfig(true);
     try {
       const jsonString = JSON.stringify(configToSave);
-      await loansApi.updatePaymentMethods({ payment_methods_json: jsonString });
+      const saveFn = loansApi.savePaymentMethods || loansApi.updatePaymentMethods;
+      if (typeof saveFn === 'function') {
+        await saveFn({ payment_methods_json: jsonString });
+      } else {
+        throw new Error('Función para guardar métodos de pago no disponible');
+      }
 
       setPersistedPaymentConfig(configToSave);
       setPaymentConfig(configToSave);
