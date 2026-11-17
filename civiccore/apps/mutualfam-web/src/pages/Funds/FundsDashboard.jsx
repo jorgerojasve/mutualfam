@@ -735,82 +735,56 @@ export default function FundsDashboard() {
             Fondos Familiares
           </h1>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-            Financiamiento solidario, colectas colectivas y fondos de reserva
+            Financiamiento solidario y colectas colectivas familiares ("hacer una vaca")
           </p>
         </div>
 
         {/* Acciones principales */}
         <div style={{ display: 'flex', gap: '8px' }}>
-          {activeTab === 'colectas' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowConfigModal(true)}
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  color: '#f8fafc',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  padding: '8px 14px',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                ⚙️ Datos
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenCreateColectaModal}
-                style={{
-                  backgroundColor: '#10b981',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-                }}
-              >
-                <Plus size={16} />
-                + Colecta
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCreateFundModal(true)}
-              style={{
-                backgroundColor: '#2563eb',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '8px 16px',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-              }}
-            >
-              <Plus size={16} />
-              + Crear Fondo
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowConfigModal(true)}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              color: '#f8fafc',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: '8px',
+              padding: '8px 14px',
+              fontSize: '0.85rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            ⚙️ Datos
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenCreateColectaModal}
+            style={{
+              backgroundColor: '#10b981',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '8px 16px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+            }}
+          >
+            <Plus size={16} />
+            + Colecta
+          </button>
         </div>
       </div>
 
-      {/* Control Segmentado de Pestañas (Homologado con Móvil) */}
+      {/* Control Segmentado de Pestañas: Vigentes / Historial */}
       <div style={{
         display: 'flex',
         backgroundColor: 'rgba(15, 23, 42, 0.7)',
@@ -821,39 +795,39 @@ export default function FundsDashboard() {
       }}>
         <button
           type="button"
-          onClick={() => setActiveTab('colectas')}
+          onClick={() => setColectasFilter('active')}
           style={{
             flex: 1,
             padding: '10px 14px',
             borderRadius: '8px',
             border: 'none',
-            backgroundColor: activeTab === 'colectas' ? '#10b981' : 'transparent',
-            color: activeTab === 'colectas' ? '#ffffff' : '#94a3b8',
+            backgroundColor: colectasFilter === 'active' ? '#10b981' : 'transparent',
+            color: colectasFilter === 'active' ? '#ffffff' : '#94a3b8',
             fontWeight: '600',
             fontSize: '0.9rem',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
         >
-          🐮 Colectas (Vacas) {hasLoadedColectas && activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
+          🐮 Vigentes {hasLoadedColectas && activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('periodicos')}
+          onClick={() => setColectasFilter('history')}
           style={{
             flex: 1,
             padding: '10px 14px',
             borderRadius: '8px',
             border: 'none',
-            backgroundColor: activeTab === 'periodicos' ? '#2563eb' : 'transparent',
-            color: activeTab === 'periodicos' ? '#ffffff' : '#94a3b8',
+            backgroundColor: colectasFilter === 'history' ? '#10b981' : 'transparent',
+            color: colectasFilter === 'history' ? '#ffffff' : '#94a3b8',
             fontWeight: '600',
             fontSize: '0.9rem',
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
         >
-          🏛️ Fondos Comunes {hasLoadedFunds && funds.length > 0 ? `(${funds.length})` : ''}
+          📜 Historial {hasLoadedColectas && historyColectas.length > 0 ? `(${historyColectas.length})` : ''}
         </button>
       </div>
 
@@ -866,51 +840,10 @@ export default function FundsDashboard() {
       )}
 
       {/* ========================================================= */}
-      {/* PESTAÑA 1: COLECTAS ("VACAS")                            */}
+      {/* PESTAÑA: COLECTAS ("VACAS")                              */}
       {/* ========================================================= */}
       {activeTab === 'colectas' && (
         <div>
-          {/* Sub-pestañas homologadas a Préstamos: Vigentes / Historial */}
-          <div style={{
-            display: 'flex',
-            gap: '1.5rem',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-            marginBottom: '1.25rem',
-          }}>
-            <button
-              type="button"
-              onClick={() => setColectasFilter('active')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                borderBottom: colectasFilter === 'active' ? '2px solid #10b981' : '2px solid transparent',
-                color: colectasFilter === 'active' ? '#10b981' : '#94a3b8',
-                fontWeight: '700',
-                fontSize: '1rem',
-                padding: '0.5rem 0.25rem',
-                cursor: 'pointer',
-              }}
-            >
-              Vigentes {hasLoadedColectas && activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
-            </button>
-            <button
-              type="button"
-              onClick={() => setColectasFilter('history')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                borderBottom: colectasFilter === 'history' ? '2px solid #10b981' : '2px solid transparent',
-                color: colectasFilter === 'history' ? '#10b981' : '#94a3b8',
-                fontWeight: '700',
-                fontSize: '1rem',
-                padding: '0.5rem 0.25rem',
-                cursor: 'pointer',
-              }}
-            >
-              Historial {hasLoadedColectas && historyColectas.length > 0 ? `(${historyColectas.length})` : ''}
-            </button>
-          </div>
-
           {loadingColectas ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '14rem' }}>
               <div className="loader" />
@@ -1370,85 +1303,6 @@ export default function FundsDashboard() {
                   </div>
                 );
               })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* PESTAÑA 2: FONDOS COMUNES PERIÓDICOS                     */}
-      {/* ========================================================= */}
-      {activeTab === 'periodicos' && (
-        <div>
-          {loadingFunds ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '14rem' }}>
-              <div className="loader" />
-            </div>
-          ) : funds.length === 0 ? (
-            (isOffline || connectionError) ? (
-              <OfflineEmptyState
-                title="Sin conexión de red"
-                message="No se pudieron cargar los fondos comunes. Tus datos están seguros."
-                onRetry={handleRetryAll}
-              />
-            ) : (
-              <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#94a3b8' }}>
-                No hay fondos comunes creados
-              </div>
-            )
-          ) : (
-            <div className="dashboard-grid">
-              {funds.map((fund) => (
-                <div
-                  key={fund.id}
-                  className="glass-card"
-                  style={{
-                    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '14px',
-                    padding: '1.25rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1rem',
-                  }}
-                >
-                  <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#f8fafc', margin: '0 0 0.35rem 0' }}>
-                      {fund.name}
-                    </h3>
-                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: 0 }}>
-                      {fund.fund_type === 'emergency' ? '🚨 Fondo de Emergencia' : '💰 Ahorro Familiar'}
-                    </p>
-
-                    {fund.target_monthly_contribution_usd && (
-                      <div style={{
-                        marginTop: '1rem',
-                        background: 'rgba(15, 23, 42, 0.6)',
-                        padding: '1rem',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.06)',
-                      }}>
-                        <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 0.25rem 0' }}>
-                          Aporte mensual sugerido
-                        </p>
-                        <p style={{ color: '#38bdf8', fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>
-                          ${fund.target_monthly_contribution_usd} <span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>USD</span>
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1rem' }}>
-                    <button
-                      className="btn btn-primary"
-                      style={{ flex: 1, fontSize: '0.85rem' }}
-                      onClick={() => alert("Próximamente: Aportes periódicos continuos")}
-                    >
-                      Aportar al Fondo
-                    </button>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
@@ -2426,105 +2280,6 @@ export default function FundsDashboard() {
                   disabled={submittingExpense}
                 >
                   {submittingExpense ? 'Rindiendo cuentas...' : 'Rendir Cuentas y Completar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL 5: CREAR FONDO COMÚN PERIÓDICO                     */}
-      {/* ========================================================= */}
-      {showCreateFundModal && createPortal(
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
-          display: 'grid',
-          placeItems: 'center',
-          zIndex: 99999,
-          padding: '1rem',
-        }} onClick={() => setShowCreateFundModal(false)}>
-          <div style={{
-            backgroundColor: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            padding: '1.5rem',
-            maxWidth: '24rem',
-            width: '100%',
-            color: '#f8fafc',
-          }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>🏛️ Crear Fondo Común</h3>
-              <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => setShowCreateFundModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateFund} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Nombre del Fondo *
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="Ej: Fondo de Salud Familiar"
-                  value={newFundName}
-                  onChange={(e) => setNewFundName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Tipo de Fondo
-                </label>
-                <select
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  value={newFundType}
-                  onChange={(e) => setNewFundType(e.target.value)}
-                >
-                  <option value="emergency">🚨 Fondo de Emergencia</option>
-                  <option value="savings">💰 Ahorro Familiar</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Aporte Mensual Sugerido (USD)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="form-input"
-                  style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }}
-                  placeholder="10.00"
-                  value={newFundTarget}
-                  onChange={(e) => setNewFundTarget(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowCreateFundModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ backgroundColor: '#2563eb', border: 'none' }}
-                  disabled={submittingFund}
-                >
-                  {submittingFund ? 'Creando...' : 'Crear Fondo'}
                 </button>
               </div>
             </form>

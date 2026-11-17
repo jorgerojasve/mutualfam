@@ -2406,14 +2406,12 @@ export default function FundsScreen({ navigation }) {
                   ⚙️ Datos
                 </Text>
               </TouchableOpacity>
-              {activeTab === 'colectas' && (
-                <TouchableOpacity
-                  style={styles.headerAddButton}
-                  onPress={handlePressCreateColecta}
-                >
-                  <Text style={styles.headerAddButtonText}>+ Colecta</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.headerAddButton}
+                onPress={handlePressCreateColecta}
+              >
+                <Text style={styles.headerAddButtonText}>+ Colecta</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -2429,51 +2427,26 @@ export default function FundsScreen({ navigation }) {
           </View>
         )}
 
-        {/* Selector Segmentado de Pestañas */}
+        {/* Selector de Pestañas: Vigentes / Historial */}
         <View style={styles.segmentedControl}>
           <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'colectas' && styles.segmentBtnActive]}
-            onPress={() => setActiveTab('colectas')}
+            style={[styles.segmentBtn, colectasFilter === 'active' && styles.segmentBtnActive]}
+            onPress={() => setColectasFilter('active')}
           >
-            <Text style={[styles.segmentBtnText, activeTab === 'colectas' && styles.segmentBtnTextActive]}>
-              {(isOffline || connectionError) && activeColectas.length === 0
-                ? '🐮 Colectas (Sin conexión)'
-                : `🐮 Colectas (Vacas)${activeColectas.length > 0 ? ` (${activeColectas.length})` : ''}`}
+            <Text style={[styles.segmentBtnText, colectasFilter === 'active' && styles.segmentBtnTextActive]}>
+              🐮 Vigentes{activeColectas.length > 0 ? ` (${activeColectas.length})` : ''}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'periodicos' && styles.segmentBtnActive]}
-            onPress={() => setActiveTab('periodicos')}
+            style={[styles.segmentBtn, colectasFilter === 'history' && styles.segmentBtnActive]}
+            onPress={() => setColectasFilter('history')}
           >
-            <Text style={[styles.segmentBtnText, activeTab === 'periodicos' && styles.segmentBtnTextActive]}>
-              🏛️ Fondos Comunes
+            <Text style={[styles.segmentBtnText, colectasFilter === 'history' && styles.segmentBtnTextActive]}>
+              📜 Historial{historyColectas.length > 0 ? ` (${historyColectas.length})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Sub-pestañas homologadas a Préstamos: Vigentes / Historial */}
-        {activeTab === 'colectas' && (
-          <View style={styles.colectasSubTabs}>
-            <TouchableOpacity
-              style={[styles.colectasSubTab, colectasFilter === 'active' && styles.colectasSubTabActive]}
-              onPress={() => setColectasFilter('active')}
-            >
-              <Text style={[styles.colectasSubTabText, colectasFilter === 'active' && styles.colectasSubTabTextActive]}>
-                Vigentes{activeColectas.length > 0 ? ` (${activeColectas.length})` : ''}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.colectasSubTab, colectasFilter === 'history' && styles.colectasSubTabActive]}
-              onPress={() => setColectasFilter('history')}
-            >
-              <Text style={[styles.colectasSubTabText, colectasFilter === 'history' && styles.colectasSubTabTextActive]}>
-                Historial{historyColectas.length > 0 ? ` (${historyColectas.length})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
 
       {!isOffline && !connectionError && paymentConfigLoaded && !hasConfiguredPaymentMethods(userPaymentConfig) && (
