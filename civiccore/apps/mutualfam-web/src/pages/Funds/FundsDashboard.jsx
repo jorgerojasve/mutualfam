@@ -13,6 +13,7 @@ import {
   formatCashPaymentSummary,
 } from '../../utils/paymentConfig.js';
 import CashDeliveryCard from '../../components/Common/CashDeliveryCard.jsx';
+import BankTransferCard from '../../components/Common/BankTransferCard.jsx';
 import CashPayrollInput from '../../components/Common/CashPayrollInput.jsx';
 import PaymentConfigModal from '../../components/Common/PaymentConfigModal.jsx';
 
@@ -2100,6 +2101,81 @@ export default function FundsDashboard() {
                   />
                 </div>
               )}
+
+              {/* Tarjeta de Datos de Transferencia Bancaria */}
+              {(paymentMethod === 'transferencia' || normalizePaymentMethodKey(paymentMethod) === 'Transferencia Bancaria') && (
+                <BankTransferCard
+                  data={targetColecta.beneficiario_datos_pago?.['Transferencia Bancaria'] || targetColecta.beneficiario_datos_pago?.transferencia}
+                  montoBs={formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
+                  recipientName={targetColecta.beneficiario_nombre}
+                  tasaLabel={`${targetColecta.tipo_tasa?.toUpperCase() || 'BCV'}: Bs. ${formatVE(targetColecta.tasa_actual || 1)}`}
+                />
+              )}
+
+              {/* Tarjeta de Datos de Pago Móvil */}
+              {(paymentMethod === 'pago_movil' || normalizePaymentMethodKey(paymentMethod) === 'Pago Móvil') && (() => {
+                const pmData = targetColecta.beneficiario_datos_pago?.['Pago Móvil'] || targetColecta.beneficiario_datos_pago?.pago_movil;
+                if (!pmData || (!pmData.cedula && !pmData.telefono)) return null;
+                const safeBanco = getBankLabel(pmData.banco);
+                const docPrefix = pmData.tipo_doc ? (pmData.tipo_doc === 'Persona' ? 'V' : pmData.tipo_doc[0]) : 'V';
+                const cleanCedula = pmData.cedula ? String(pmData.cedula).replace(/^[VJEGC]-?/i, '') : '';
+                const safeDoc = cleanCedula ? `${docPrefix}-${cleanCedula}` : '';
+                const montoBs = formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)));
+                const copyAllText = `Banco: ${safeBanco} | Documento: ${safeDoc} | Teléfono: ${pmData.telefono || ''} | Monto: ${montoBs} Bs`;
+
+                return (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '10px', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: '700' }}>
+                      Datos de Pago Móvil de {targetColecta.beneficiario_nombre}:
+                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Banco</div>
+                        <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{safeBanco}</div>
+                      </div>
+                      <button type="button" onClick={() => navigator.clipboard?.writeText(pmData.banco || safeBanco)} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                        Copiar
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Cédula / Documento</div>
+                        <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{safeDoc}</div>
+                      </div>
+                      <button type="button" onClick={() => navigator.clipboard?.writeText(safeDoc)} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                        Copiar
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Teléfono</div>
+                        <div style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: '600' }}>{pmData.telefono}</div>
+                      </div>
+                      <button type="button" onClick={() => navigator.clipboard?.writeText(pmData.telefono || '')} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600' }}>
+                        Copiar
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard?.writeText(copyAllText)}
+                      style={{
+                        backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        color: '#38bdf8',
+                        borderRadius: '6px',
+                        padding: '8px',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        marginTop: '0.25rem',
+                        textAlign: 'center'
+                      }}
+                    >
+                      📋 Copiar todo para el banco
+                    </button>
+                  </div>
+                );
+              })()}
 
               {(paymentMethod === 'pago_movil' || paymentMethod === 'transferencia') && (
                 <div>
