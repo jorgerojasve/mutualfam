@@ -15,9 +15,26 @@ import CashPayrollInput from '../../components/Common/CashPayrollInput.jsx';
 import PaymentConfigModal from '../../components/Common/PaymentConfigModal.jsx';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
+const getInitialCachedLoans = () => {
+  try {
+    const raw = localStorage.getItem('auth_user_org');
+    const org = raw ? JSON.parse(raw) : null;
+    const orgId = org?.id || org?.activeOrg?.id;
+    if (orgId) {
+      const cached = localStorage.getItem(`cached_loans_${orgId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch (_) {}
+  return [];
+};
+
 export default function LoansDashboard() {
-  const [loans, setLoans] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialLoans = getInitialCachedLoans();
+  const [loans, setLoans] = useState(initialLoans);
+  const [loading, setLoading] = useState(initialLoans.length === 0);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [amount, setAmount] = useState('');
@@ -139,7 +156,17 @@ export default function LoansDashboard() {
 
   useEffect(() => {
     if (activeOrg?.id) {
-      fetchLoans();
+      try {
+        const cached = localStorage.getItem(`cached_loans_${activeOrg.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLoans(parsed);
+            setLoading(false);
+          }
+        }
+      } catch (_) {}
+      fetchLoans(loans.length > 0);
       fetchPaymentConfig();
     } else {
       setLoans([]);

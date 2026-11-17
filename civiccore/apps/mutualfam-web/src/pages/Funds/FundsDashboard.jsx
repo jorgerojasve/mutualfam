@@ -104,10 +104,27 @@ export default function FundsDashboard() {
   const [connectionError, setConnectionError] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
+  // Helper para leer caché inicial
+  const getInitialCached = (prefix) => {
+    try {
+      const orgId = activeOrg?.id || localStorage.getItem('active_org_id') || localStorage.getItem('organizationId');
+      if (orgId) {
+        const cached = localStorage.getItem(`${prefix}_${orgId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
   // Colectas state
-  const [colectas, setColectas] = useState([]);
+  const initialCachedColectas = getInitialCached('cached_colectas');
+  const [colectas, setColectas] = useState(initialCachedColectas || []);
+  const [hasLoadedColectas, setHasLoadedColectas] = useState(Boolean(initialCachedColectas));
   const [rates, setRates] = useState({});
-  const [loadingColectas, setLoadingColectas] = useState(true);
+  const [loadingColectas, setLoadingColectas] = useState(!initialCachedColectas);
   const [colectasFilter, setColectasFilter] = useState('active'); // 'active' | 'history'
 
   const activeColectas = colectas.filter((c) => !c.gasto_validado && !['completada', 'cancelada'].includes(c.estado));
@@ -115,8 +132,10 @@ export default function FundsDashboard() {
   const displayedColectas = colectasFilter === 'active' ? activeColectas : historyColectas;
 
   // Fondos comunes state
-  const [funds, setFunds] = useState([]);
-  const [loadingFunds, setLoadingFunds] = useState(true);
+  const initialCachedFunds = getInitialCached('cached_funds');
+  const [funds, setFunds] = useState(initialCachedFunds || []);
+  const [hasLoadedFunds, setHasLoadedFunds] = useState(Boolean(initialCachedFunds));
+  const [loadingFunds, setLoadingFunds] = useState(!initialCachedFunds);
 
   // Modales
   const [showCreateColectaModal, setShowCreateColectaModal] = useState(false);
@@ -183,6 +202,7 @@ export default function FundsDashboard() {
     if (!activeOrg?.id) {
       setColectas([]);
       setLoadingColectas(false);
+      setHasLoadedColectas(true);
       return;
     }
     try {
@@ -195,6 +215,7 @@ export default function FundsDashboard() {
       const list = Array.isArray(data) ? data : [];
       setColectas(list);
       setRates(ratesData || {});
+      setHasLoadedColectas(true);
       try {
         localStorage.setItem(`cached_colectas_${activeOrg.id}`, JSON.stringify(list));
       } catch (_) {}
@@ -217,6 +238,7 @@ export default function FundsDashboard() {
       }
     } finally {
       if (!silent) setLoadingColectas(false);
+      setHasLoadedColectas(true);
     }
   };
 
@@ -225,6 +247,7 @@ export default function FundsDashboard() {
     if (!activeOrg?.id) {
       setFunds([]);
       setLoadingFunds(false);
+      setHasLoadedFunds(true);
       return;
     }
     try {
@@ -233,6 +256,7 @@ export default function FundsDashboard() {
       const data = await fundsApi.getFunds();
       const list = Array.isArray(data) ? data : [];
       setFunds(list);
+      setHasLoadedFunds(true);
       try {
         localStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(list));
       } catch (_) {}
@@ -255,10 +279,31 @@ export default function FundsDashboard() {
       }
     } finally {
       if (!silent) setLoadingFunds(false);
+      setHasLoadedFunds(true);
     }
   };
 
   useEffect(() => {
+    if (activeOrg?.id) {
+      try {
+        const cachedC = localStorage.getItem(`cached_colectas_${activeOrg.id}`);
+        if (cachedC) {
+          const parsed = JSON.parse(cachedC);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setColectas(parsed);
+            setHasLoadedColectas(true);
+          }
+        }
+        const cachedF = localStorage.getItem(`cached_funds_${activeOrg.id}`);
+        if (cachedF) {
+          const parsed = JSON.parse(cachedF);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setFunds(parsed);
+            setHasLoadedFunds(true);
+          }
+        }
+      } catch (_) {}
+    }
     fetchColectas();
     fetchFunds();
   }, [activeOrg?.id]);
@@ -727,7 +772,7 @@ export default function FundsDashboard() {
             transition: 'all 0.2s ease',
           }}
         >
-          🐮 Colectas (Vacas) {activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
+          🐮 Colectas (Vacas) {hasLoadedColectas && activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
         </button>
         <button
           type="button"
@@ -745,7 +790,7 @@ export default function FundsDashboard() {
             transition: 'all 0.2s ease',
           }}
         >
-          🏛️ Fondos Comunes ({funds.length})
+          🏛️ Fondos Comunes {hasLoadedFunds && funds.length > 0 ? `(${funds.length})` : ''}
         </button>
       </div>
 
@@ -783,7 +828,7 @@ export default function FundsDashboard() {
                 cursor: 'pointer',
               }}
             >
-              Vigentes {activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
+              Vigentes {hasLoadedColectas && activeColectas.length > 0 ? `(${activeColectas.length})` : ''}
             </button>
             <button
               type="button"
@@ -799,7 +844,7 @@ export default function FundsDashboard() {
                 cursor: 'pointer',
               }}
             >
-              Historial {historyColectas.length > 0 ? `(${historyColectas.length})` : ''}
+              Historial {hasLoadedColectas && historyColectas.length > 0 ? `(${historyColectas.length})` : ''}
             </button>
           </div>
 
