@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { membershipApi, asambleasApi, useAuthStore } from '@civiccore/sdk';
+import { membershipApi, asambleasApi, useAuthStore, eventBus } from '@civiccore/sdk';
 import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2, Landmark, CheckCircle, XCircle, AlertCircle, Clock, ShieldAlert, Vote, X } from 'lucide-react';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
@@ -46,14 +46,14 @@ const MembersList = () => {
   const [submittingDefense, setSubmittingDefense] = useState(false);
 
   // Cargar Miembros
-  const fetchMembers = async () => {
+  const fetchMembers = async (silent = false) => {
     if (!activeOrg?.id) {
       setMembers([]);
       setIsLoadingMembers(false);
       return;
     }
     try {
-      setIsLoadingMembers(true);
+      if (!silent) setIsLoadingMembers(true);
       setConnectionError(false);
       const data = await membershipApi.getMembers();
       const list = Array.isArray(data) ? data : [];
@@ -84,19 +84,19 @@ const MembersList = () => {
         } catch (_) {}
       }
     } finally {
-      setIsLoadingMembers(false);
+      if (!silent) setIsLoadingMembers(false);
     }
   };
 
   // Cargar Propuestas de Asamblea
-  const fetchPropuestas = async () => {
+  const fetchPropuestas = async (silent = false) => {
     if (!activeOrg?.id) {
       setPropuestas([]);
       setIsLoadingAsambleas(false);
       return;
     }
     try {
-      setIsLoadingAsambleas(true);
+      if (!silent) setIsLoadingAsambleas(true);
       setConnectionError(false);
       const data = await asambleasApi.getPropuestas();
       const list = Array.isArray(data) ? data : [];
@@ -122,7 +122,7 @@ const MembersList = () => {
         } catch (_) {}
       }
     } finally {
-      setIsLoadingAsambleas(false);
+      if (!silent) setIsLoadingAsambleas(false);
     }
   };
 
@@ -142,6 +142,37 @@ const MembersList = () => {
     fetchMembers();
     fetchPropuestas();
   }, [activeOrg?.id]);
+
+  // Suscripción WebSocket en vivo a eventos de gobernanza y membresía
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+
+    const handleRealtimeUpdate = (payload) => {
+      fetchPropuestas(true);
+      fetchMembers(true);
+      if (selectedPropuesta && payload?.proposal_id === selectedPropuesta.id) {
+        asambleasApi.getPropuesta(selectedPropuesta.id).then(updated => {
+          if (updated) setSelectedPropuesta(updated);
+        }).catch(() => {});
+      }
+    };
+
+    const unsubs = [
+      eventBus.subscribe('PROPUESTA_CREADA', handleRealtimeUpdate),
+      eventBus.subscribe('PROPUESTA_APROBADA', handleRealtimeUpdate),
+      eventBus.subscribe('PROPUESTA_ACTUALIZADA', handleRealtimeUpdate),
+      eventBus.subscribe('PROPUESTA_RESUELTA', handleRealtimeUpdate),
+      eventBus.subscribe('VOTO_EMITIDO', handleRealtimeUpdate),
+      eventBus.subscribe('DEFENSA_PUBLICADA', handleRealtimeUpdate),
+      eventBus.subscribe('PROPUESTA_COMENTADA', handleRealtimeUpdate),
+      eventBus.subscribe('MIEMBRO_INGRESADO', handleRealtimeUpdate),
+      eventBus.subscribe('RECONNECTED', handleRealtimeUpdate),
+    ];
+
+    return () => {
+      unsubs.forEach(unsub => unsub && unsub());
+    };
+  }, [activeOrg?.id, selectedPropuesta?.id]);
 
   const handleRetryAll = async () => {
     await Promise.all([fetchMembers(), fetchPropuestas()]);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { gobernanzaApi, membershipApi, useAuthStore, useConfigStore } from '@civiccore/sdk';
+import { gobernanzaApi, membershipApi, useAuthStore, useConfigStore, eventBus } from '@civiccore/sdk';
 import { ArrowLeft, ThumbsUp, ThumbsDown, MessageSquare, Clock, ShieldAlert } from 'lucide-react';
 import InteractiveEditor from '../../components/Governance/InteractiveEditor';
 
@@ -31,6 +31,26 @@ const ProposalDetail = () => {
 
   useEffect(() => {
     fetchProposalData();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const handleUpdate = (payload) => {
+      if (!payload?.proposal_id || String(payload.proposal_id) === String(id)) {
+        fetchProposalData();
+      }
+    };
+    const unsubs = [
+      eventBus.subscribe('PROPUESTA_ACTUALIZADA', handleUpdate),
+      eventBus.subscribe('PROPUESTA_RESUELTA', handleUpdate),
+      eventBus.subscribe('VOTO_EMITIDO', handleUpdate),
+      eventBus.subscribe('DEFENSA_PUBLICADA', handleUpdate),
+      eventBus.subscribe('PROPUESTA_COMENTADA', handleUpdate),
+      eventBus.subscribe('RECONNECTED', handleUpdate),
+    ];
+    return () => {
+      unsubs.forEach(unsub => unsub && unsub());
+    };
   }, [id]);
 
   const fetchProposalData = async () => {

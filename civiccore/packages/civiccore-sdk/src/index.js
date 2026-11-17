@@ -5,3 +5,4 @@ export { useConfigStore } from './configStore.js';
 export { useManifest } from './useManifest.js';
 export { FRAMEWORK_MATURITY, MODULE_MATURITY } from './maturity.js';
 export { eventBus } from './eventBus.js';
+export { wsClient } from './wsClient.js';

@@ -28,7 +28,9 @@ app = FastAPI(title="Mutual Familiar API", version="1.0.0")
 
 @app.on_event("startup")
 async def start_repayment_reminders_task():
-    """Inicia tarea en segundo plano para evaluar y enviar recordatorios de vencimiento de préstamos."""
+    """Inicia tarea en segundo plano para evaluar y enviar recordatorios de vencimiento de préstamos y registra loop de eventos en tiempo real."""
+    from services import realtime
+    realtime.set_loop(asyncio.get_running_loop())
     async def reminder_loop():
         # Esperar brevemente al arranque del servidor
         await asyncio.sleep(15)
@@ -124,6 +126,7 @@ def health_check():
 
 
 @app.websocket("/api/v1/ws")
+@app.websocket("/api/v1/auth/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = None, org_id: str = None):
     """Canal de eventos en tiempo real. Cada cliente se suscribe a su mutual activa."""
     from jose import JWTError, jwt
