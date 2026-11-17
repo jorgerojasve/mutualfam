@@ -513,7 +513,7 @@ const ProposalDetail = () => {
       {/* Discussion Section */}
       <div className="glass-panel" style={{ padding: '2.5rem' }}>
         <h3 className="mb-6 flex items-center gap-2">
-          <MessageSquare size={20} /> Discusión ({comments.length})
+          <MessageSquare size={20} /> Discusión {comments.length > 0 ? `(${comments.length})` : ''}
         </h3>
         
         <div className="comments-list mb-8">

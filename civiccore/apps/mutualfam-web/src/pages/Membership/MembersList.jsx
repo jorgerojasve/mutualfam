@@ -8,9 +8,26 @@ const MembersList = () => {
   const { activeOrg, user, isOffline } = useAuthStore();
   const [activeMainTab, setActiveMainTab] = useState('miembros'); // 'miembros' | 'asamblea'
 
+  // Lectura segura de caché inicial para evitar parpadeos de conteo en 0
+  const getInitialCached = (prefix) => {
+    try {
+      const orgId = activeOrg?.id || localStorage.getItem('active_org_id') || localStorage.getItem('organizationId');
+      if (orgId) {
+        const cached = localStorage.getItem(`${prefix}_${orgId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+
   // Miembros State
-  const [members, setMembers] = useState([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
+  const initialCachedMembers = getInitialCached('cached_members');
+  const [members, setMembers] = useState(initialCachedMembers || []);
+  const [hasLoadedMembers, setHasLoadedMembers] = useState(Boolean(initialCachedMembers));
+  const [isLoadingMembers, setIsLoadingMembers] = useState(!initialCachedMembers);
   const [connectionError, setConnectionError] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteToken, setInviteToken] = useState('');
@@ -19,8 +36,10 @@ const MembersList = () => {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Asambleas State
-  const [propuestas, setPropuestas] = useState([]);
-  const [isLoadingAsambleas, setIsLoadingAsambleas] = useState(true);
+  const initialCachedAsambleas = getInitialCached('cached_asambleas');
+  const [propuestas, setPropuestas] = useState(initialCachedAsambleas || []);
+  const [hasLoadedAsambleas, setHasLoadedAsambleas] = useState(Boolean(initialCachedAsambleas));
+  const [isLoadingAsambleas, setIsLoadingAsambleas] = useState(!initialCachedAsambleas);
   const [asambleaFilter, setAsambleaFilter] = useState('activas'); // 'activas' | 'historial'
   const [expulsables, setExpulsables] = useState([]);
 
@@ -84,6 +103,7 @@ const MembersList = () => {
     if (!activeOrg?.id) {
       setMembers([]);
       setIsLoadingMembers(false);
+      setHasLoadedMembers(true);
       return;
     }
     try {
@@ -97,6 +117,7 @@ const MembersList = () => {
         email: m.email || '',
       }));
       setMembers(formatted);
+      setHasLoadedMembers(true);
       try {
         localStorage.setItem(`cached_members_${activeOrg.id}`, JSON.stringify(formatted));
       } catch (_) {}
@@ -119,6 +140,7 @@ const MembersList = () => {
       }
     } finally {
       if (!silent) setIsLoadingMembers(false);
+      setHasLoadedMembers(true);
     }
   };
 
@@ -127,6 +149,7 @@ const MembersList = () => {
     if (!activeOrg?.id) {
       setPropuestas([]);
       setIsLoadingAsambleas(false);
+      setHasLoadedAsambleas(true);
       return;
     }
     try {
@@ -135,6 +158,7 @@ const MembersList = () => {
       const data = await asambleasApi.getPropuestas();
       const list = Array.isArray(data) ? data : [];
       setPropuestas(list);
+      setHasLoadedAsambleas(true);
       try {
         localStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(list));
       } catch (_) {}
@@ -157,6 +181,7 @@ const MembersList = () => {
       }
     } finally {
       if (!silent) setIsLoadingAsambleas(false);
+      setHasLoadedAsambleas(true);
     }
   };
 
@@ -173,6 +198,26 @@ const MembersList = () => {
   };
 
   useEffect(() => {
+    if (activeOrg?.id) {
+      try {
+        const cachedM = localStorage.getItem(`cached_members_${activeOrg.id}`);
+        if (cachedM) {
+          const parsed = JSON.parse(cachedM);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMembers(parsed);
+            setHasLoadedMembers(true);
+          }
+        }
+        const cachedA = localStorage.getItem(`cached_asambleas_${activeOrg.id}`);
+        if (cachedA) {
+          const parsed = JSON.parse(cachedA);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPropuestas(parsed);
+            setHasLoadedAsambleas(true);
+          }
+        }
+      } catch (_) {}
+    }
     fetchMembers();
     fetchPropuestas();
   }, [activeOrg?.id]);
@@ -596,7 +641,7 @@ const MembersList = () => {
             transition: 'all 0.2s ease',
           }}
         >
-          👥 Miembros ({members.length})
+          👥 Miembros {hasLoadedMembers && members.length > 0 ? `(${members.length})` : ''}
         </button>
         <button
           type="button"
@@ -614,7 +659,7 @@ const MembersList = () => {
             transition: 'all 0.2s ease',
           }}
         >
-          🏛️ Asamblea {activeProposals.length > 0 ? `(${activeProposals.length})` : ''}
+          🏛️ Asamblea {hasLoadedAsambleas && activeProposals.length > 0 ? `(${activeProposals.length})` : ''}
         </button>
       </div>
 
@@ -656,7 +701,7 @@ const MembersList = () => {
                   color: '#f8fafc',
                   marginBottom: '1rem',
                 }}>
-                  Miembros Actuales ({members.length})
+                  Miembros Actuales {hasLoadedMembers && members.length > 0 ? `(${members.length})` : ''}
                 </h3>
 
                 {isLoadingMembers ? (
@@ -878,7 +923,7 @@ const MembersList = () => {
                 transition: 'all 0.15s ease'
               }}
             >
-              Activas ({activeProposals.length})
+              Activas {hasLoadedAsambleas ? `(${activeProposals.length})` : ''}
             </button>
             <button
               type="button"
@@ -896,7 +941,7 @@ const MembersList = () => {
                 transition: 'all 0.15s ease'
               }}
             >
-              Historial ({historyProposals.length})
+              Historial {hasLoadedAsambleas ? `(${historyProposals.length})` : ''}
             </button>
           </div>
 
@@ -1755,7 +1800,7 @@ const MembersList = () => {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700' }}>
-                      💬 Foro de Debate ({comments.length})
+                      💬 Foro de Debate {comments.length > 0 ? `(${comments.length})` : ''}
                     </div>
                     <button
                       type="button"
