@@ -701,14 +701,57 @@ export default function AssemblyScreen({ embedded = false }) {
     );
   };
 
+  // Cancelar Invitación de Ingreso
+  const handleCancelarIngreso = () => {
+    if (!proposalDetail) return;
+    Alert.alert(
+      '¿Cancelar Invitación?',
+      'Se invalidará el código de invitación y la propuesta pasará al historial como ingreso cancelado.',
+      [
+        { text: 'No, mantener', style: 'cancel' },
+        {
+          text: 'Sí, cancelar ingreso',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await governanceApi.cancelarIngreso(proposalDetail.id);
+              Alert.alert('Ingreso Cancelado', 'La invitación ha sido invalidada y la propuesta se movió al historial.');
+              openProposalDetail({ id: proposalDetail.id });
+              fetchPropuestas(true);
+            } catch (e) {
+              Alert.alert('Error', getErrorMessage(e, 'No se pudo cancelar el ingreso'));
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Filtrado de propuestas
+  const isProposalActive = (p) => {
+    if (p.is_active_proposal !== undefined) {
+      return Boolean(p.is_active_proposal);
+    }
+    if (p.proposal_type === 'member_admission' && p.status === 'approved') {
+      const hasJoined = Boolean(p.member_joined || p.redeemed_by_name);
+      const isCancelled = Boolean(p.admission_cancelled);
+      let isExpired = false;
+      if (p.invite_expires_at) {
+        try {
+          isExpired = new Date(p.invite_expires_at) <= new Date();
+        } catch (e) {}
+      }
+      return !hasJoined && !isCancelled && !isExpired;
+    }
+    return p.status === 'debate' || p.status === 'voting';
+  };
+
   const propuestasFiltradas = propuestas.filter((p) => {
-    const isActiva = p.status === 'debate' || p.status === 'voting';
-    return activeTab === 'activas' ? isActiva : !isActiva;
+    return activeTab === 'activas' ? isProposalActive(p) : !isProposalActive(p);
   });
 
-  const countActivas = propuestas.filter((p) => p.status === 'debate' || p.status === 'voting').length;
-  const countHistorial = propuestas.filter((p) => p.status !== 'debate' && p.status !== 'voting').length;
+  const countActivas = propuestas.filter(isProposalActive).length;
+  const countHistorial = propuestas.filter((p) => !isProposalActive(p)).length;
 
   // Render de tarjeta de propuesta
   const renderProposalCard = ({ item }) => {
@@ -718,14 +761,27 @@ export default function AssemblyScreen({ embedded = false }) {
     const isApproved = item.status === 'approved';
     const isRejected = item.status === 'rejected';
 
+    const isAuthor = item.is_author ?? (currentUser?.id && item.author_id === currentUser.id);
+    const hasJoined = Boolean(item.member_joined || item.redeemed_by_name);
+    const isAdmissionCancelled = Boolean(item.admission_cancelled);
+    const isWaitingEntry = isAdmission && isApproved && !hasJoined && !isAdmissionCancelled;
+
     let statusColor = '#f59e0b';
     let statusLabel = '⏳ Debate';
     if (isVoting) {
       statusColor = '#3b82f6';
       statusLabel = '🗳️ Votación';
     } else if (isApproved) {
-      statusColor = '#10b981';
-      statusLabel = '✅ Aprobada';
+      if (isWaitingEntry) {
+        statusColor = '#0284c7';
+        statusLabel = '⏳ Esperando Ingreso';
+      } else if (isAdmission && isAdmissionCancelled) {
+        statusColor = '#64748b';
+        statusLabel = '⏱️ Ingreso Cancelado';
+      } else {
+        statusColor = '#10b981';
+        statusLabel = isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada';
+      }
     } else if (isRejected) {
       statusColor = '#ef4444';
       statusLabel = item.veto_activated ? '🚫 Vetada' : '❌ Rechazada';
@@ -776,36 +832,47 @@ export default function AssemblyScreen({ embedded = false }) {
                 🤝 Parentesco: <Text style={{ color: '#f8fafc', fontWeight: '600' }}>{item.candidate_relation}</Text>
               </Text>
             ) : null}
-            {item.status === 'approved' && item.invite_token && (
-              <View style={styles.inviteSnippetRow}>
-                <View style={styles.inviteSnippetCodePill}>
-                  <Text style={styles.inviteSnippetCodeText}>
-                    🔑 {item.invite_code_formatted || item.invite_token}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.shareSnippetBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleShareInvite(
-                      item.invite_token,
-                      item.candidate_name,
-                      item.invite_code_formatted
-                    );
-                  }}
-                >
-                  <Text style={styles.shareSnippetBtnText}>💬 Compartir</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {item.redeemed_by_name ? (
+
+            {hasJoined ? (
               <Text style={styles.redeemedText}>
-                👤 Cuenta vinculada: <Text style={{ color: '#38bdf8', fontWeight: 'bold' }}>{item.redeemed_by_name}</Text>
+                👤 Miembro incorporado: <Text style={{ color: '#38bdf8', fontWeight: 'bold' }}>{item.redeemed_by_name || item.candidate_name}</Text>
               </Text>
-            ) : item.status === 'approved' && item.invite_token ? (
-              <Text style={styles.pendingClaimText}>
-                ⏳ Invitación de 15 días aprobada y lista para canje
+            ) : isAdmissionCancelled ? (
+              <Text style={styles.cancelledAdmissionText}>
+                ⏱️ Invitación expirada • Ingreso cancelado por falta de canje en 15 días
               </Text>
+            ) : isWaitingEntry ? (
+              isAuthor && item.invite_token ? (
+                <>
+                  <View style={styles.inviteSnippetRow}>
+                    <View style={styles.inviteSnippetCodePill}>
+                      <Text style={styles.inviteSnippetCodeText}>
+                        🔑 {item.invite_code_formatted || item.invite_token}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.shareSnippetBtn}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleShareInvite(
+                          item.invite_token,
+                          item.candidate_name,
+                          item.invite_code_formatted
+                        );
+                      }}
+                    >
+                      <Text style={styles.shareSnippetBtnText}>💬 Compartir</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.pendingClaimText}>
+                    ⏳ Invitación aprobada válida por 15 días. Comparte el código con el nuevo miembro.
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.pendingClaimText}>
+                  ⏳ Aprobada por la asamblea. Código entregado al proponente ({item.author_name}). En espera del ingreso del nuevo miembro.
+                </Text>
+              )
             ) : (isDebate || isVoting) ? (
               <Text style={styles.pendingAssemblyText}>
                 ⚖️ En proceso de asamblea (El enlace se generará una vez aprobado)
@@ -864,11 +931,13 @@ export default function AssemblyScreen({ embedded = false }) {
                     : styles.primaryVoteActionBtnVoted)
                 : isDebate
                 ? styles.primaryVoteActionBtnDebate
+                : isWaitingEntry
+                ? (isAuthor ? styles.primaryVoteActionBtnWaitingAuthor : styles.primaryVoteActionBtnWaitingOther)
                 : styles.primaryVoteActionBtnClosed,
             ]}
           >
             <Text style={styles.voteActionBtnIcon}>
-              {isVoting ? '🗳️' : isDebate ? '💬' : '📜'}
+              {isVoting ? '🗳️' : isDebate ? '💬' : isWaitingEntry ? (isAuthor ? '🔑' : '⏳') : '📜'}
             </Text>
             <Text
               style={[
@@ -879,6 +948,8 @@ export default function AssemblyScreen({ embedded = false }) {
                       : styles.primaryVoteActionTextVoted)
                   : isDebate
                   ? styles.primaryVoteActionTextDebate
+                  : isWaitingEntry
+                  ? (isAuthor ? styles.primaryVoteActionTextWaitingAuthor : styles.primaryVoteActionTextWaitingOther)
                   : styles.primaryVoteActionTextClosed,
               ]}
             >
@@ -888,6 +959,8 @@ export default function AssemblyScreen({ embedded = false }) {
                     : 'Ver y Votar →')
                 : isDebate
                 ? 'Ver y Participar en Debate →'
+                : isWaitingEntry
+                ? (isAuthor ? 'Ver Invitación y Compartir →' : 'Ver Detalle de Asamblea →')
                 : 'Ver Detalle de Asamblea →'}
             </Text>
           </View>
@@ -1124,40 +1197,73 @@ export default function AssemblyScreen({ embedded = false }) {
 
                 {/* Enlace de Invitación Oficial (Admisión) */}
                 {proposalDetail.proposal_type === 'member_admission' && (
-                  proposalDetail.status === 'approved' && proposalDetail.invite_token ? (
-                    <View style={styles.sectionCard}>
-                      <Text style={styles.sectionHeader}>Enlace de Invitación Oficial:</Text>
-                      <View style={styles.detailInviteBox}>
-                        <Text style={styles.detailInviteCode}>
-                          {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
-                        </Text>
-                        <Text style={styles.detailInviteSub}>
-                          {proposalDetail.redeemed_by_name
-                            ? `✅ Canjeado por ${proposalDetail.redeemed_by_name}`
-                            : '⏳ Invitación aprobada de 15 días. Lista para compartir con el familiar.'}
-                        </Text>
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  proposalDetail.status === 'approved' ? (
+                    (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
+                      <View style={styles.sectionCard}>
+                        <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
+                        <View style={[styles.infoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10b981' }]}>
+                          <Text style={[styles.infoBannerText, { color: '#a7f3d0' }]}>
+                            ✅ Ingreso Concretado: El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                          </Text>
+                        </View>
+                      </View>
+                    ) : proposalDetail.admission_cancelled ? (
+                      <View style={styles.sectionCard}>
+                        <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
+                        <View style={[styles.infoBanner, { backgroundColor: 'rgba(100, 116, 139, 0.2)', borderColor: '#64748b' }]}>
+                          <Text style={[styles.infoBannerText, { color: '#cbd5e1' }]}>
+                            ⏱️ Ingreso Cancelado: La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (proposalDetail.is_author || (currentUser?.id && proposalDetail.author_id === currentUser.id) || proposalDetail.invite_token) ? (
+                      <View style={styles.sectionCard}>
+                        <Text style={styles.sectionHeader}>Enlace de Invitación Oficial:</Text>
+                        <View style={styles.detailInviteBox}>
+                          <Text style={styles.detailInviteCode}>
+                            {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                          </Text>
+                          <Text style={styles.detailInviteSub}>
+                            ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
+                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <TouchableOpacity
+                              style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
+                              onPress={() =>
+                                handleShareInvite(
+                                  proposalDetail.invite_token,
+                                  proposalDetail.candidate_name,
+                                  proposalDetail.invite_code_formatted
+                                )
+                              }
+                            >
+                              <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
+                              onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
+                            >
+                              <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
+                            </TouchableOpacity>
+                          </View>
                           <TouchableOpacity
-                            style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
-                            onPress={() =>
-                              handleShareInvite(
-                                proposalDetail.invite_token,
-                                proposalDetail.candidate_name,
-                                proposalDetail.invite_code_formatted
-                              )
-                            }
+                            style={styles.cancelInviteBtn}
+                            onPress={handleCancelarIngreso}
                           >
-                            <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
-                            onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
-                          >
-                            <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
+                            <Text style={styles.cancelInviteBtnText}>⚠️ Cancelar Invitación de Ingreso</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
-                    </View>
+                    ) : (
+                      <View style={styles.sectionCard}>
+                        <Text style={styles.sectionHeader}>Estado de la Invitación:</Text>
+                        <View style={styles.infoBanner}>
+                          <Text style={styles.infoBannerText}>
+                            ⏳ Ingreso Aprobado • En Espera: La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
+                          </Text>
+                        </View>
+                      </View>
+                    )
                   ) : (proposalDetail.status === 'debate' || proposalDetail.status === 'voting') ? (
                     <View style={styles.sectionCard}>
                       <Text style={styles.sectionHeader}>Estado de la Invitación:</Text>
@@ -2165,6 +2271,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245, 158, 11, 0.18)',
     borderColor: '#f59e0b'
   },
+  primaryVoteActionBtnWaitingAuthor: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 4
+  },
+  primaryVoteActionBtnWaitingOther: {
+    backgroundColor: 'rgba(2, 132, 199, 0.25)',
+    borderColor: '#0284c7'
+  },
   primaryVoteActionBtnClosed: {
     backgroundColor: 'rgba(51, 65, 85, 0.5)',
     borderColor: 'rgba(148, 163, 184, 0.25)'
@@ -2186,8 +2305,34 @@ const styles = StyleSheet.create({
   primaryVoteActionTextDebate: {
     color: '#fbbf24'
   },
+  primaryVoteActionTextWaitingAuthor: {
+    color: '#ffffff'
+  },
+  primaryVoteActionTextWaitingOther: {
+    color: '#38bdf8'
+  },
   primaryVoteActionTextClosed: {
     color: '#cbd5e1'
+  },
+  cancelledAdmissionText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 4
+  },
+  cancelInviteBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)'
+  },
+  cancelInviteBtnText: {
+    color: '#f87171',
+    fontSize: 13,
+    fontWeight: '600'
   },
   viewDetailText: {
     color: '#38bdf8',

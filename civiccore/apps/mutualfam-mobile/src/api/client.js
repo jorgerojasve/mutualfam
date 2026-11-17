@@ -411,6 +411,10 @@ export const governanceApi = {
     const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/cerrar`);
     return data;
   },
+  cancelarIngreso: async (id) => {
+    const { data } = await apiClient.post(`/gobernanza/propuestas/${id}/cancelar-ingreso`);
+    return data;
+  },
   getComentarios: async (id) => {
     const { data } = await apiClient.get(`/gobernanza/propuestas/${id}/comentarios`);
     return data;

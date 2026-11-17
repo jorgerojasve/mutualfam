@@ -235,8 +235,19 @@ def activate_proposed_member(
 
     # Mark invite as completed if exists
     invite = db.query(OrganizationInvite).filter(OrganizationInvite.proposal_id == proposal_id).first()
-    if invite and not invite.uses_count:
-        invite.uses_count = 1
+    if invite:
+        if not invite.uses_count:
+            invite.uses_count = 1
+        invite.status = InviteStatus.USED
+
+    extra = dict(prop.extra_fields or {})
+    target_user = db.query(User).filter(User.id == target_id).first()
+    if target_user:
+        extra["redeemed_by_user_id"] = target_user.id
+        extra["redeemed_by_name"] = f"{target_user.first_name} {target_user.last_name}".strip()
+        extra["redeemed_at"] = datetime.now(timezone.utc).isoformat()
+    extra["member_joined"] = True
+    prop.extra_fields = extra
 
     db.commit()
     db.refresh(membership)

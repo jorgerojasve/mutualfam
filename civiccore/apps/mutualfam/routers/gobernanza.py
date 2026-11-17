@@ -14,7 +14,9 @@ from civiccore.modules.membership.models import (
     User,
     OrganizationMembership,
     MemberStatus,
-    Organization
+    Organization,
+    OrganizationInvite,
+    InviteStatus
 )
 from civiccore.modules.governance.models import (
     Proposal,
@@ -164,12 +166,91 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
     candidate_name_extra = p.extra_fields.get("candidate_name") if p.extra_fields else None
     candidate_relation = p.extra_fields.get("candidate_relation") if p.extra_fields else None
 
-    # Solo exponer el token y código de invitación si la propuesta fue efectivamente aprobada
     is_approved = (p.status == ProposalStatus.APPROVED)
-    invite_token = (p.extra_fields.get("invite_token") if p.extra_fields else None) if is_approved else None
-    invite_code_formatted = (p.extra_fields.get("invite_code_formatted") if p.extra_fields else None) if is_approved else None
-    invite_expires_at = (p.extra_fields.get("expires_at") if p.extra_fields else None) if is_approved else None
+    is_admission = (p.proposal_type == ProposalType.MEMBER_ADMISSION)
+    is_author = (current_user_id == p.author_id)
+
+    # Verificar si el miembro ya se incorporó a la mutual
+    member_joined = bool(p.extra_fields and (p.extra_fields.get("member_joined") or p.extra_fields.get("redeemed_by_name")))
     redeemed_by_name = p.extra_fields.get("redeemed_by_name") if p.extra_fields else None
+
+    invite = None
+    if is_admission:
+        invite = db.query(OrganizationInvite).filter(OrganizationInvite.proposal_id == p.id).first()
+        if not member_joined:
+            if invite and invite.uses_count and invite.uses_count > 0:
+                member_joined = True
+                m = db.query(OrganizationMembership).filter(
+                    OrganizationMembership.organization_id == p.organization_id,
+                    OrganizationMembership.invited_by_token == invite.token
+                ).first()
+                if m:
+                    u = db.query(User).filter(User.id == m.user_id).first()
+                    if u:
+                        redeemed_by_name = f"{u.first_name} {u.last_name}".strip()
+            elif p.target_member_id and p.organization_id:
+                m = db.query(OrganizationMembership).filter(
+                    OrganizationMembership.user_id == p.target_member_id,
+                    OrganizationMembership.organization_id == p.organization_id,
+                    OrganizationMembership.status == MemberStatus.ACTIVE
+                ).first()
+                if m:
+                    member_joined = True
+
+    now = utcnow()
+
+    # Verificar si expiró la invitación (15 días sin canje) o fue cancelada
+    is_invite_expired = False
+    admission_cancelled = bool(p.extra_fields and (p.extra_fields.get("admission_cancelled") or p.extra_fields.get("admission_expired")))
+
+    if is_admission and is_approved and not member_joined and not admission_cancelled:
+        expires_at_dt = None
+        if invite and invite.expires_at:
+            expires_at_dt = invite.expires_at.replace(tzinfo=timezone.utc) if invite.expires_at.tzinfo is None else invite.expires_at
+        elif p.extra_fields and p.extra_fields.get("expires_at"):
+            try:
+                raw_exp = p.extra_fields.get("expires_at")
+                expires_at_dt = datetime.fromisoformat(raw_exp.replace("Z", "+00:00"))
+                if expires_at_dt.tzinfo is None:
+                    expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+
+        if expires_at_dt and now >= expires_at_dt:
+            is_invite_expired = True
+            admission_cancelled = True
+            if not (p.extra_fields and p.extra_fields.get("admission_cancelled")):
+                extra = dict(p.extra_fields or {})
+                extra["admission_cancelled"] = True
+                extra["admission_expired"] = True
+                extra["cancellation_reason"] = "Invitación expirada (15 días sin canje)"
+                extra["cancelled_at"] = now.isoformat()
+                p.extra_fields = extra
+                if invite:
+                    invite.status = InviteStatus.EXPIRED
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+    # El código para nuevo ingreso solo debe salir a quien hace la propuesta (el autor)
+    can_see_invite = (
+        is_approved
+        and is_admission
+        and is_author
+        and not member_joined
+        and not admission_cancelled
+    )
+    invite_token = (p.extra_fields.get("invite_token") if p.extra_fields else None) if can_see_invite else None
+    invite_code_formatted = (p.extra_fields.get("invite_code_formatted") if p.extra_fields else None) if can_see_invite else None
+    invite_expires_at = (p.extra_fields.get("expires_at") if p.extra_fields else None) if is_approved else None
+
+    # No se debe pasar la propuesta al historial hasta que no ingrese el nuevo miembro,
+    # mientras debe permanecer en activo. Si pasa mucho tiempo sin que ingrese se cancela su ingreso y pasa al historial.
+    if is_admission and is_approved:
+        is_active_proposal = (not member_joined) and (not admission_cancelled)
+    else:
+        is_active_proposal = (p.status in (ProposalStatus.DEBATE, ProposalStatus.VOTING))
 
     my_vote_record = db.query(Vote).filter(
         Vote.proposal_id == p.id,
@@ -185,7 +266,6 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         elif my_vote_record.vote_value == 0.0:
             my_vote = "abstencion"
 
-    now = utcnow()
     time_remaining_seconds = 0
     phase_label = "Debate"
     
@@ -200,7 +280,15 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         time_remaining_seconds = max(0, int(diff))
         phase_label = "Votación Abierta"
     elif p.status == ProposalStatus.APPROVED:
-        phase_label = "Aprobada"
+        if is_admission:
+            if member_joined:
+                phase_label = "Ingreso Concretado"
+            elif admission_cancelled:
+                phase_label = "Ingreso Cancelado (Expirado)"
+            else:
+                phase_label = "Esperando Ingreso"
+        else:
+            phase_label = "Aprobada"
     elif p.status == ProposalStatus.REJECTED:
         phase_label = "Rechazada"
 
@@ -274,6 +362,10 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         "organization_id": p.organization_id,
         "author_id": p.author_id,
         "author_name": author_name,
+        "is_author": is_author,
+        "member_joined": bool(member_joined),
+        "admission_cancelled": bool(admission_cancelled),
+        "is_active_proposal": is_active_proposal,
         "target_member_id": p.target_member_id,
         "target_name": target_name or candidate_name_extra,
         "candidate_name": candidate_name_extra or target_name,
@@ -690,6 +782,52 @@ def cerrar_propuesta(
 
     results = GovernanceService.calculate_proposal_results(db, proposal)
     dispatch_proposal_resolution_notifications(db, proposal, org.id)
+
+    return _serialize_proposal(db, proposal, user.id)
+
+
+@router.post("/propuestas/{proposal_id}/cancelar-ingreso")
+def cancelar_ingreso(
+    proposal_id: int,
+    current_org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    Cancela la invitación de un nuevo ingreso aprobado antes de que se canjee.
+    Solo puede realizarlo el proponente. Pasa la propuesta al historial.
+    """
+    org = current_org_member["organization"]
+    user = current_org_member["user"]
+
+    proposal = db.query(Proposal).filter(
+        Proposal.id == proposal_id,
+        Proposal.organization_id == org.id
+    ).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+
+    if proposal.proposal_type != ProposalType.MEMBER_ADMISSION:
+        raise HTTPException(status_code=400, detail="Solo las propuestas de admisión de miembros pueden ser canceladas")
+
+    if proposal.author_id != user.id:
+        raise HTTPException(status_code=403, detail="Solo el proponente del ingreso puede cancelar la invitación")
+
+    extra = dict(proposal.extra_fields or {})
+    if extra.get("member_joined") or extra.get("redeemed_by_name"):
+        raise HTTPException(status_code=400, detail="El miembro ya completó su ingreso a la mutual")
+
+    extra["admission_cancelled"] = True
+    extra["cancellation_reason"] = "Cancelado por el proponente"
+    extra["cancelled_at"] = utcnow().isoformat()
+    proposal.extra_fields = extra
+
+    invite = db.query(OrganizationInvite).filter(OrganizationInvite.proposal_id == proposal.id).first()
+    if invite:
+        invite.status = InviteStatus.EXPIRED
+
+    db.commit()
+    db.refresh(proposal)
+    notify_org(org.id, "PROPUESTA_ACTUALIZADA", {"proposal_id": proposal.id, "status": "cancelled"})
 
     return _serialize_proposal(db, proposal, user.id)
 
