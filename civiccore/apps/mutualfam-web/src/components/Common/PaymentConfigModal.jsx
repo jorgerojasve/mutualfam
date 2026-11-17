@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { loansApi } from '@civiccore/sdk';
 import {
   Smartphone,
@@ -81,6 +82,7 @@ export default function PaymentConfigModal({
   const [banks, setBanks] = useState(VENEZUELAN_BANKS);
   const [isPickingBank, setIsPickingBank] = useState(false);
   const [bankSearch, setBankSearch] = useState('');
+  const [docPickerTarget, setDocPickerTarget] = useState(null);
   const [pmErrors, setPmErrors] = useState({});
   const [tbErrors, setTbErrors] = useState({});
   const [usdErrors, setUsdErrors] = useState({});
@@ -92,6 +94,7 @@ export default function PaymentConfigModal({
       setSelectedConfigMethod(null);
       setIsPickingBank(false);
       setBankSearch('');
+      setDocPickerTarget(null);
       setPmErrors({});
       setTbErrors({});
       setUsdErrors({});
@@ -348,40 +351,36 @@ export default function PaymentConfigModal({
             !tb.titular ||
             !tb.cedula
           ) {
-            alert('Por favor completa todos los campos requeridos de Transferencia Bancaria (banco, cuenta de 20 dígitos, titular y documento) o déjalos en blanco para eliminar el método.');
+            alert('Por favor completa todos los campos requeridos de Transferencia Bancaria (banco, cuenta de 20 dígitos, titular y cédula/RIF) o déjalos en blanco para eliminar el método.');
             return;
           }
         }
       } else if (method === 'Efectivo USD') {
         const usd = configToSave['Efectivo USD'];
-        if (typeof usd === 'object' && usd !== null) {
-          const isEmpty = !usd.telefono && !usd.lugar && !usd.zona_entrega && !usd.horario && !usd.notas;
+        if (typeof usd === 'object') {
+          const isEmpty = !usd.telefono && !usd.lugar;
           if (isEmpty) {
             delete configToSave['Efectivo USD'];
-          } else if (!usd.telefono || (!usd.lugar && !usd.zona_entrega)) {
-            alert('Por favor completa al menos el teléfono y lugar de entrega para Efectivo USD, o déjalos en blanco para eliminar el método.');
+          } else if (!usd.telefono || !usd.lugar) {
+            alert('Por favor indica teléfono y lugar de entrega para Efectivo USD, o déjalos en blanco para eliminar el método.');
             return;
           }
-        }
-      } else {
-        if (!configToSave[method] || String(configToSave[method]).trim() === '') {
-          delete configToSave[method];
         }
       }
     }
 
     setSavingConfig(true);
     try {
+      const jsonString = JSON.stringify(configToSave);
+      await loansApi.updatePaymentMethods({ payment_methods_json: jsonString });
+
       setPersistedPaymentConfig(configToSave);
-      if (typeof loansApi.updatePaymentMethods === 'function') {
-        await loansApi.updatePaymentMethods(JSON.stringify(configToSave));
-      } else {
-        await loansApi.savePaymentMethods({ payment_methods_json: JSON.stringify(configToSave) });
-      }
       setPaymentConfig(configToSave);
-      if (onSuccess) onSuccess(configToSave);
-      alert('Tus datos de pago han sido guardados exitosamente.');
-      if (onClose) onClose();
+
+      if (typeof onSuccess === 'function') {
+        onSuccess(configToSave);
+      }
+      onClose();
     } catch (e) {
       alert('Error al guardar la configuración de pagos: ' + (e.message || 'Error desconocido'));
     } finally {
@@ -391,33 +390,49 @@ export default function PaymentConfigModal({
 
   if (!visible) return null;
 
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '1rem',
-      overflowY: 'auto',
-    }}>
-      <div style={{
-        backgroundColor: '#0f172a',
-        border: '1px solid #1e293b',
-        borderRadius: '16px',
-        width: '100%',
-        maxWidth: '540px',
-        maxHeight: '90vh',
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.78)',
+        backdropFilter: 'blur(4px)',
         display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
-        overflow: 'hidden',
-      }}>
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 99999,
+        padding: '12px',
+        boxSizing: 'border-box',
+      }}
+      onClick={() => {
+        if (docPickerTarget) {
+          setDocPickerTarget(null);
+        } else if (isPickingBank) {
+          setIsPickingBank(false);
+        } else if (selectedConfigMethod) {
+          setSelectedConfigMethod(null);
+        } else {
+          onClose();
+        }
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#071f19',
+          border: '1.5px solid #145347',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '460px',
+          maxHeight: 'min(92vh, 680px)',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7)',
+          overflow: 'hidden',
+          position: 'relative',
+          boxSizing: 'border-box',
+        }}
+      >
         {/* Loading Spinner inicial */}
         {loadingInitial ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
@@ -428,7 +443,7 @@ export default function PaymentConfigModal({
           /* ======================================================== */
           /* SUB-VISTA: SELECCIÓN Y BÚSQUEDA DE BANCOS                 */
           /* ======================================================== */
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem', gap: '0.75rem' }}>
               <button
                 type="button"
@@ -437,7 +452,7 @@ export default function PaymentConfigModal({
                   background: 'none',
                   border: 'none',
                   color: '#38bdf8',
-                  fontSize: '0.9rem',
+                  fontSize: '0.95rem',
                   fontWeight: '600',
                   cursor: 'pointer',
                   display: 'flex',
@@ -453,7 +468,7 @@ export default function PaymentConfigModal({
               </h2>
             </div>
 
-            <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <div style={{ position: 'relative', marginBottom: '0.85rem' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
               <input
                 type="text"
@@ -463,10 +478,10 @@ export default function PaymentConfigModal({
                 autoFocus
                 style={{
                   width: '100%',
-                  padding: '10px 10px 10px 36px',
-                  borderRadius: '8px',
-                  backgroundColor: '#1e293b',
-                  border: '1px solid #334155',
+                  padding: '11px 11px 11px 36px',
+                  borderRadius: '10px',
+                  backgroundColor: '#0c2b23',
+                  border: '1px solid #145347',
                   color: '#fff',
                   fontSize: '0.9rem',
                   boxSizing: 'border-box',
@@ -478,9 +493,9 @@ export default function PaymentConfigModal({
               flex: 1,
               maxHeight: '340px',
               overflowY: 'auto',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              backgroundColor: '#090e17',
+              border: '1px solid #145347',
+              borderRadius: '10px',
+              backgroundColor: '#041712',
               marginBottom: '1rem',
             }}>
               {banks
@@ -535,8 +550,8 @@ export default function PaymentConfigModal({
                         display: 'flex',
                         alignItems: 'center',
                         padding: '12px 14px',
-                        backgroundColor: isSelected ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
-                        borderBottom: '1px solid #1e293b',
+                        backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                        borderBottom: '1px solid rgba(20, 83, 71, 0.4)',
                         cursor: 'pointer',
                         transition: 'background-color 0.15s ease',
                       }}
@@ -570,12 +585,13 @@ export default function PaymentConfigModal({
                 onClick={() => setIsPickingBank(false)}
                 style={{
                   width: '100%',
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #334155',
+                  padding: '11px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #145347',
                   backgroundColor: 'transparent',
                   color: '#cbd5e1',
                   fontSize: '0.9rem',
+                  fontWeight: '600',
                   cursor: 'pointer',
                 }}
               >
@@ -587,14 +603,14 @@ export default function PaymentConfigModal({
           /* ======================================================== */
           /* VISTA PRINCIPAL: LISTA VERTICAL DE MÉTODOS (HOMOLOGADO)  */
           /* ======================================================== */
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.25rem' }}>
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'flex-start',
               marginBottom: '1rem',
               paddingBottom: '0.75rem',
-              borderBottom: '1px solid #1e293b',
+              borderBottom: '1px solid rgba(20, 83, 71, 0.6)',
             }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold', color: '#f8fafc' }}>
@@ -622,7 +638,7 @@ export default function PaymentConfigModal({
             </div>
 
             {/* Lista Vertical de Métodos */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.5rem', flex: 1, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', marginBottom: '1.25rem', flex: 1, overflowY: 'auto' }}>
               {AVAILABLE_PAYMENT_METHODS.map((method) => {
                 const configItem = paymentConfig[method];
                 const isConfigured = Boolean(
@@ -652,40 +668,34 @@ export default function PaymentConfigModal({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '12px 14px',
-                      backgroundColor: '#1e293b',
-                      borderRadius: '10px',
-                      border: isConfigured ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #334155',
+                      padding: '13px 14px',
+                      backgroundColor: '#0c2b23',
+                      borderRadius: '12px',
+                      border: isConfigured ? '1.5px solid rgba(16, 185, 129, 0.6)' : '1px solid #145347',
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
                       opacity: isDisabled ? 0.5 : 1,
                       transition: 'all 0.15s ease',
                     }}
-                    onMouseEnter={(e) => {
-                      if (!isDisabled) e.currentTarget.style.backgroundColor = '#273549';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isDisabled) e.currentTarget.style.backgroundColor = '#1e293b';
-                    }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {method === 'Pago Móvil' ? (
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: 'rgba(56, 189, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Smartphone size={18} color="#38bdf8" />
                         </div>
                       ) : method === 'Transferencia Bancaria' ? (
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(129, 140, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: 'rgba(129, 140, 248, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <ArrowLeftRight size={18} color="#818cf8" />
                         </div>
                       ) : method === 'Efectivo USD' ? (
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Banknote size={18} color="#10b981" />
                         </div>
                       ) : method === 'Efectivo Bolívares' ? (
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(148, 163, 184, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: 'rgba(148, 163, 184, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Wallet size={18} color="#94a3b8" />
                         </div>
                       ) : (
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(148, 163, 184, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: 'rgba(148, 163, 184, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <CreditCard size={18} color="#94a3b8" />
                         </div>
                       )}
@@ -732,18 +742,19 @@ export default function PaymentConfigModal({
               justifyContent: 'flex-end',
               gap: '10px',
               paddingTop: '1rem',
-              borderTop: '1px solid #1e293b',
+              borderTop: '1px solid rgba(20, 83, 71, 0.6)',
             }}>
               <button
                 type="button"
                 onClick={onClose}
                 style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #334155',
+                  padding: '11px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid #145347',
                   backgroundColor: 'transparent',
                   color: '#cbd5e1',
                   fontSize: '0.9rem',
+                  fontWeight: '600',
                   cursor: 'pointer',
                 }}
               >
@@ -754,15 +765,15 @@ export default function PaymentConfigModal({
                 onClick={handleSaveConfig}
                 disabled={savingConfig}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: '8px',
+                  padding: '11px 22px',
+                  borderRadius: '10px',
                   border: 'none',
                   backgroundColor: '#10b981',
                   color: '#fff',
                   fontWeight: 'bold',
-                  fontSize: '0.9rem',
+                  fontSize: '0.95rem',
                   cursor: savingConfig ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)',
+                  boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)',
                 }}
               >
                 {savingConfig ? 'Guardando...' : 'Guardar Todo'}
@@ -773,14 +784,15 @@ export default function PaymentConfigModal({
           /* ======================================================== */
           /* SUB-VISTA: CONFIGURACIÓN ESPECÍFICA DEL MÉTODO           */
           /* ======================================================== */
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.5rem', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem 1.25rem', overflowY: 'auto' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
               marginBottom: '1rem',
               paddingBottom: '0.75rem',
-              borderBottom: '1px solid #1e293b',
+              borderBottom: '1px solid rgba(20, 83, 71, 0.6)',
               gap: '0.75rem',
+              flexShrink: 0,
             }}>
               <button
                 type="button"
@@ -794,7 +806,7 @@ export default function PaymentConfigModal({
                   background: 'none',
                   border: 'none',
                   color: '#38bdf8',
-                  fontSize: '0.9rem',
+                  fontSize: '0.95rem',
                   fontWeight: '600',
                   cursor: 'pointer',
                   display: 'flex',
@@ -811,13 +823,13 @@ export default function PaymentConfigModal({
             </div>
 
             {/* Formulario según el método seleccionado */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, marginBottom: '1.25rem' }}>
               {selectedConfigMethod === 'Pago Móvil' && (
                 <>
                   {/* Banco Receptor */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
-                      Banco Receptor
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Banco
                     </label>
                     <div
                       onClick={() => {
@@ -828,12 +840,12 @@ export default function PaymentConfigModal({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: pmErrors.banco ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: pmErrors.banco ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: paymentConfig['Pago Móvil']?.banco ? '#fff' : '#64748b',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         cursor: 'pointer',
                       }}
                     >
@@ -842,7 +854,7 @@ export default function PaymentConfigModal({
                           ? getBankLabel(paymentConfig['Pago Móvil']?.banco, banks)
                           : 'Selecciona tu banco...'}
                       </span>
-                      <span style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
+                      <span style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
                         Elegir ▼
                       </span>
                     </div>
@@ -853,64 +865,83 @@ export default function PaymentConfigModal({
                     )}
                   </div>
 
-                  {/* Tipo de Documento y Número */}
+                  {/* Tipo de Documento (Homologado Android) */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
-                      Cédula / Documento de Identidad
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Tipo de Documento
                     </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <select
-                        value={paymentConfig['Pago Móvil']?.tipo_doc || 'Persona'}
-                        onChange={(e) => {
-                          setPaymentConfig({
-                            ...paymentConfig,
-                            'Pago Móvil': {
-                              ...(paymentConfig['Pago Móvil'] || {}),
-                              tipo_doc: e.target.value,
-                            },
-                          });
-                        }}
-                        style={{
-                          width: '85px',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          color: '#fff',
-                          fontSize: '0.9rem',
+                    <div
+                      onClick={() => setDocPickerTarget('Pago Móvil')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: '1px solid #145347',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                          border: '1px solid rgba(59, 130, 246, 0.5)',
+                          color: '#93c5fd',
                           fontWeight: 'bold',
-                        }}
-                      >
-                        {DOCUMENT_TYPES.map((d) => (
-                          <option key={d.key} value={d.key}>{d.prefix} - {d.key}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={paymentConfig['Pago Móvil']?.cedula || ''}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setPaymentConfig({
-                            ...paymentConfig,
-                            'Pago Móvil': {
-                              ...(paymentConfig['Pago Móvil'] || {}),
-                              cedula: val,
-                            },
-                          });
-                          if (pmErrors.cedula) setPmErrors((prev) => ({ ...prev, cedula: null }));
-                        }}
-                        placeholder="12345678"
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          borderRadius: '8px',
-                          backgroundColor: '#1e293b',
-                          border: pmErrors.cedula ? '1.5px solid #ef4444' : '1px solid #334155',
-                          color: '#fff',
-                          fontSize: '0.9rem',
-                        }}
-                      />
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          {getDocTypeInfo(paymentConfig['Pago Móvil']?.tipo_doc).prefix}
+                        </div>
+                        <span style={{ color: '#fff', fontSize: '0.95rem', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {getDocTypeInfo(paymentConfig['Pago Móvil']?.tipo_doc).title}
+                        </span>
+                      </div>
+                      <span style={{ color: '#38bdf8', fontSize: '0.85rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
+                        Elegir ▼
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Número de documento */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Número de documento
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={paymentConfig['Pago Móvil']?.cedula || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Pago Móvil': {
+                            ...(paymentConfig['Pago Móvil'] || {}),
+                            cedula: val,
+                          },
+                        });
+                        if (pmErrors.cedula) setPmErrors((prev) => ({ ...prev, cedula: null }));
+                      }}
+                      placeholder="12345678"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: pmErrors.cedula ? '1.5px solid #ef4444' : '1px solid #145347',
+                        color: '#fff',
+                        fontSize: '0.95rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
                     {pmErrors.cedula && (
                       <span style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
                         {pmErrors.cedula}
@@ -920,11 +951,12 @@ export default function PaymentConfigModal({
 
                   {/* Teléfono */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
-                      Teléfono Afiliado a Pago Móvil
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Teléfono
                     </label>
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="tel"
                       value={paymentConfig['Pago Móvil']?.telefono || ''}
                       onChange={(e) => {
                         setPaymentConfig({
@@ -939,12 +971,12 @@ export default function PaymentConfigModal({
                       placeholder="04141234567"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: pmErrors.telefono ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: pmErrors.telefono ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -961,7 +993,7 @@ export default function PaymentConfigModal({
                 <>
                   {/* Banco Destino */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Banco Destino
                     </label>
                     <div
@@ -973,12 +1005,12 @@ export default function PaymentConfigModal({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: tbErrors.banco ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: tbErrors.banco ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: paymentConfig['Transferencia Bancaria']?.banco ? '#fff' : '#64748b',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         cursor: 'pointer',
                       }}
                     >
@@ -987,7 +1019,7 @@ export default function PaymentConfigModal({
                           ? getBankLabel(paymentConfig['Transferencia Bancaria']?.banco, banks)
                           : 'Selecciona el banco de tu cuenta...'}
                       </span>
-                      <span style={{ color: '#818cf8', fontSize: '0.8rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
+                      <span style={{ color: '#818cf8', fontSize: '0.85rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
                         Elegir ▼
                       </span>
                     </div>
@@ -1000,7 +1032,7 @@ export default function PaymentConfigModal({
 
                   {/* Tipo de Cuenta */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Tipo de Cuenta
                     </label>
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -1021,13 +1053,13 @@ export default function PaymentConfigModal({
                             }
                             style={{
                               flex: 1,
-                              padding: '8px',
-                              borderRadius: '8px',
-                              border: active ? '1px solid #818cf8' : '1px solid #334155',
-                              backgroundColor: active ? 'rgba(129, 140, 248, 0.2)' : '#1e293b',
+                              padding: '10px',
+                              borderRadius: '10px',
+                              border: active ? '1.5px solid #818cf8' : '1px solid #145347',
+                              backgroundColor: active ? 'rgba(129, 140, 248, 0.2)' : '#0c2b23',
                               color: active ? '#a5b4fc' : '#94a3b8',
                               fontWeight: active ? '700' : '500',
-                              fontSize: '0.85rem',
+                              fontSize: '0.9rem',
                               cursor: 'pointer',
                             }}
                           >
@@ -1040,7 +1072,7 @@ export default function PaymentConfigModal({
 
                   {/* Número de cuenta */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600' }}>
                         Número de Cuenta (20 dígitos)
                       </label>
@@ -1072,10 +1104,10 @@ export default function PaymentConfigModal({
                       placeholder="0102 0000 00 0000000000"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: tbErrors.numero_cuenta ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: tbErrors.numero_cuenta ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
                         fontSize: '0.95rem',
                         fontFamily: 'monospace',
@@ -1092,7 +1124,7 @@ export default function PaymentConfigModal({
 
                   {/* Titular */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Nombre del Titular
                     </label>
                     <input
@@ -1111,12 +1143,12 @@ export default function PaymentConfigModal({
                       placeholder="Nombre y Apellido o Razón Social"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: tbErrors.titular ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: tbErrors.titular ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -1127,64 +1159,83 @@ export default function PaymentConfigModal({
                     )}
                   </div>
 
-                  {/* Documento del Titular */}
+                  {/* Tipo de Documento (Homologado Android) */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
-                      Documento / RIF del Titular
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Tipo de Documento
                     </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <select
-                        value={paymentConfig['Transferencia Bancaria']?.tipo_doc || 'Persona'}
-                        onChange={(e) => {
-                          setPaymentConfig({
-                            ...paymentConfig,
-                            'Transferencia Bancaria': {
-                              ...(paymentConfig['Transferencia Bancaria'] || {}),
-                              tipo_doc: e.target.value,
-                            },
-                          });
-                        }}
-                        style={{
-                          width: '85px',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          color: '#fff',
-                          fontSize: '0.9rem',
+                    <div
+                      onClick={() => setDocPickerTarget('Transferencia Bancaria')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: '1px solid #145347',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                          border: '1px solid rgba(59, 130, 246, 0.5)',
+                          color: '#93c5fd',
                           fontWeight: 'bold',
-                        }}
-                      >
-                        {DOCUMENT_TYPES.map((d) => (
-                          <option key={d.key} value={d.key}>{d.prefix} - {d.key}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={paymentConfig['Transferencia Bancaria']?.cedula || ''}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          setPaymentConfig({
-                            ...paymentConfig,
-                            'Transferencia Bancaria': {
-                              ...(paymentConfig['Transferencia Bancaria'] || {}),
-                              cedula: val,
-                            },
-                          });
-                          if (tbErrors.cedula) setTbErrors((prev) => ({ ...prev, cedula: null }));
-                        }}
-                        placeholder="12345678"
-                        style={{
-                          flex: 1,
-                          padding: '10px',
-                          borderRadius: '8px',
-                          backgroundColor: '#1e293b',
-                          border: tbErrors.cedula ? '1.5px solid #ef4444' : '1px solid #334155',
-                          color: '#fff',
-                          fontSize: '0.9rem',
-                        }}
-                      />
+                          fontSize: '0.85rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          {getDocTypeInfo(paymentConfig['Transferencia Bancaria']?.tipo_doc).prefix}
+                        </div>
+                        <span style={{ color: '#fff', fontSize: '0.95rem', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {getDocTypeInfo(paymentConfig['Transferencia Bancaria']?.tipo_doc).title}
+                        </span>
+                      </div>
+                      <span style={{ color: '#818cf8', fontSize: '0.85rem', fontWeight: '600', marginLeft: '8px', flexShrink: 0 }}>
+                        Elegir ▼
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Documento / RIF del Titular */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Número de documento / RIF
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={paymentConfig['Transferencia Bancaria']?.cedula || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            cedula: val,
+                          },
+                        });
+                        if (tbErrors.cedula) setTbErrors((prev) => ({ ...prev, cedula: null }));
+                      }}
+                      placeholder="12345678"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: tbErrors.cedula ? '1.5px solid #ef4444' : '1px solid #145347',
+                        color: '#fff',
+                        fontSize: '0.95rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
                     {tbErrors.cedula && (
                       <span style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>
                         {tbErrors.cedula}
@@ -1194,7 +1245,7 @@ export default function PaymentConfigModal({
 
                   {/* Correo Electrónico (Opcional) */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Correo Electrónico (Opcional para comprobante)
                     </label>
                     <input
@@ -1213,12 +1264,12 @@ export default function PaymentConfigModal({
                       placeholder="correo@ejemplo.com"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: tbErrors.email ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: tbErrors.email ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -1228,33 +1279,68 @@ export default function PaymentConfigModal({
                       </span>
                     )}
                   </div>
+
+                  {/* Teléfono de contacto (Opcional) */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
+                      Teléfono de contacto (Opcional)
+                    </label>
+                    <input
+                      type="tel"
+                      value={paymentConfig['Transferencia Bancaria']?.telefono || ''}
+                      onChange={(e) => {
+                        setPaymentConfig({
+                          ...paymentConfig,
+                          'Transferencia Bancaria': {
+                            ...(paymentConfig['Transferencia Bancaria'] || {}),
+                            telefono: e.target.value,
+                          },
+                        });
+                      }}
+                      placeholder="04141234567"
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: '1px solid #145347',
+                        color: '#fff',
+                        fontSize: '0.95rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
                 </>
               )}
 
               {selectedConfigMethod === 'Efectivo USD' && (
                 <>
-                  {/* Tarjeta explicativa de Efectivo USD */}
+                  {/* Banner informativo */}
                   <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '12px',
+                    borderRadius: '10px',
                     backgroundColor: 'rgba(16, 185, 129, 0.12)',
                     border: '1px solid rgba(16, 185, 129, 0.3)',
-                    borderRadius: '10px',
-                    padding: '12px',
+                    color: '#a7f3d0',
+                    fontSize: '0.82rem',
+                    lineHeight: 1.4,
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#34d399', fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '4px' }}>
-                      <Banknote size={17} /> Recepción de Dólares en Efectivo
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.4' }}>
-                      Ingresa los datos para que quienes te transfieran o aporten puedan coordinar la entrega física del dinero en mano de forma segura.
-                    </p>
+                    <Info size={18} style={{ flexShrink: 0, marginTop: '2px', color: '#10b981' }} />
+                    <span>
+                      Coordina entregas de aportes o desembolsos en divisas fijando tu WhatsApp, una zona segura y tus condiciones de aceptación de billetes.
+                    </span>
                   </div>
 
                   {/* Teléfono / WhatsApp */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Teléfono o WhatsApp para coordinar *
                     </label>
                     <input
-                      type="text"
+                      type="tel"
                       value={paymentConfig['Efectivo USD']?.telefono || ''}
                       onChange={(e) => {
                         setPaymentConfig({
@@ -1269,12 +1355,12 @@ export default function PaymentConfigModal({
                       placeholder="Ej: 04141234567"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: usdErrors.telefono ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: usdErrors.telefono ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -1287,7 +1373,7 @@ export default function PaymentConfigModal({
 
                   {/* Lugar o Zona */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Lugar o Zona de Entrega de Preferencia *
                     </label>
                     <input
@@ -1306,12 +1392,12 @@ export default function PaymentConfigModal({
                       placeholder="Ej: Chacao / C.C. Líder / Mi domicilio"
                       style={{
                         width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: usdErrors.lugar ? '1.5px solid #ef4444' : '1px solid #334155',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: usdErrors.lugar ? '1.5px solid #ef4444' : '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.9rem',
+                        fontSize: '0.95rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -1324,7 +1410,7 @@ export default function PaymentConfigModal({
 
                   {/* Horarios Disponibles */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Horario y Días Disponibles (Opcional)
                     </label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
@@ -1344,12 +1430,12 @@ export default function PaymentConfigModal({
                               });
                             }}
                             style={{
-                              padding: '5px 8px',
-                              borderRadius: '6px',
-                              border: isCurrent ? '1px solid #10b981' : '1px solid #334155',
-                              backgroundColor: isCurrent ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: isCurrent ? '1.5px solid #10b981' : '1px solid #145347',
+                              backgroundColor: isCurrent ? 'rgba(16, 185, 129, 0.25)' : '#0c2b23',
                               color: isCurrent ? '#6ee7b7' : '#94a3b8',
-                              fontSize: '0.75rem',
+                              fontSize: '0.78rem',
                               cursor: 'pointer',
                             }}
                           >
@@ -1373,12 +1459,12 @@ export default function PaymentConfigModal({
                       placeholder="O escribe un horario personalizado..."
                       style={{
                         width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.85rem',
+                        fontSize: '0.88rem',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -1386,7 +1472,7 @@ export default function PaymentConfigModal({
 
                   {/* Condiciones de los Billetes */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '2px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
                       Condiciones de los Billetes (Opcional)
                     </label>
                     <div style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: '6px' }}>
@@ -1415,12 +1501,12 @@ export default function PaymentConfigModal({
                               });
                             }}
                             style={{
-                              padding: '5px 8px',
-                              borderRadius: '6px',
-                              border: isSelected ? '1px solid #10b981' : '1px solid #334155',
-                              backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: isSelected ? '1.5px solid #10b981' : '1px solid #145347',
+                              backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.25)' : '#0c2b23',
                               color: isSelected ? '#6ee7b7' : '#94a3b8',
-                              fontSize: '0.75rem',
+                              fontSize: '0.78rem',
                               cursor: 'pointer',
                             }}
                           >
@@ -1433,7 +1519,7 @@ export default function PaymentConfigModal({
 
                   {/* Notas adicionales */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                       Notas o Instrucciones Adicionales (Opcional)
                     </label>
                     <textarea
@@ -1451,12 +1537,12 @@ export default function PaymentConfigModal({
                       placeholder="Ej: Confirmar antes de salir al punto de encuentro..."
                       style={{
                         width: '100%',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        backgroundColor: '#0c2b23',
+                        border: '1px solid #145347',
                         color: '#fff',
-                        fontSize: '0.85rem',
+                        fontSize: '0.88rem',
                         resize: 'vertical',
                         boxSizing: 'border-box',
                       }}
@@ -1466,28 +1552,29 @@ export default function PaymentConfigModal({
               )}
             </div>
 
-            {/* Botón de Confirmación para el método actual */}
+            {/* Botón de Confirmación para el método actual (Homologado Android Verde) */}
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',
-              gap: '10px',
               paddingTop: '1rem',
-              borderTop: '1px solid #1e293b',
+              borderTop: '1px solid rgba(20, 83, 71, 0.6)',
+              flexShrink: 0,
             }}>
               <button
                 type="button"
                 onClick={handleConfirmConfigMethod}
                 style={{
                   width: '100%',
-                  padding: '11px 20px',
-                  borderRadius: '8px',
+                  padding: '13px 20px',
+                  borderRadius: '10px',
                   border: 'none',
-                  backgroundColor: '#3b82f6',
+                  backgroundColor: '#10b981',
                   color: '#fff',
                   fontWeight: 'bold',
-                  fontSize: '0.95rem',
+                  fontSize: '1rem',
                   cursor: 'pointer',
-                  boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
+                  boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)',
+                  transition: 'background-color 0.15s ease',
                 }}
               >
                 Confirmar
@@ -1495,7 +1582,164 @@ export default function PaymentConfigModal({
             </div>
           </div>
         )}
+
+        {/* Modal / Sheet Flotante Selector de Tipo de Documento (Homologado con Android) */}
+        {docPickerTarget && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100,
+              padding: '16px',
+              boxSizing: 'border-box',
+            }}
+            onClick={() => setDocPickerTarget(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                maxHeight: '90%',
+                backgroundColor: '#071f19',
+                border: '1.5px solid #145347',
+                borderRadius: '16px',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8)',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingBottom: '12px',
+                borderBottom: '1px solid rgba(20, 83, 71, 0.6)',
+                marginBottom: '10px',
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#f8fafc' }}>
+                    Tipo de Documento
+                  </h3>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                    {docPickerTarget} • Identificación oficial
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDocPickerTarget(null)}
+                  style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '15px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', padding: '4px 0' }}>
+                {DOCUMENT_TYPES.map((doc) => {
+                  const currentKey = getDocTypeInfo(paymentConfig[docPickerTarget]?.tipo_doc).key;
+                  const isSelected = currentKey === doc.key;
+                  return (
+                    <div
+                      key={doc.key}
+                      onClick={() => {
+                        setPaymentConfig((prev) => ({
+                          ...prev,
+                          [docPickerTarget]: {
+                            ...(prev[docPickerTarget] || {}),
+                            tipo_doc: doc.key,
+                          },
+                        }));
+                        setDocPickerTarget(null);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderRadius: '10px',
+                        backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.18)' : '#0c2b23',
+                        border: isSelected ? '1.5px solid #10b981' : '1px solid #145347',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '6px',
+                        backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.25)' : 'rgba(59, 130, 246, 0.2)',
+                        border: isSelected ? '1px solid #10b981' : '1px solid rgba(59, 130, 246, 0.4)',
+                        color: isSelected ? '#34d399' : '#93c5fd',
+                        fontWeight: 'bold',
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: '12px',
+                        flexShrink: 0,
+                      }}>
+                        {doc.prefix}
+                      </div>
+                      <div style={{ flex: 1, marginRight: '8px' }}>
+                        <div style={{ color: isSelected ? '#6ee7b7' : '#e2e8f0', fontSize: '0.9rem', fontWeight: '600' }}>
+                          {doc.title}
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '2px' }}>
+                          {doc.subtitle}
+                        </div>
+                      </div>
+                      {isSelected ? (
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '10px',
+                          backgroundColor: '#10b981',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          flexShrink: 0,
+                        }}>
+                          ✓
+                        </div>
+                      ) : (
+                        <div style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '9px',
+                          border: '1.5px solid #64748b',
+                          flexShrink: 0,
+                        }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
