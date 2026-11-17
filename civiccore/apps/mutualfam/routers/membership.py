@@ -266,7 +266,15 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
         if proposal.status == ProposalStatus.APPROVED:
             # La asamblea ya aprobó el ingreso; activar inmediatamente
             invite.uses_count = (invite.uses_count or 0) + 1
+            invite.status = InviteStatus.USED
             proposal.target_member_id = current_user.id
+            extra = dict(proposal.extra_fields or {})
+            extra["redeemed_by_user_id"] = current_user.id
+            extra["redeemed_by_name"] = f"{current_user.first_name} {current_user.last_name}".strip()
+            extra["redeemed_at"] = utcnow().isoformat()
+            extra["member_joined"] = True
+            proposal.extra_fields = extra
+
             if existing_membership:
                 existing_membership.status = MemberStatus.ACTIVE
                 existing_membership.role = "member"
