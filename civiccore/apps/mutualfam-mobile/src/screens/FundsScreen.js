@@ -202,7 +202,7 @@ const getColectaFinancialStats = (colecta) => {
   };
 };
 
-export default function FundsScreen() {
+export default function FundsScreen({ navigation }) {
   const { activeOrg, loading: orgLoading, isOffline, setIsOffline, retryConnection } = React.useContext(OrgContext);
   const [activeTab, setActiveTab] = useState('colectas'); // 'colectas' | 'periodicos'
   const [currentUser, setCurrentUser] = useState(null);
@@ -3173,6 +3173,7 @@ export default function FundsScreen() {
                 const isBeneficiarySelf = Boolean(currentUser && targetColecta.beneficiario_id === currentUser.id);
                 const chosenMethod = isBeneficiarySelf ? selfPledgeMethod : paymentMethod;
                 const isEarlyBsBlocked = !plannedReached && !isHardCurrencyMethod(chosenMethod);
+                const selectedNormalized = normalizePaymentMethodName(paymentMethod);
                 return (
                 <>
                   <Text style={styles.modalSubtitle}>
