@@ -230,6 +230,8 @@ export default function LoansScreen({ navigation }) {
       );
       return;
     }
+    const userAvail = getAvailablePaymentMethods(latestConfig);
+    setAcceptedMethods(userAvail.length > 0 ? userAvail : []);
     setShowModal(true);
   };
 
@@ -424,6 +426,18 @@ export default function LoansScreen({ navigation }) {
   };
 
   const toggleMethod = (method) => {
+    const isAvail = getAvailablePaymentMethods(paymentConfig).includes(method);
+    if (!isAvail) {
+      Alert.alert(
+        'Método no configurado',
+        `No has registrado tus datos para ${method}. ¿Deseas configurarlos ahora?`,
+        [
+          { text: 'Configurar', onPress: handleOpenConfig },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     setAcceptedMethods(prev => 
       prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
     );

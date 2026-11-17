@@ -9,6 +9,7 @@ import { formatLocalDate, formatTimeAMPM, getDefaultHoraPago, formatDateTime } f
 import {
   normalizePaymentMethodKey,
   hasConfiguredPaymentMethods,
+  getAvailablePaymentMethods,
   loadUserPaymentConfig,
   formatCashPaymentSummary,
 } from '../../utils/paymentConfig.js';
@@ -161,10 +162,7 @@ export default function FundsDashboard() {
     return formatLocalDate(d);
   });
   const [horaPago, setHoraPago] = useState('14:00');
-  const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([
-    'Pago Móvil',
-    'Transferencia Bancaria',
-  ]);
+  const [colectaAcceptedMethods, setColectaAcceptedMethods] = useState([]);
   const [beneficiarioNombre, setBeneficiarioNombre] = useState('');
   const [submittingColecta, setSubmittingColecta] = useState(false);
 
@@ -388,6 +386,62 @@ export default function FundsDashboard() {
     ? parsedPledge / effPledgeRate
     : null;
 
+  // Cargar configuración de métodos de pago en memoria
+  const fetchPaymentConfig = async () => {
+    try {
+      const cfg = await loadUserPaymentConfig();
+      setUserPaymentConfig(cfg || {});
+      return cfg;
+    } catch (_) {
+      return {};
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentConfig();
+  }, [activeOrg?.id]);
+
+  // Abrir Modal de Creación de Colecta con validación obligatoria de métodos de pago
+  const handleOpenCreateColectaModal = async () => {
+    try {
+      const latestConfig = await loadUserPaymentConfig(userPaymentConfig);
+      setUserPaymentConfig(latestConfig || {});
+      if (!hasConfiguredPaymentMethods(latestConfig)) {
+        if (window.confirm('Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.\n\n¿Deseas configurar tus datos de pago ahora?')) {
+          setShowConfigModal(true);
+        }
+        return;
+      }
+      const userAvail = getAvailablePaymentMethods(latestConfig);
+      if (userAvail.length === 0) {
+        if (window.confirm('No tienes ningún método de pago configurado con datos completos.\n\n¿Deseas configurar tus datos de pago ahora?')) {
+          setShowConfigModal(true);
+        }
+        return;
+      }
+      setColectaAcceptedMethods(userAvail);
+      setShowCreateColectaModal(true);
+    } catch (err) {
+      console.warn('Error al verificar configuración de pagos para colecta:', err);
+      setShowCreateColectaModal(true);
+    }
+  };
+
+  // Alternar selección de método de pago asegurando que esté debidamente cargado
+  const toggleColectaMethod = (m) => {
+    const available = getAvailablePaymentMethods(userPaymentConfig);
+    const isConfigured = available.includes(m);
+    if (!isConfigured) {
+      if (window.confirm(`Aún no has configurado tus datos para ${m}.\n\n¿Deseas ir a "⚙️ Mis Datos de Pago" para cargarlos ahora?`)) {
+        setShowConfigModal(true);
+      }
+      return;
+    }
+    setColectaAcceptedMethods((prev) =>
+      prev.includes(m) ? prev.filter((item) => item !== m) : [...prev, m]
+    );
+  };
+
   // Crear Colecta
   const handleCreateColecta = async (e) => {
     e.preventDefault();
@@ -406,6 +460,7 @@ export default function FundsDashboard() {
     }
 
     const latestConfig = await loadUserPaymentConfig(userPaymentConfig);
+    setUserPaymentConfig(latestConfig || {});
     if (!hasConfiguredPaymentMethods(latestConfig)) {
       if (window.confirm('Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.\n\n¿Deseas configurarlos ahora?')) {
         setShowConfigModal(true);
@@ -413,8 +468,15 @@ export default function FundsDashboard() {
       return;
     }
 
+    const available = getAvailablePaymentMethods(latestConfig);
+    const validAccepted = (colectaAcceptedMethods || []).filter((m) => available.includes(m));
+    if (validAccepted.length === 0) {
+      alert('Debes seleccionar al menos un método de pago debidamente configurado.');
+      return;
+    }
+
     const filteredDatosPago = {};
-    for (const m of (colectaAcceptedMethods || [])) {
+    for (const m of validAccepted) {
       if (latestConfig && latestConfig[m]) {
         filteredDatosPago[m] = latestConfig[m];
       }
@@ -702,7 +764,7 @@ export default function FundsDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowCreateColectaModal(true)}
+                onClick={handleOpenCreateColectaModal}
                 style={{
                   backgroundColor: '#10b981',
                   color: '#ffffff',
@@ -893,7 +955,7 @@ export default function FundsDashboard() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setShowCreateColectaModal(true)}
+                  onClick={handleOpenCreateColectaModal}
                   style={{
                     backgroundColor: '#10b981',
                     color: '#ffffff',
@@ -1650,40 +1712,67 @@ export default function FundsDashboard() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px', fontWeight: '600' }}>
                   Métodos de Pago que Aceptas para esta Colecta *
                 </label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD'].map((m) => {
+                    const isConfigured = getAvailablePaymentMethods(userPaymentConfig).includes(m);
                     const isSelected = colectaAcceptedMethods.includes(m);
                     return (
                       <button
                         key={m}
                         type="button"
-                        onClick={() => {
-                          setColectaAcceptedMethods((prev) =>
-                            isSelected ? prev.filter((item) => item !== m) : [...prev, m]
-                          );
-                        }}
+                        onClick={() => toggleColectaMethod(m)}
+                        title={!isConfigured ? `Debes configurar tus datos de ${m} primero` : ''}
                         style={{
-                          padding: '6px 12px',
+                          padding: '7px 12px',
                           borderRadius: '8px',
-                          border: isSelected ? '1px solid #10b981' : '1px solid #334155',
-                          backgroundColor: isSelected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                          color: isSelected ? '#34d399' : '#94a3b8',
-                          fontSize: '0.8rem',
+                          border: isSelected
+                            ? '1.5px solid #10b981'
+                            : isConfigured
+                              ? '1px solid #145347'
+                              : '1px dashed #64748b',
+                          backgroundColor: isSelected
+                            ? 'rgba(16, 185, 129, 0.22)'
+                            : isConfigured
+                              ? 'rgba(255, 255, 255, 0.05)'
+                              : 'rgba(0, 0, 0, 0.35)',
+                          color: isSelected
+                            ? '#34d399'
+                            : isConfigured
+                              ? '#e2e8f0'
+                              : '#94a3b8',
+                          fontSize: '0.82rem',
                           fontWeight: '600',
                           cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          opacity: isConfigured ? 1 : 0.65,
+                          transition: 'all 0.15s ease',
                         }}
                       >
-                        {isSelected ? '✓ ' : '+ '}{m}
+                        {isSelected ? '✓ ' : isConfigured ? '+ ' : '⚙️ '}
+                        {m}
+                        {!isConfigured && (
+                          <span style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: '500' }}>
+                            (Sin datos)
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '4px' }}>
-                  Los aportantes verán tus datos guardados correspondientes a estos métodos para transferirte o coordinar entrega.
-                </div>
+                {colectaAcceptedMethods.length === 0 ? (
+                  <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: '6px 0 0 0', fontWeight: '500' }}>
+                    ⚠️ Debes seleccionar al menos un método de pago configurado.
+                  </p>
+                ) : (
+                  <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: '4px' }}>
+                    Los aportantes verán tus datos guardados correspondientes a estos métodos para transferirte o coordinar entrega.
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '1rem' }}>
@@ -1697,8 +1786,12 @@ export default function FundsDashboard() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ backgroundColor: '#10b981', border: 'none' }}
-                  disabled={submittingColecta}
+                  style={{
+                    backgroundColor: colectaAcceptedMethods.length === 0 ? '#475569' : '#10b981',
+                    border: 'none',
+                    cursor: colectaAcceptedMethods.length === 0 ? 'not-allowed' : 'pointer',
+                  }}
+                  disabled={submittingColecta || colectaAcceptedMethods.length === 0}
                 >
                   {submittingColecta ? 'Publicando...' : 'Publicar Colecta'}
                 </button>
@@ -2444,7 +2537,11 @@ export default function FundsDashboard() {
       <PaymentConfigModal
         visible={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSuccess={(cfg) => setUserPaymentConfig(cfg)}
+        onSuccess={(cfg) => {
+          setUserPaymentConfig(cfg);
+          const avail = getAvailablePaymentMethods(cfg);
+          setColectaAcceptedMethods(avail);
+        }}
         initialConfig={userPaymentConfig}
       />
     </div>

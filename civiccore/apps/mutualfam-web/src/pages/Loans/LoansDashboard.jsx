@@ -8,6 +8,7 @@ import { formatDateTime } from '../../utils/dates.js';
 import {
   formatCashPaymentSummary,
   hasConfiguredPaymentMethods as checkConfiguredPaymentMethods,
+  getAvailablePaymentMethods,
   loadUserPaymentConfig,
 } from '../../utils/paymentConfig.js';
 import CashDeliveryCard from '../../components/Common/CashDeliveryCard.jsx';
@@ -42,6 +43,8 @@ export default function LoansDashboard() {
   const [loanCurrency, setLoanCurrency] = useState(() => localStorage.getItem('loan_currency_pref') || 'USD'); // 'USD' | 'VES'
   const [motive, setMotive] = useState('');
   const [estimatedDate, setEstimatedDate] = useState('');
+  const [acceptedMethods, setAcceptedMethods] = useState([]);
+  const [submittingLoan, setSubmittingLoan] = useState(false);
 
   // Estados homologados con Android (Tasa BCV, Filtro Vigentes/Historial, Datos de Pago)
   const [bcvRate, setBcvRate] = useState(null);
@@ -297,12 +300,68 @@ export default function LoansDashboard() {
     }
   };
 
+  // Abrir Modal de Solicitud de Préstamo validando que existan métodos configurados
+  const handleOpenLoanRequest = async () => {
+    try {
+      const latestConfig = await loadUserPaymentConfig(paymentConfig);
+      setPaymentConfig(latestConfig || {});
+      if (!checkConfiguredPaymentMethods(latestConfig)) {
+        if (window.confirm('Debes registrar al menos un método de pago antes de solicitar un préstamo para que los miembros de la mutual puedan transferirte o desembolsarte los fondos.\n\n¿Deseas configurar tus datos de pago ahora?')) {
+          setShowConfigModal(true);
+        }
+        return;
+      }
+      const userAvail = getAvailablePaymentMethods(latestConfig);
+      if (userAvail.length === 0) {
+        if (window.confirm('No tienes ningún método de pago configurado con datos completos.\n\n¿Deseas configurar tus datos de pago ahora?')) {
+          setShowConfigModal(true);
+        }
+        return;
+      }
+      setAcceptedMethods(userAvail);
+      setShowModal(true);
+    } catch (err) {
+      console.warn('Error al verificar datos de pago para préstamo:', err);
+      setShowModal(true);
+    }
+  };
+
+  // Alternar método de pago asegurando que esté debidamente cargado
+  const toggleLoanMethod = (m) => {
+    const available = getAvailablePaymentMethods(paymentConfig);
+    const isConfigured = available.includes(m);
+    if (!isConfigured) {
+      if (window.confirm(`Aún no has configurado tus datos para ${m}.\n\n¿Deseas ir a "⚙️ Mis Datos de Pago" para cargarlos ahora?`)) {
+        setShowConfigModal(true);
+      }
+      return;
+    }
+    setAcceptedMethods((prev) =>
+      prev.includes(m) ? prev.filter((item) => item !== m) : [...prev, m]
+    );
+  };
+
   const handleCreateRequest = async (e) => {
     e.preventDefault();
     if (!activeOrg) {
       alert("Debes pertenecer a una mutual activa para solicitar préstamos.");
       return;
     }
+    const latestConfig = await loadUserPaymentConfig(paymentConfig);
+    setPaymentConfig(latestConfig || {});
+    if (!checkConfiguredPaymentMethods(latestConfig)) {
+      if (window.confirm('Debes registrar al menos un método de pago antes de solicitar un préstamo.\n\n¿Deseas configurarlos ahora?')) {
+        setShowConfigModal(true);
+      }
+      return;
+    }
+    const available = getAvailablePaymentMethods(latestConfig);
+    const validAccepted = (acceptedMethods || []).filter((m) => available.includes(m));
+    if (validAccepted.length === 0) {
+      alert("Debes seleccionar al menos un método de pago con datos cargados que aceptas para recibir el préstamo.");
+      return;
+    }
+
     const parsedAmount = parseVEAmount(amount);
     if (!parsedAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
       alert("Por favor ingresa un monto válido mayor a 0.");
@@ -324,19 +383,24 @@ export default function LoansDashboard() {
       return;
     }
 
+    setSubmittingLoan(true);
     try {
       await loansApi.createLoan({
         amount_usd: roundedUsd,
         motive,
-        estimated_repayment_date: estimatedDate || null
+        estimated_repayment_date: estimatedDate || null,
+        accepted_payment_methods: validAccepted,
       });
       setShowModal(false);
       setAmount('');
       setMotive('');
       setEstimatedDate('');
+      setAcceptedMethods([]);
       fetchLoans();
     } catch (err) {
       alert("Error: " + (err.message || 'No se pudo crear la solicitud'));
+    } finally {
+      setSubmittingLoan(false);
     }
   };
 
@@ -640,7 +704,7 @@ export default function LoansDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setShowModal(true)}
+              onClick={handleOpenLoanRequest}
               style={{
                 backgroundColor: '#2563eb',
                 border: 'none',
@@ -1309,6 +1373,70 @@ export default function LoansDashboard() {
                   style={{ resize: 'none' }}
                 ></textarea>
               </div>
+
+              <div>
+                <label className="form-label" style={{ marginBottom: '0.4rem', display: 'block' }}>
+                  Métodos de Pago que Aceptas para Recibir el Préstamo *
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD'].map((m) => {
+                    const isConfigured = getAvailablePaymentMethods(paymentConfig).includes(m);
+                    const isSelected = acceptedMethods.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => toggleLoanMethod(m)}
+                        title={!isConfigured ? `Debes configurar tus datos de ${m} primero` : ''}
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: '8px',
+                          border: isSelected
+                            ? '1.5px solid #10b981'
+                            : isConfigured
+                              ? '1px solid var(--border-light)'
+                              : '1px dashed #64748b',
+                          backgroundColor: isSelected
+                            ? 'rgba(16, 185, 129, 0.22)'
+                            : isConfigured
+                              ? 'rgba(255, 255, 255, 0.05)'
+                              : 'rgba(0, 0, 0, 0.35)',
+                          color: isSelected
+                            ? '#34d399'
+                            : isConfigured
+                              ? '#e2e8f0'
+                              : '#94a3b8',
+                          fontSize: '0.82rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          opacity: isConfigured ? 1 : 0.65,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {isSelected ? '✓ ' : isConfigured ? '+ ' : '⚙️ '}
+                        {m}
+                        {!isConfigured && (
+                          <span style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: '500' }}>
+                            (Sin datos)
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {acceptedMethods.length === 0 ? (
+                  <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: '6px 0 0 0', fontWeight: '500' }}>
+                    ⚠️ Debes seleccionar al menos un método de pago configurado.
+                  </p>
+                ) : (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    Los miembros verán tus datos correspondientes a estos métodos para transferirte el dinero.
+                  </span>
+                )}
+              </div>
               
               {/* Footer fijado siempre visible */}
               <div
@@ -1327,8 +1455,16 @@ export default function LoansDashboard() {
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Enviar Solicitud
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submittingLoan || acceptedMethods.length === 0}
+                  style={{
+                    backgroundColor: acceptedMethods.length === 0 ? '#475569' : undefined,
+                    cursor: acceptedMethods.length === 0 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {submittingLoan ? 'Enviando...' : 'Enviar Solicitud'}
                 </button>
               </div>
             </form>
@@ -1474,7 +1610,11 @@ export default function LoansDashboard() {
       <PaymentConfigModal
         visible={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSuccess={(newCfg) => setPaymentConfig(newCfg)}
+        onSuccess={(newCfg) => {
+          setPaymentConfig(newCfg);
+          const avail = getAvailablePaymentMethods(newCfg);
+          setAcceptedMethods(avail);
+        }}
         initialConfig={paymentConfig}
       />
 
