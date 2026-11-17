@@ -173,12 +173,16 @@ export const authApi = {
     const { data } = await apiClient.get('/membership/me');
     return data;
   },
-  register: async (email, password, fullName) => {
-    const { data } = await apiClient.post('/membership/register', {
+  register: async (email, password, fullName, firstName = null, lastName = null, identifier = null) => {
+    const payload = {
       email,
       password,
-      full_name: fullName
-    });
+      full_name: fullName,
+    };
+    if (firstName) payload.first_name = firstName;
+    if (lastName) payload.last_name = lastName;
+    if (identifier) payload.identifier = identifier;
+    const { data } = await apiClient.post('/membership/register', payload);
     return data;
   },
   getMembers: async (orgId) => {

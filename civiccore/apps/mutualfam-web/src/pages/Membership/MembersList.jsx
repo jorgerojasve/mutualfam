@@ -287,9 +287,30 @@ const MembersList = () => {
     }
   };
 
-  // Filtrar propuestas
-  const activeProposals = propuestas.filter(p => p.status === 'DEBATE' || p.status === 'VOTING');
-  const historyProposals = propuestas.filter(p => p.status === 'APPROVED' || p.status === 'REJECTED' || p.status === 'CLOSED');
+  // Filtrar propuestas homologado con Android
+  const isProposalActive = (p) => {
+    if (p.is_active_proposal !== undefined) {
+      return Boolean(p.is_active_proposal);
+    }
+    const isAdmission = p.proposal_type === 'member_admission' || p.category === 'ADMISSION' || p.proposal_type === 'ADMISSION';
+    const isApproved = p.status === 'APPROVED' || p.status === 'approved';
+    if (isAdmission && isApproved) {
+      const hasJoined = Boolean(p.member_joined || p.redeemed_by_name);
+      const isCancelled = Boolean(p.admission_cancelled);
+      let isExpired = false;
+      if (p.invite_expires_at) {
+        try {
+          isExpired = new Date(p.invite_expires_at) <= new Date();
+        } catch (e) {}
+      }
+      return !hasJoined && !isCancelled && !isExpired;
+    }
+    const st = String(p.status || '').toUpperCase();
+    return st === 'DEBATE' || st === 'VOTING';
+  };
+
+  const activeProposals = propuestas.filter(isProposalActive);
+  const historyProposals = propuestas.filter(p => !isProposalActive(p));
   const displayedPropuestas = asambleaFilter === 'activas' ? activeProposals : historyProposals;
 
   return (
@@ -673,7 +694,7 @@ const MembersList = () => {
           ) : (
             <div className="dashboard-grid">
               {displayedPropuestas.map((p) => {
-                const isAdmission = p.proposal_type === 'ADMISSION' || p.category === 'ADMISSION';
+                const isAdmission = p.proposal_type === 'ADMISSION' || p.category === 'ADMISSION' || p.proposal_type === 'member_admission';
                 const isExpulsion = p.proposal_type === 'EXPULSION' || p.category === 'EXPULSION';
                 const votesFor = p.votes_for || p.tally?.for || 0;
                 const votesAgainst = p.votes_against || p.tally?.against || 0;
@@ -683,6 +704,11 @@ const MembersList = () => {
 
                 const isTarget = user && (p.target_member_id === user.id);
                 const hasVoted = p.user_voted || p.mi_voto;
+
+                const isAuthor = Boolean(user && (p.author_id === user.id || p.author_user_id === user.id));
+                const hasJoined = Boolean(p.member_joined || p.redeemed_by_name);
+                const isAdmissionCancelled = Boolean(p.admission_cancelled);
+                const isWaitingEntry = isAdmission && (p.status === 'APPROVED' || p.status === 'approved') && !hasJoined && !isAdmissionCancelled;
 
                 return (
                   <div
@@ -729,10 +755,26 @@ const MembersList = () => {
                         borderRadius: '20px',
                         fontSize: '0.72rem',
                         fontWeight: '700',
-                        backgroundColor: p.status === 'APPROVED' ? '#10b981' : p.status === 'REJECTED' ? '#ef4444' : '#3b82f6',
+                        backgroundColor: isWaitingEntry
+                          ? '#0284c7'
+                          : isAdmission && isAdmissionCancelled
+                          ? '#64748b'
+                          : p.status === 'APPROVED' || p.status === 'approved'
+                          ? '#10b981'
+                          : p.status === 'REJECTED' || p.status === 'rejected'
+                          ? '#ef4444'
+                          : '#3b82f6',
                         color: '#ffffff',
                       }}>
-                        {p.status === 'APPROVED' ? 'Aprobada' : p.status === 'REJECTED' ? 'Rechazada / Vetada' : 'En Deliberación'}
+                        {isWaitingEntry
+                          ? '⏳ Esperando Ingreso'
+                          : isAdmission && isAdmissionCancelled
+                          ? '⏱️ Ingreso Cancelado'
+                          : p.status === 'APPROVED' || p.status === 'approved'
+                          ? (isAdmission ? '✅ Ingreso Completado' : 'Aprobada')
+                          : p.status === 'REJECTED' || p.status === 'rejected'
+                          ? (votesVeto > 0 ? '🚫 Vetada' : '❌ Rechazada')
+                          : 'En Deliberación'}
                       </span>
                     </div>
 
@@ -805,6 +847,92 @@ const MembersList = () => {
                         <strong>Alegato de Defensa del Imputado:</strong>
                         <p style={{ margin: '4px 0 0 0', color: '#e2e8f0' }}>{p.defense_text}</p>
                       </div>
+                    )}
+
+                    {/* Tarjeta de Código de Invitación cuando está aprobada y en espera de ingreso */}
+                    {isWaitingEntry && (
+                      isAuthor ? (
+                        <div style={{
+                          backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.4)',
+                          borderRadius: '10px',
+                          padding: '12px',
+                          marginTop: '6px',
+                        }}>
+                          <div style={{ fontSize: '0.78rem', color: '#93c5fd', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                            🔑 Código Oficial de Invitación
+                          </div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '0.1em', color: '#38bdf8', fontFamily: 'monospace', margin: '4px 0' }}>
+                            {p.invite_code_formatted || p.invite_token}
+                          </div>
+                          <p style={{ fontSize: '0.78rem', color: '#cbd5e1', margin: '0 0 10px 0' }}>
+                            ⏳ Invitación de 15 días aprobada. Exclusiva para que tú se la entregues al familiar.
+                          </p>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              style={{ flex: 1, backgroundColor: '#16a34a', border: 'none', fontSize: '0.82rem', padding: '6px 10px' }}
+                              onClick={() => {
+                                const text = encodeURIComponent(`¡Hola ${p.candidate_name}! La asamblea de la Mutual Familiar ha aprobado tu ingreso. Usa este código de invitación en la app: ${p.invite_code_formatted || p.invite_token}`);
+                                window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+                              }}
+                            >
+                              💬 WhatsApp
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ flex: 1, fontSize: '0.82rem', padding: '6px 10px' }}
+                              onClick={() => {
+                                navigator.clipboard.writeText(p.invite_code_formatted || p.invite_token);
+                                alert('Código copiado al portapapeles');
+                              }}
+                            >
+                              📋 Copiar
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            style={{
+                              marginTop: '8px',
+                              width: '100%',
+                              backgroundColor: 'transparent',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              color: '#f87171',
+                              borderRadius: '6px',
+                              padding: '5px',
+                              fontSize: '0.75rem',
+                              cursor: 'pointer'
+                            }}
+                            onClick={async () => {
+                              if (window.confirm('¿Deseas cancelar esta invitación de ingreso? La propuesta pasará al historial.')) {
+                                try {
+                                  await asambleasApi.cancelarIngreso(p.id);
+                                  alert('Ingreso cancelado');
+                                  fetchPropuestas();
+                                } catch (e) {
+                                  alert(e.message || 'Error al cancelar');
+                                }
+                              }
+                            }}
+                          >
+                            ⚠️ Cancelar Invitación de Ingreso
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{
+                          backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          borderRadius: '10px',
+                          padding: '10px 12px',
+                          fontSize: '0.8rem',
+                          color: '#bae6fd',
+                          marginTop: '6px',
+                        }}>
+                          ⏳ <strong>Ingreso Aprobado • En Espera:</strong> La asamblea familiar aprobó el ingreso de {p.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {p.author_name || 'quien hizo la propuesta'} para su entrega al nuevo miembro.
+                        </div>
+                      )
                     )}
 
                     {/* Botonera de Votación y Acciones */}

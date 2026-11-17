@@ -183,6 +183,7 @@ export const colectasApi = {
   triggerPaymentNotifications: (colectaId) => request(`/colectas/${colectaId}/notificar-cobro`, { method: 'POST' }),
   recordarPendientes: (colectaId) => request(`/colectas/${colectaId}/recordar-pendientes`, { method: 'POST' }),
   confirmPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/confirmar-pago`, { method: 'POST', body: JSON.stringify(data) }),
+  validatePayment: (colectaId, compromisoId) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/validar-pago`, { method: 'POST' }),
   rejectPayment: (colectaId, compromisoId, data) => request(`/colectas/${colectaId}/compromisos/${compromisoId}/rechazar-pago`, { method: 'POST', body: JSON.stringify(data) }),
   validateExpense: (colectaId, data) => request(`/colectas/${colectaId}/validar-gasto`, { method: 'POST', body: JSON.stringify(data) }),
   cancelColecta: (colectaId) => request(`/colectas/${colectaId}/cancelar`, { method: 'PATCH' }),
@@ -200,6 +201,7 @@ export const asambleasApi = {
   votar: (id, voto) => request(`/gobernanza/propuestas/${id}/votar`, { method: 'POST', body: JSON.stringify({ voto }) }),
   publicarDefensa: (id, defense_text) => request(`/gobernanza/propuestas/${id}/defensa`, { method: 'POST', body: JSON.stringify({ defense_text }) }),
   cerrarPropuesta: (id) => request(`/gobernanza/propuestas/${id}/cerrar`, { method: 'POST' }),
+  cancelarIngreso: (id) => request(`/gobernanza/propuestas/${id}/cancelar-ingreso`, { method: 'POST' }),
   getCandidatosDisponibles: (search = '') => request(search ? `/gobernanza/candidatos-disponibles?q=${encodeURIComponent(search)}` : '/gobernanza/candidatos-disponibles'),
   getMiembrosExpulsables: () => request('/gobernanza/miembros-expulsables'),
 };
