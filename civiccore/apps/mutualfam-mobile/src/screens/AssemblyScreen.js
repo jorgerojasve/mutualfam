@@ -855,9 +855,42 @@ export default function AssemblyScreen({ embedded = false }) {
         )}
 
         <View style={styles.cardFooter}>
-          <Text style={styles.viewDetailText}>
-            {isVoting ? '🗳️ Ver y Votar →' : 'Ver Detalle de Asamblea →'}
-          </Text>
+          <View
+            style={[
+              styles.primaryVoteActionBtn,
+              isVoting
+                ? (!item.my_vote
+                    ? styles.primaryVoteActionBtnPending
+                    : styles.primaryVoteActionBtnVoted)
+                : isDebate
+                ? styles.primaryVoteActionBtnDebate
+                : styles.primaryVoteActionBtnClosed,
+            ]}
+          >
+            <Text style={styles.voteActionBtnIcon}>
+              {isVoting ? '🗳️' : isDebate ? '💬' : '📜'}
+            </Text>
+            <Text
+              style={[
+                styles.primaryVoteActionText,
+                isVoting
+                  ? (!item.my_vote
+                      ? styles.primaryVoteActionTextPending
+                      : styles.primaryVoteActionTextVoted)
+                  : isDebate
+                  ? styles.primaryVoteActionTextDebate
+                  : styles.primaryVoteActionTextClosed,
+              ]}
+            >
+              {isVoting
+                ? (!item.my_vote
+                    ? 'Ver y Votar (Voto Pendiente) →'
+                    : 'Ver y Votar →')
+                : isDebate
+                ? 'Ver y Participar en Debate →'
+                : 'Ver Detalle de Asamblea →'}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -2097,8 +2130,64 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   cardFooter: {
-    alignItems: 'flex-end',
-    marginTop: 4
+    marginTop: 10,
+    width: '100%'
+  },
+  primaryVoteActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    gap: 8
+  },
+  primaryVoteActionBtnPending: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8',
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 4
+  },
+  primaryVoteActionBtnVoted: {
+    backgroundColor: '#0369a1',
+    borderColor: '#38bdf8',
+    shadowColor: '#0369a1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  primaryVoteActionBtnDebate: {
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    borderColor: '#f59e0b'
+  },
+  primaryVoteActionBtnClosed: {
+    backgroundColor: 'rgba(51, 65, 85, 0.5)',
+    borderColor: 'rgba(148, 163, 184, 0.25)'
+  },
+  voteActionBtnIcon: {
+    fontSize: 16
+  },
+  primaryVoteActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2
+  },
+  primaryVoteActionTextPending: {
+    color: '#ffffff'
+  },
+  primaryVoteActionTextVoted: {
+    color: '#ffffff'
+  },
+  primaryVoteActionTextDebate: {
+    color: '#fbbf24'
+  },
+  primaryVoteActionTextClosed: {
+    color: '#cbd5e1'
   },
   viewDetailText: {
     color: '#38bdf8',
