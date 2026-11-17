@@ -222,6 +222,11 @@ export const asambleasApi = {
   cancelarIngreso: (id) => request(`/gobernanza/propuestas/${id}/cancelar-ingreso`, { method: 'POST' }),
   getCandidatosDisponibles: (search = '') => request(search ? `/gobernanza/candidatos-disponibles?q=${encodeURIComponent(search)}` : '/gobernanza/candidatos-disponibles'),
   getMiembrosExpulsables: () => request('/gobernanza/miembros-expulsables'),
+  getComentarios: (id) => request(`/gobernanza/propuestas/${id}/comentarios`),
+  agregarComentario: (id, payload) => request(`/gobernanza/propuestas/${id}/comentarios`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
 };
 
 

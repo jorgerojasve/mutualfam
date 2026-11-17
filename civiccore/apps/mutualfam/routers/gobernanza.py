@@ -48,11 +48,14 @@ class ProponerIngresoRequest(BaseModel):
     candidate_relation: Optional[str] = None
     candidate_phone: Optional[str] = None
     candidate_user_id: Optional[int] = None
-    justificacion: str
+    justificacion: Optional[str] = None
+    motive: Optional[str] = None
 
 class ProponerExpulsionRequest(BaseModel):
-    target_user_id: int
-    motivo: str
+    target_user_id: Optional[int] = None
+    target_member_id: Optional[int] = None
+    motivo: Optional[str] = None
+    motive: Optional[str] = None
 
 class VotarRequest(BaseModel):
     voto: str  # "si", "no", "abstencion"
@@ -439,13 +442,17 @@ def proponer_ingreso(
     if not candidate_name:
         raise HTTPException(status_code=400, detail="Debes indicar el nombre del candidato a invitar")
 
+    justificacion = (req.justificacion or req.motive or "").strip()
+    if not justificacion:
+        raise HTTPException(status_code=400, detail="Debes indicar la justificación o motivo del ingreso")
+
     try:
         proposal = admission_service.propose_member_admission(
             db=db,
             author_id=user.id,
             candidate_name=candidate_name,
             organization_id=org.id,
-            justificacion=req.justificacion,
+            justificacion=justificacion,
             candidate_relation=req.candidate_relation,
             candidate_phone=req.candidate_phone,
             candidate_user_id=req.candidate_user_id
@@ -498,11 +505,17 @@ def proponer_expulsion(
     if not membership or membership.status != MemberStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Debes ser miembro activo de la mutual para proponer expulsiones")
 
-    if req.target_user_id == user.id:
+    target_user_id = req.target_user_id or req.target_member_id
+    motivo = (req.motivo or req.motive or "").strip()
+
+    if not target_user_id or not motivo:
+        raise HTTPException(status_code=400, detail="Debes indicar el miembro a expulsar y el motivo")
+
+    if target_user_id == user.id:
         raise HTTPException(status_code=400, detail="No puedes proponer tu propia expulsión")
 
     target_membership = db.query(OrganizationMembership).filter(
-        OrganizationMembership.user_id == req.target_user_id,
+        OrganizationMembership.user_id == target_user_id,
         OrganizationMembership.organization_id == org.id,
         OrganizationMembership.status == MemberStatus.ACTIVE
     ).first()
@@ -515,7 +528,7 @@ def proponer_expulsion(
     # Verificar si ya existe una propuesta de expulsión activa para este miembro
     active_proposal = db.query(Proposal).filter(
         Proposal.organization_id == org.id,
-        Proposal.target_member_id == req.target_user_id,
+        Proposal.target_member_id == target_user_id,
         Proposal.proposal_type == ProposalType.EXPULSION,
         Proposal.status.in_([ProposalStatus.DEBATE, ProposalStatus.VOTING])
     ).first()
@@ -529,13 +542,13 @@ def proponer_expulsion(
     from models import LoanRequest, LoanStatus
     active_loans = db.query(LoanRequest).filter(
         LoanRequest.organization_id == org.id,
-        LoanRequest.requester_id == req.target_user_id,
+        LoanRequest.requester_id == target_user_id,
         LoanRequest.status.in_([LoanStatus.FUNDED, LoanStatus.PARTIAL])
     ).all()
     unpaid_loans = [l for l in active_loans if l.repaid_at is None]
     total_debt = sum(l.amount_usd for l in unpaid_loans) if unpaid_loans else 0.0
 
-    motivo_content = req.motivo
+    motivo_content = motivo
     if total_debt > 0:
         motivo_content += f"\n\n⚠️ Advertencia de Solvencia: Este miembro mantiene un préstamo activo de ${total_debt:,.2f} USD pendiente de pago. De aprobarse la expulsión, la deuda permanecerá en cobranza o cobertura según las normas de la mutual."
 
@@ -544,7 +557,7 @@ def proponer_expulsion(
         content=motivo_content,
         category="expulsion",
         proposal_type=ProposalType.EXPULSION,
-        target_member_id=req.target_user_id,
+        target_member_id=target_user_id,
         organization_id=org.id,
         voting_mechanism=VotingMechanism.SIMPLE,
         extra_fields={

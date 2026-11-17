@@ -908,6 +908,7 @@ export default function FundsDashboard() {
                         fontSize: '0.75rem',
                         fontWeight: '700',
                         textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
                         backgroundColor: (item.gasto_validado || item.estado === 'completada')
                           ? 'rgba(168, 85, 247, 0.2)'
                           : item.estado === 'abierta' || item.estado === 'activa'
