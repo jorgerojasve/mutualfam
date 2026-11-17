@@ -1085,19 +1085,82 @@ export default function LoansDashboard() {
         </div>
       )}
 
-      {/* Modal para Solicitar Préstamo */}
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-slide-up modal-scrollable" style={{
-            width: '100%',
-            maxWidth: '500px',
-            padding: '1.75rem 2rem 1.75rem 1.75rem',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            scrollbarGutter: 'stable'
-          }}>
-            <h2 className="text-gradient" style={{ fontSize: '1.4rem', marginBottom: '1.25rem' }}>Solicitar Préstamo</h2>
-            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingRight: '6px' }}>
+      {/* Modal para Solicitar Préstamo (Portal Z-Index 99999 + Botón X + Backdrop click) */}
+      {showModal && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '12px',
+            boxSizing: 'border-box',
+          }}
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="glass-panel animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              padding: '1.5rem',
+              maxHeight: 'min(92vh, 680px)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxSizing: 'border-box',
+              position: 'relative',
+              borderRadius: '16px',
+            }}
+          >
+            {/* Header con botón X para cerrar siempre accesible */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid var(--border-light)',
+              flexShrink: 0,
+            }}>
+              <h2 className="text-gradient" style={{ fontSize: '1.35rem', margin: 0 }}>
+                Solicitar Préstamo
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleCreateRequest}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                gap: '1rem',
+                paddingRight: '4px',
+              }}
+            >
               <div style={{
                 backgroundColor: 'rgba(0, 0, 0, 0.22)',
                 border: '1px solid var(--border-light)',
@@ -1247,11 +1310,20 @@ export default function LoansDashboard() {
                 ></textarea>
               </div>
               
-              <div className="flex justify-between items-center mt-6" style={{ paddingRight: '2px' }}>
+              {/* Footer fijado siempre visible */}
+              <div
+                className="flex justify-between items-center mt-4 pt-3"
+                style={{
+                  borderTop: '1px solid var(--border-light)',
+                  flexShrink: 0,
+                  gap: '10px',
+                }}
+              >
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)}
                   className="btn btn-secondary"
+                  style={{ minWidth: '100px' }}
                 >
                   Cancelar
                 </button>
@@ -1261,21 +1333,80 @@ export default function LoansDashboard() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Modal para Prometer Aporte (Web / iPhone) */}
-      {showPledgeModal && selectedLoan && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div className="glass-panel animate-slide-up modal-scrollable" style={{
-            width: '100%',
-            maxWidth: '480px',
-            padding: '1.75rem 2rem 1.75rem 1.75rem',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            scrollbarGutter: 'stable'
-          }}>
-            <h2 className="text-gradient" style={{ fontSize: '1.35rem', marginBottom: '0.65rem' }}>Prometer Aporte 🤝</h2>
+      {/* Modal para Prometer Aporte (Web / iPhone) (Portal Z-Index 99999 + Botón X + Backdrop click) */}
+      {showPledgeModal && selectedLoan && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '12px',
+            boxSizing: 'border-box',
+          }}
+          onClick={() => {
+            setShowPledgeModal(false);
+            setSelectedLoan(null);
+          }}
+        >
+          <div
+            className="glass-panel animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              padding: '1.5rem',
+              maxHeight: 'min(92vh, 600px)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxSizing: 'border-box',
+              position: 'relative',
+              borderRadius: '16px',
+            }}
+          >
+            {/* Header con botón X */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '0.75rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid var(--border-light)',
+              flexShrink: 0,
+            }}>
+              <h2 className="text-gradient" style={{ fontSize: '1.35rem', margin: 0 }}>
+                Prometer Aporte 🤝
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPledgeModal(false);
+                  setSelectedLoan(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
             <p className="text-secondary" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
               Vas a aportar al préstamo de: <strong>{selectedLoan.requester_name}</strong>
             </p>
@@ -1283,7 +1414,18 @@ export default function LoansDashboard() {
               Faltan por fondear: ${Math.max(0, selectedLoan.amount_usd - ((selectedLoan.amount_pledged || 0) + (selectedLoan.amount_paid || 0) + (selectedLoan.amount_verified || 0))).toFixed(2)} (de ${selectedLoan.amount_usd} solicitados)
             </p>
 
-            <form onSubmit={handlePledgeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingRight: '6px' }}>
+            <form
+              onSubmit={handlePledgeSubmit}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                gap: '1.25rem',
+                paddingRight: '4px',
+              }}
+            >
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Monto a aportar (USD)</label>
                 <input 
@@ -1298,7 +1440,15 @@ export default function LoansDashboard() {
                 />
               </div>
 
-              <div className="flex justify-between items-center mt-6">
+              {/* Footer fijado siempre visible */}
+              <div
+                className="flex justify-between items-center mt-4 pt-3"
+                style={{
+                  borderTop: '1px solid var(--border-light)',
+                  flexShrink: 0,
+                  gap: '10px',
+                }}
+              >
                 <button 
                   type="button" 
                   onClick={() => {
@@ -1306,6 +1456,7 @@ export default function LoansDashboard() {
                     setSelectedLoan(null);
                   }}
                   className="btn btn-secondary"
+                  style={{ minWidth: '100px' }}
                 >
                   Cancelar
                 </button>
@@ -1315,7 +1466,8 @@ export default function LoansDashboard() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Configurar Datos de Pago */}
