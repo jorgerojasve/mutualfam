@@ -353,7 +353,10 @@ export default function FundsScreen() {
     if (Platform.OS === 'android') {
       setShowTimePicker(false);
     }
-    if (selectedTime) {
+    if (event?.type === 'dismissed') {
+      return;
+    }
+    if (selectedTime && selectedTime instanceof Date && !isNaN(selectedTime.getTime())) {
       setTimeObj(selectedTime);
       const hours = String(selectedTime.getHours()).padStart(2, '0');
       const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
@@ -373,7 +376,10 @@ export default function FundsScreen() {
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
     }
-    if (selectedDate) {
+    if (event?.type === 'dismissed') {
+      return;
+    }
+    if (selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime())) {
       setDateObj(selectedDate);
       const newFecha = formatLocalDate(selectedDate);
       const prevFecha = fechaPago;
@@ -791,48 +797,69 @@ export default function FundsScreen() {
   };
 
   const handlePressCreateColecta = async () => {
-    if (activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1) {
-      Alert.alert(
-        'Invitaciones Requeridas',
-        'Tu mutual aún no tiene otros miembros familiares. Debes invitar a tus familiares antes de proponer una colecta solidaria.',
-        [
-          { text: 'Invitar Familiares', onPress: () => navigation.navigate('Familia') },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
-      return;
+    try {
+      if (activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1) {
+        Alert.alert(
+          'Invitaciones Requeridas',
+          'Tu mutual aún no tiene otros miembros familiares. Debes invitar a tus familiares antes de proponer una colecta solidaria.',
+          [
+            { text: 'Invitar Familiares', onPress: () => navigation.navigate('Familia') },
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+      const latestConfig = await fetchUserPaymentConfig();
+      if (!hasConfiguredPaymentMethods(latestConfig)) {
+        Alert.alert(
+          'Datos de Pago Requeridos',
+          'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
+          [
+            { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+      const userAvail = getAvailablePaymentMethods(latestConfig);
+      setColectaAcceptedMethods(userAvail.length > 0 ? userAvail : ['Pago Móvil']);
+      if (currentUser && !beneficiarioNombre) {
+        setBeneficiarioNombre(
+          currentUser.nombre ||
+          currentUser.name ||
+          `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() ||
+          ''
+        );
+      }
+      const todayStr = formatLocalDate(new Date());
+      if (!fechaPago) {
+        const d = new Date();
+        d.setDate(d.getDate() + 7);
+        setDateObj(d);
+        setFechaPago(formatLocalDate(d));
+      } else if (fechaPago === todayStr) {
+        setHoraPago(getDefaultHoraPago(fechaPago));
+        setTimeObj(getDefaultTimeObj(fechaPago));
+      } else {
+        if (!timeObj || !(timeObj instanceof Date) || isNaN(timeObj.getTime())) {
+          const t = new Date();
+          t.setHours(14, 0, 0, 0);
+          setTimeObj(t);
+        }
+        if (!dateObj || !(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+          setDateObj(parseLocalDate(fechaPago));
+        }
+      }
+      setShowRateInfo(false);
+      setShowRulesInfo(false);
+      setShowPmInfo(false);
+      setShowDatePicker(false);
+      setShowTimePicker(false);
+      setShowCreateModal(true);
+    } catch (err) {
+      console.warn('Error al preparar modal de colecta:', err);
+      Alert.alert('Error', 'No se pudo iniciar la solicitud de colecta.');
     }
-    const latestConfig = await fetchUserPaymentConfig();
-    if (!hasConfiguredPaymentMethods(latestConfig)) {
-      Alert.alert(
-        'Datos de Pago Requeridos',
-        'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
-        [
-          { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
-      return;
-    }
-    const userAvail = getAvailablePaymentMethods(latestConfig);
-    setColectaAcceptedMethods(userAvail.length > 0 ? userAvail : ['Pago Móvil']);
-    if (currentUser && !beneficiarioNombre) {
-      setBeneficiarioNombre(currentUser.nombre || currentUser.name || `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim());
-    }
-    const todayStr = formatLocalDate(new Date());
-    if (!fechaPago) {
-      const d = new Date();
-      d.setDate(d.getDate() + 7);
-      setDateObj(d);
-      setFechaPago(formatLocalDate(d));
-    } else if (fechaPago === todayStr) {
-      setHoraPago(getDefaultHoraPago(fechaPago));
-      setTimeObj(getDefaultTimeObj(fechaPago));
-    }
-    setShowRateInfo(false);
-    setShowRulesInfo(false);
-    setShowPmInfo(false);
-    setShowCreateModal(true);
   };
 
   const toggleColectaMethod = (method) => {
@@ -854,55 +881,55 @@ export default function FundsScreen() {
 
   // Crear Colecta
   const handleCreateColecta = async () => {
-    if (!titulo.trim() || !proposito.trim() || !montoMeta) {
-      Alert.alert('Campos requeridos', 'Por favor ingresa título, propósito y monto meta.');
-      return;
-    }
-    const parsed = parseVEAmount(montoMeta);
-    if (parsed === null || isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Monto inválido', 'El monto meta debe ser mayor a 0.');
-      return;
-    }
-    if (tipoTasa === 'fija' && (!tasaFijaValor || parseFloat(tasaFijaValor) <= 0)) {
-      Alert.alert('Tasa fija requerida', 'Ingresa el valor numérico para la tasa fija.');
-      return;
-    }
-    if (colectaAcceptedMethods.length === 0) {
-      Alert.alert('Método de pago requerido', 'Debes seleccionar al menos un método de pago que aceptas para la colecta.');
-      return;
-    }
-
-    const latestConfig = await fetchUserPaymentConfig();
-    if (!hasConfiguredPaymentMethods(latestConfig)) {
-      Alert.alert(
-        'Datos de Pago Requeridos',
-        'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
-        [
-          { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
-      return;
-    }
-
-    const filteredDatosPago = {};
-    for (const m of colectaAcceptedMethods) {
-      if (latestConfig && latestConfig[m]) {
-        filteredDatosPago[m] = latestConfig[m];
-      } else if (userPaymentConfig && userPaymentConfig[m]) {
-        filteredDatosPago[m] = userPaymentConfig[m];
-      }
-    }
-
-    setSubmitting(true);
     try {
+      if (!(titulo || '').trim() || !(proposito || '').trim() || !montoMeta) {
+        Alert.alert('Campos requeridos', 'Por favor ingresa título, propósito y monto meta.');
+        return;
+      }
+      const parsed = parseVEAmount(montoMeta);
+      if (parsed === null || isNaN(parsed) || parsed <= 0) {
+        Alert.alert('Monto inválido', 'El monto meta debe ser mayor a 0.');
+        return;
+      }
+      if (tipoTasa === 'fija' && (!tasaFijaValor || parseFloat(tasaFijaValor) <= 0)) {
+        Alert.alert('Tasa fija requerida', 'Ingresa el valor numérico para la tasa fija.');
+        return;
+      }
+      if (!colectaAcceptedMethods || colectaAcceptedMethods.length === 0) {
+        Alert.alert('Método de pago requerido', 'Debes seleccionar al menos un método de pago que aceptas para la colecta.');
+        return;
+      }
+
+      const latestConfig = await fetchUserPaymentConfig();
+      if (!hasConfiguredPaymentMethods(latestConfig)) {
+        Alert.alert(
+          'Datos de Pago Requeridos',
+          'Debes registrar al menos un método de pago antes de proponer una colecta para que los miembros de la mutual puedan transferir los aportes a quien gestionará la compra.',
+          [
+            { text: 'Cargar Datos de Pago', onPress: handleOpenConfig },
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+
+      const filteredDatosPago = {};
+      for (const m of (colectaAcceptedMethods || [])) {
+        if (latestConfig && latestConfig[m]) {
+          filteredDatosPago[m] = latestConfig[m];
+        } else if (userPaymentConfig && userPaymentConfig[m]) {
+          filteredDatosPago[m] = userPaymentConfig[m];
+        }
+      }
+
+      setSubmitting(true);
       const effRate = getEffectiveRate(tipoTasa, tasaFijaValor);
       const metaUsd = colectaCurrency === 'VES' ? Number((parsed / effRate).toFixed(2)) : parsed;
       const metaVes = colectaCurrency === 'VES' ? parsed : Number((parsed * effRate).toFixed(2));
 
       await colectasApi.createColecta({
-        titulo: titulo.trim(),
-        proposito: proposito.trim(),
+        titulo: (titulo || '').trim(),
+        proposito: (proposito || '').trim(),
         monto_meta_usd: metaUsd,
         monto_meta_ves: metaVes,
         currency: colectaCurrency,
@@ -910,7 +937,7 @@ export default function FundsScreen() {
         tasa_fija_valor: tipoTasa === 'fija' ? parseFloat(tasaFijaValor) : null,
         fecha_pago: fechaPago,
         hora_pago: horaPago || getDefaultHoraPago(fechaPago),
-        beneficiario_nombre: beneficiarioNombre.trim() || undefined,
+        beneficiario_nombre: (beneficiarioNombre || '').trim() || undefined,
         beneficiario_datos_pago: (Object.keys(filteredDatosPago).length > 0) ? filteredDatosPago : undefined,
       });
 
@@ -2750,12 +2777,12 @@ export default function FundsScreen() {
               {showDatePicker && (
                 <View style={Platform.OS === 'ios' ? styles.iosDatePickerWrapper : null}>
                   <DateTimePicker
-                    value={dateObj}
+                    value={dateObj instanceof Date && !isNaN(dateObj.getTime()) ? dateObj : new Date()}
                     mode="date"
                     display={Platform.OS === 'ios' ? 'inline' : 'default'}
                     minimumDate={new Date()}
                     onChange={onDateChange}
-                    themeVariant="dark"
+                    {...(Platform.OS === 'ios' ? { themeVariant: 'dark' } : {})}
                   />
                   {Platform.OS === 'ios' && (
                     <TouchableOpacity
@@ -2771,7 +2798,12 @@ export default function FundsScreen() {
               <Text style={styles.inputLabel}>Hora de Pago / Liquidación *</Text>
               <TouchableOpacity
                 style={[styles.input, { justifyContent: 'center' }]}
-                onPress={() => setShowTimePicker(true)}
+                onPress={() => {
+                  if (!timeObj || !(timeObj instanceof Date) || isNaN(timeObj.getTime())) {
+                    setTimeObj(getDefaultTimeObj(fechaPago));
+                  }
+                  setShowTimePicker(true);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={{ color: horaPago ? '#f8fafc' : '#64748b', fontSize: 15 }}>
@@ -2781,12 +2813,12 @@ export default function FundsScreen() {
               {showTimePicker && (
                 <View style={Platform.OS === 'ios' ? styles.iosDatePickerWrapper : null}>
                   <DateTimePicker
-                    value={timeObj}
+                    value={timeObj instanceof Date && !isNaN(timeObj.getTime()) ? timeObj : new Date()}
                     mode="time"
                     display={Platform.OS === 'ios' ? 'inline' : 'default'}
                     onChange={onTimeChange}
-                    themeVariant="dark"
                     is24Hour={false}
+                    {...(Platform.OS === 'ios' ? { themeVariant: 'dark' } : {})}
                   />
                   {Platform.OS === 'ios' && (
                     <TouchableOpacity

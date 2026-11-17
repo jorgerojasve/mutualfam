@@ -860,7 +860,8 @@ export default function LoansScreen() {
 
   const onDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
-    if (selectedDate) {
+    if (event?.type === 'dismissed') return;
+    if (selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime())) {
       setDateObj(selectedDate);
       setEstimatedDate(formatLocalDate(selectedDate));
     }
@@ -1418,7 +1419,14 @@ export default function LoansScreen() {
               >
                 <Text style={{color: estimatedDate ? '#fff' : '#94a3b8'}}>{estimatedDate || "Tocar para seleccionar fecha"}</Text>
               </TouchableOpacity>
-              {showDatePicker && <DateTimePicker value={dateObj} mode="date" display="default" onChange={onDateChange} />}
+              {showDatePicker && (
+                <DateTimePicker
+                  value={dateObj instanceof Date && !isNaN(dateObj.getTime()) ? dateObj : new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={onDateChange}
+                />
+              )}
               
               <Text style={styles.label}>Motivo</Text>
               <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} multiline value={motive} onChangeText={setMotive} />

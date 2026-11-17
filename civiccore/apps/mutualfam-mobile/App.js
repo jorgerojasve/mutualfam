@@ -13,6 +13,7 @@ import UpdateModal from './src/components/UpdateModal';
 import BetaWelcomeModal from './src/components/BetaWelcomeModal';
 import { initializeBetaState } from './src/utils/beta';
 import { authApi } from './src/api/client';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 
 // Screens
@@ -185,24 +186,26 @@ export default function App() {
   }
 
   return (
-    <OrgProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <NavigationContainer ref={navigationRef} linking={linking} theme={appNavTheme}>
-          <StatusBar style="light" backgroundColor={theme.headerBg} />
-          <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
-            <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
-            <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
-            <Stack.Screen name="MainTabs" component={MainTabs} />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <UpdateModal
-          updateInfo={updateInfo}
-          onDismiss={() => setUpdateInfo(null)}
-        />
-        <BetaWelcomeModal />
-      </GestureHandlerRootView>
-    </OrgProvider>
+    <ErrorBoundary>
+      <OrgProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <NavigationContainer ref={navigationRef} linking={linking} theme={appNavTheme}>
+            <StatusBar style="light" backgroundColor={theme.headerBg} />
+            <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="CreateMutual" component={CreateMutualScreen} />
+              <Stack.Screen name="JoinMutual" component={JoinMutualScreen} />
+              <Stack.Screen name="SelectMutual" component={SelectMutualScreen} />
+              <Stack.Screen name="MainTabs" component={MainTabs} />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <UpdateModal
+            updateInfo={updateInfo}
+            onDismiss={() => setUpdateInfo(null)}
+          />
+          <BetaWelcomeModal />
+        </GestureHandlerRootView>
+      </OrgProvider>
+    </ErrorBoundary>
   );
 }
