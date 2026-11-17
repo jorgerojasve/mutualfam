@@ -863,7 +863,7 @@ export default function FundsScreen({ navigation }) {
   };
 
   const toggleColectaMethod = (method) => {
-    if (!userPaymentConfig || !userPaymentConfig[method]) {
+    if (!getAvailablePaymentMethods(userPaymentConfig).includes(method)) {
       Alert.alert(
         'Método no configurado',
         `No has registrado tus datos para ${method}. ¿Deseas configurarlos ahora?`,
