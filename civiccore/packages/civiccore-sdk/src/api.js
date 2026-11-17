@@ -22,10 +22,18 @@ const request = async (endpoint, options = {}) => {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(`${baseURL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${baseURL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (netErr) {
+    const errorMsg = netErr?.message === 'Failed to fetch'
+      ? 'No se pudo conectar con el servidor. Por favor verifica tu conexión o intenta nuevamente en unos segundos.'
+      : (netErr?.message || 'Error de conexión con el servidor');
+    throw new Error(errorMsg);
+  }
 
   let rawText = '';
   try {
@@ -112,7 +120,17 @@ export const membershipApi = {
   stats: () => request('/membership/stats'),
   getMembers: () => request('/membership/members'),
   createOrganization: (data) => request('/membership/organizations/create', { method: 'POST', body: JSON.stringify(data) }),
-  joinOrganization: (token) => request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token }) }),
+  joinOrganization: (token) => {
+    let cleanToken = (token || '').toString().trim();
+    if (cleanToken.includes('token=')) {
+      cleanToken = cleanToken.split('token=')[1].split('&')[0];
+    } else if (cleanToken.includes('join/')) {
+      cleanToken = cleanToken.split('join/')[1].split('?')[0];
+    }
+    const compact = cleanToken.replace(/[\s-]/g, '').toUpperCase();
+    const tokenToSend = compact.length === 8 ? compact : cleanToken;
+    return request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token: tokenToSend }) });
+  },
   getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),

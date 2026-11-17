@@ -1,7 +1,8 @@
 import os
 import asyncio
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -73,6 +74,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno en el servidor: {str(exc)}"}
+    )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(membership.router, prefix="/api/v1/membership", tags=["membership"])

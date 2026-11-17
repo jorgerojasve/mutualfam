@@ -59,13 +59,13 @@ export default function MutualSwitcher() {
     setJoinError('');
     setJoinSuccess('');
     try {
-      await joinOrg(inviteCode.trim());
-      setJoinSuccess('¡Te has unido exitosamente!');
+      const res = await joinOrg(inviteCode.trim());
+      setJoinSuccess(res?.message || '¡Te has unido exitosamente!');
       setInviteCode('');
       setTimeout(() => {
         handleClose();
         window.location.reload();
-      }, 900);
+      }, 1200);
     } catch (err) {
       setJoinError(err?.message || 'Código de invitación inválido o expirado');
     } finally {
