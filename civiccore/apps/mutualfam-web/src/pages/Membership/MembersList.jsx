@@ -51,6 +51,7 @@ const MembersList = () => {
 
   // Modal Detalle de Propuesta y Debate (Homologado con Móvil)
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showVotingRules, setShowVotingRules] = useState(false);
   const [proposalDetail, setProposalDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [comments, setComments] = useState([]);
@@ -294,6 +295,7 @@ const MembersList = () => {
   const openProposalDetail = async (proposal) => {
     setSelectedPropuesta(proposal);
     setShowDetailModal(true);
+    setShowVotingRules(false);
     setLoadingDetail(true);
     setCommentText('');
     setReplyingTo(null);
@@ -1404,137 +1406,447 @@ const MembersList = () => {
                   </div>
                 </div>
 
-                {/* Enlace de Invitación Oficial (Admisión) */}
-                {proposalDetail.proposal_type === 'member_admission' && (
-                  proposalDetail.status === 'approved' ? (
-                    (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
-                      <div style={{
-                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                        border: '1px solid #10b981',
-                        borderRadius: '12px',
-                        padding: '12px',
-                        marginBottom: '14px',
-                        color: '#a7f3d0',
-                        fontSize: '13px'
-                      }}>
-                        ✅ <strong>Ingreso Concretado:</strong> El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                {/* 1. SECCIÓN DE VOTACIÓN DIRECTA (Si está en Votación Abierta) */}
+                {proposalDetail.status === 'voting' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    marginBottom: '14px',
+                    border: '1.5px solid #1e293b'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      flexWrap: 'wrap',
+                      gap: '6px'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700' }}>
+                        Emite tu voto (nominativo):
                       </div>
-                    ) : proposalDetail.admission_cancelled ? (
+                      {proposalDetail.my_vote && (
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          backgroundColor: proposalDetail.my_vote === 'si'
+                            ? 'rgba(16, 185, 129, 0.2)'
+                            : proposalDetail.my_vote === 'no'
+                              ? 'rgba(239, 68, 68, 0.2)'
+                              : 'rgba(148, 163, 184, 0.2)',
+                          color: proposalDetail.my_vote === 'si'
+                            ? '#34d399'
+                            : proposalDetail.my_vote === 'no'
+                              ? '#f87171'
+                              : '#cbd5e1',
+                          border: `1px solid ${proposalDetail.my_vote === 'si' ? '#10b981' : proposalDetail.my_vote === 'no' ? '#ef4444' : '#94a3b8'}`
+                        }}>
+                          Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Botones de Voto */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('si')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : '#10b981',
+                          border: proposalDetail.my_vote === 'si' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        👍 SÍ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('no')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'no' ? '#dc2626' : '#ef4444',
+                          border: proposalDetail.my_vote === 'no' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleVotarInDetail('abstencion')}
+                        disabled={submittingVote}
+                        style={{
+                          backgroundColor: proposalDetail.my_vote === 'abstencion' ? '#475569' : '#64748b',
+                          border: proposalDetail.my_vote === 'abstencion' ? '2px solid #ffffff' : 'none',
+                          color: '#ffffff',
+                          borderRadius: '10px',
+                          padding: '10px 4px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ⬜ Abstención
+                      </button>
+                    </div>
+
+                    {/* Conteo de Votos e Indicadores */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                       <div style={{
-                        backgroundColor: 'rgba(100, 116, 139, 0.2)',
-                        border: '1px solid #64748b',
-                        borderRadius: '12px',
-                        padding: '12px',
-                        marginBottom: '14px',
-                        color: '#cbd5e1',
-                        fontSize: '13px'
+                        border: '1.5px solid #10b981',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
                       }}>
-                        ⏱️ <strong>Ingreso Cancelado:</strong> La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
+                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
                       </div>
-                    ) : (proposalDetail.is_author || (user?.id && proposalDetail.author_id === user.id) || proposalDetail.invite_token) ? (
                       <div style={{
-                        backgroundColor: 'rgba(2, 132, 199, 0.15)',
-                        border: '1px solid #0284c7',
-                        borderRadius: '12px',
-                        padding: '14px',
-                        marginBottom: '14px',
+                        border: '1.5px solid #ef4444',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
                       }}>
-                        <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>
-                          Enlace de Invitación Oficial:
+                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #94a3b8',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
+                      }}>
+                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
+                      </div>
+                    </div>
+
+                    {/* Avance del Censo y Participación */}
+                    <div style={{
+                      backgroundColor: '#1e293b',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: '#cbd5e1',
+                      marginBottom: '10px',
+                    }}>
+                      👥 Participación: <strong style={{ color: '#f8fafc' }}>
+                        {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                      </strong>
+                      {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
+                        ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
+                        : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
+                          ? ' (100% del censo ha votado)'
+                          : ''}
+                    </div>
+
+                    {/* Concluir Votación */}
+                    {proposalDetail.can_conclude && (
+                      <button
+                        type="button"
+                        onClick={handleCerrarInDetail}
+                        disabled={closingProposal}
+                        style={{
+                          width: '100%',
+                          backgroundColor: '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          marginBottom: '10px'
+                        }}
+                      >
+                        {closingProposal ? 'Computando resolución...' : '⚖️ Computar y Concluir Votación'}
+                      </button>
+                    )}
+
+                    {/* Desplegable de Reglas y Explicaciones */}
+                    <button
+                      type="button"
+                      onClick={() => setShowVotingRules(!showVotingRules)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#1e293b',
+                        border: '1px solid #334155',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <span>ℹ️ {showVotingRules ? 'Ocultar regla y detalles' : 'Ver regla de votación y detalles'}</span>
+                      <span>{showVotingRules ? '▲' : '▼'}</span>
+                    </button>
+
+                    {showVotingRules && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '10px',
+                        backgroundColor: '#1e293b',
+                        borderRadius: '8px',
+                        border: '1px solid #334155',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                          {proposalDetail.proposal_type === 'member_admission'
+                            ? `* Regla de Admisión: Requiere ≥75% de aprobación (${proposalDetail.votes_yes_needed || 2} de ${proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).`
+                            : '* Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.'}
                         </div>
                         <div style={{
-                          fontSize: '22px',
-                          fontWeight: '800',
-                          letterSpacing: '0.1em',
-                          fontFamily: 'monospace',
-                          color: '#38bdf8',
-                          margin: '8px 0',
-                          textAlign: 'center',
-                          backgroundColor: '#0f172a',
-                          padding: '10px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(56, 189, 248, 0.3)'
+                          fontSize: '11px',
+                          color: proposalDetail.threshold_reached ? '#4ade80' : '#94a3b8',
+                          lineHeight: '1.4'
                         }}>
-                          {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                          {(() => {
+                            if (proposalDetail.has_veto) {
+                              return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
+                            }
+                            if (proposalDetail.proposal_type === 'member_admission') {
+                              const needed = proposalDetail.votes_yes_needed || 2;
+                              const currentYes = proposalDetail.votes_yes || 0;
+                              const total = proposalDetail.total_active_members || 2;
+                              const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+
+                              if (proposalDetail.threshold_reached && pending === 0) {
+                                return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
+                              }
+                              if (currentYes >= total) {
+                                return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
+                              }
+                              return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                            }
+                            if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
+                              return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
+                            }
+                            return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
+                          })()}
                         </div>
-                        <p style={{ fontSize: '12px', color: '#cbd5e1', margin: '0 0 12px 0', textAlign: 'center' }}>
-                          ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
-                        </p>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleShareInvite(proposalDetail.invite_token, proposalDetail.candidate_name, proposalDetail.invite_code_formatted)}
-                            style={{
-                              flex: 1,
-                              backgroundColor: '#16a34a',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '8px',
-                              padding: '10px',
-                              fontWeight: '700',
-                              fontSize: '13px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            💬 WhatsApp
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(proposalDetail.invite_code_formatted || proposalDetail.invite_token);
-                              alert('Código copiado al portapapeles');
-                            }}
-                            style={{
-                              flex: 1,
-                              backgroundColor: '#334155',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '8px',
-                              padding: '10px',
-                              fontWeight: '700',
-                              fontSize: '13px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            📋 Copiar
-                          </button>
-                        </div>
+                        {proposalDetail.proposal_type === 'member_admission' && (
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Enlace de Invitación Oficial (Admisión - Solo cuando está Aprobada) */}
+                {proposalDetail.proposal_type === 'member_admission' && proposalDetail.status === 'approved' && (
+                  (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
+                    <div style={{
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid #10b981',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      marginBottom: '14px',
+                      color: '#a7f3d0',
+                      fontSize: '13px'
+                    }}>
+                      ✅ <strong>Ingreso Concretado:</strong> El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                    </div>
+                  ) : proposalDetail.admission_cancelled ? (
+                    <div style={{
+                      backgroundColor: 'rgba(100, 116, 139, 0.2)',
+                      border: '1px solid #64748b',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      marginBottom: '14px',
+                      color: '#cbd5e1',
+                      fontSize: '13px'
+                    }}>
+                      ⏱️ <strong>Ingreso Cancelado:</strong> La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
+                    </div>
+                  ) : (proposalDetail.is_author || (user?.id && proposalDetail.author_id === user.id) || proposalDetail.invite_token) ? (
+                    <div style={{
+                      backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                      border: '1px solid #0284c7',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      marginBottom: '14px',
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Enlace de Invitación Oficial:
+                      </div>
+                      <div style={{
+                        fontSize: '22px',
+                        fontWeight: '800',
+                        letterSpacing: '0.1em',
+                        fontFamily: 'monospace',
+                        color: '#38bdf8',
+                        margin: '8px 0',
+                        textAlign: 'center',
+                        backgroundColor: '#0f172a',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(56, 189, 248, 0.3)'
+                      }}>
+                        {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#cbd5e1', margin: '0 0 12px 0', textAlign: 'center' }}>
+                        ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                           type="button"
-                          onClick={handleCancelarIngresoInDetail}
+                          onClick={() => handleShareInvite(proposalDetail.invite_token, proposalDetail.candidate_name, proposalDetail.invite_code_formatted)}
                           style={{
-                            width: '100%',
-                            marginTop: '10px',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.5)',
-                            color: '#f87171',
+                            flex: 1,
+                            backgroundColor: '#16a34a',
+                            color: '#fff',
+                            border: 'none',
                             borderRadius: '8px',
-                            padding: '8px',
-                            fontSize: '12px',
-                            fontWeight: '600',
+                            padding: '10px',
+                            fontWeight: '700',
+                            fontSize: '13px',
                             cursor: 'pointer'
                           }}
                         >
-                          ⚠️ Cancelar Invitación de Ingreso
+                          💬 WhatsApp
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(proposalDetail.invite_code_formatted || proposalDetail.invite_token);
+                            alert('Código copiado al portapapeles');
+                          }}
+                          style={{
+                            flex: 1,
+                            backgroundColor: '#334155',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px',
+                            fontWeight: '700',
+                            fontSize: '13px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📋 Copiar
                         </button>
                       </div>
-                    ) : (
-                      <div style={{
-                        backgroundColor: 'rgba(2, 132, 199, 0.1)',
-                        border: '1px solid rgba(56, 189, 248, 0.3)',
-                        borderRadius: '12px',
-                        padding: '12px',
-                        marginBottom: '14px',
-                        color: '#bae6fd',
-                        fontSize: '13px'
-                      }}>
-                        ⏳ <strong>Ingreso Aprobado • En Espera:</strong> La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
-                      </div>
-                    )
-                  ) : null
+                      <button
+                        type="button"
+                        onClick={handleCancelarIngresoInDetail}
+                        style={{
+                          width: '100%',
+                          marginTop: '10px',
+                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.5)',
+                          color: '#f87171',
+                          borderRadius: '8px',
+                          padding: '8px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚠️ Cancelar Invitación de Ingreso
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{
+                      backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      marginBottom: '14px',
+                      color: '#bae6fd',
+                      fontSize: '13px'
+                    }}>
+                      ⏳ <strong>Ingreso Aprobado • En Espera:</strong> La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
+                    </div>
+                  )
                 )}
 
-                {/* Sección de Defensa (Expulsión) */}
+                {/* 3. Conteo de Votos y Resultados Históricos (Solo para estados ya concluidos / rechazados / aprobados) */}
+                {proposalDetail.status !== 'debate' && proposalDetail.status !== 'voting' && (
+                  <div style={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>
+                      Resultado Final de Votación
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                      <div style={{
+                        border: '1.5px solid #10b981',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                      }}>
+                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #ef4444',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                      }}>
+                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
+                      </div>
+                      <div style={{
+                        border: '1.5px solid #94a3b8',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
+                      }}>
+                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
+                      </div>
+                    </div>
+
+                    {/* Avance del Censo y Participación */}
+                    <div style={{
+                      backgroundColor: '#1e293b',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: '#cbd5e1',
+                    }}>
+                      👥 Participación Final: <strong style={{ color: '#f8fafc' }}>
+                        {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                      </strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Sección de Defensa (Expulsión) */}
                 {proposalDetail.proposal_type === 'expulsion' && (
                   <div style={{
                     backgroundColor: '#0f172a',
@@ -1596,198 +1908,6 @@ const MembersList = () => {
                         </button>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {/* Conteo de Votos y Resultados (Solo visible una vez iniciado el período de votación) */}
-                {proposalDetail.status !== 'debate' && (
-                  <div style={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    marginBottom: '14px',
-                  }}>
-                    <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>
-                      Estado de Votación
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                      <div style={{
-                        border: '1.5px solid #10b981',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
-                      }}>
-                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
-                      </div>
-                      <div style={{
-                        border: '1.5px solid #ef4444',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
-                      }}>
-                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
-                      </div>
-                      <div style={{
-                        border: '1.5px solid #94a3b8',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
-                      }}>
-                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
-                      </div>
-                    </div>
-
-                    {/* Avance del Censo y Participación */}
-                    <div style={{
-                      backgroundColor: '#1e293b',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      color: '#cbd5e1',
-                      marginBottom: '8px',
-                    }}>
-                      👥 Participación: <strong style={{ color: '#f8fafc' }}>
-                        {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
-                      </strong>
-                      {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
-                        ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
-                        : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
-                          ? ' (100% del censo ha votado)'
-                          : ''}
-                    </div>
-
-                    <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', lineHeight: '1.4' }}>
-                      {proposalDetail.proposal_type === 'member_admission'
-                        ? `* Regla de Admisión: Requiere ≥75% de aprobación (${proposalDetail.votes_yes_needed || 2} de ${proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).`
-                        : '* Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.'}
-                    </div>
-                  </div>
-                )}
-
-                {/* Botones de Voto si está en fase de votación */}
-                {proposalDetail.status === 'voting' && (
-                  <div style={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    marginBottom: '14px',
-                  }}>
-                    <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700', marginBottom: '10px' }}>
-                      Emite tu voto (nominativo):
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleVotarInDetail('si')}
-                        disabled={submittingVote}
-                        style={{
-                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : '#10b981',
-                          border: proposalDetail.my_vote === 'si' ? '2px solid #ffffff' : 'none',
-                          color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        👍 SÍ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleVotarInDetail('no')}
-                        disabled={submittingVote}
-                        style={{
-                          backgroundColor: proposalDetail.my_vote === 'no' ? '#dc2626' : '#ef4444',
-                          border: proposalDetail.my_vote === 'no' ? '2px solid #ffffff' : 'none',
-                          color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleVotarInDetail('abstencion')}
-                        disabled={submittingVote}
-                        style={{
-                          backgroundColor: proposalDetail.my_vote === 'abstencion' ? '#475569' : '#64748b',
-                          border: proposalDetail.my_vote === 'abstencion' ? '2px solid #ffffff' : 'none',
-                          color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        ⬜ Abstención
-                      </button>
-                    </div>
-
-                    {/* Concluir Votación */}
-                    {proposalDetail.can_conclude && (
-                      <button
-                        type="button"
-                        onClick={handleCerrarInDetail}
-                        disabled={closingProposal}
-                        style={{
-                          width: '100%',
-                          backgroundColor: '#0284c7',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '10px',
-                          padding: '10px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          marginBottom: '8px'
-                        }}
-                      >
-                        {closingProposal ? 'Computando resolución...' : '⚖️ Computar y Concluir Votación'}
-                      </button>
-                    )}
-
-                    <div style={{
-                      fontSize: '11px',
-                      color: proposalDetail.threshold_reached ? '#4ade80' : '#94a3b8',
-                      lineHeight: '1.4'
-                    }}>
-                      {(() => {
-                        if (proposalDetail.has_veto) {
-                          return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
-                        }
-                        if (proposalDetail.proposal_type === 'member_admission') {
-                          const needed = proposalDetail.votes_yes_needed || 2;
-                          const currentYes = proposalDetail.votes_yes || 0;
-                          const total = proposalDetail.total_active_members || 2;
-                          const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
-
-                          if (proposalDetail.threshold_reached && pending === 0) {
-                            return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
-                          }
-                          if (currentYes >= total) {
-                            return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
-                          }
-                          return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
-                        }
-                        if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
-                          return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
-                        }
-                        return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
-                      })()}
-                    </div>
                   </div>
                 )}
 
