@@ -1421,28 +1421,29 @@ const MembersList = () => {
                       alignItems: 'center',
                       marginBottom: '10px',
                       flexWrap: 'wrap',
-                      gap: '6px'
+                      gap: '8px'
                     }}>
                       <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700' }}>
                         Emite tu voto (nominativo):
                       </div>
                       {proposalDetail.my_vote && (
                         <div style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          borderRadius: '8px',
                           fontSize: '11px',
                           fontWeight: '700',
+                          flexShrink: 0,
                           backgroundColor: proposalDetail.my_vote === 'si'
-                            ? 'rgba(16, 185, 129, 0.2)'
+                            ? 'rgba(16, 185, 129, 0.25)'
                             : proposalDetail.my_vote === 'no'
-                              ? 'rgba(239, 68, 68, 0.2)'
-                              : 'rgba(148, 163, 184, 0.2)',
+                              ? 'rgba(239, 68, 68, 0.25)'
+                              : 'rgba(56, 189, 248, 0.25)',
                           color: proposalDetail.my_vote === 'si'
                             ? '#34d399'
                             : proposalDetail.my_vote === 'no'
                               ? '#f87171'
-                              : '#cbd5e1',
-                          border: `1px solid ${proposalDetail.my_vote === 'si' ? '#10b981' : proposalDetail.my_vote === 'no' ? '#ef4444' : '#94a3b8'}`
+                              : '#38bdf8',
+                          border: `1px solid ${proposalDetail.my_vote === 'si' ? '#10b981' : proposalDetail.my_vote === 'no' ? '#ef4444' : '#38bdf8'}`
                         }}>
                           Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
                         </div>
@@ -1450,91 +1451,168 @@ const MembersList = () => {
                     </div>
 
                     {/* Botones de Voto */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px', alignItems: 'stretch' }}>
                       <button
                         type="button"
                         onClick={() => handleVotarInDetail('si')}
                         disabled={submittingVote}
                         style={{
-                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : '#10b981',
-                          border: proposalDetail.my_vote === 'si' ? '2px solid #ffffff' : 'none',
+                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : proposalDetail.my_vote ? '#0b1329' : '#064e3b',
+                          border: proposalDetail.my_vote === 'si' ? '2.5px solid #34d399' : proposalDetail.my_vote ? '1px solid rgba(255,255,255,0.1)' : '1.5px solid #059669',
                           color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
+                          opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'si' ? 0.35 : 1,
+                          borderRadius: '12px',
+                          padding: '8px 4px',
                           fontSize: '13px',
-                          fontWeight: '700',
+                          fontWeight: proposalDetail.my_vote === 'si' ? '800' : '700',
                           cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minHeight: '58px',
+                          boxShadow: proposalDetail.my_vote === 'si' ? '0 0 10px rgba(52, 211, 153, 0.5)' : 'none',
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        👍 SÍ
+                        <span>👍 SÍ</span>
+                        {proposalDetail.my_vote === 'si' && (
+                          <span style={{
+                            marginTop: '4px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                            border: '1px solid #ffffff',
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            letterSpacing: '0.3px',
+                            color: '#ffffff'
+                          }}>
+                            ✓ Tu voto
+                          </span>
+                        )}
                       </button>
+
                       <button
                         type="button"
                         onClick={() => handleVotarInDetail('no')}
                         disabled={submittingVote}
                         style={{
-                          backgroundColor: proposalDetail.my_vote === 'no' ? '#dc2626' : '#ef4444',
-                          border: proposalDetail.my_vote === 'no' ? '2px solid #ffffff' : 'none',
+                          backgroundColor: proposalDetail.my_vote === 'no' ? '#b91c1c' : proposalDetail.my_vote ? '#0b1329' : '#7f1d1d',
+                          border: proposalDetail.my_vote === 'no' ? '2.5px solid #f87171' : proposalDetail.my_vote ? '1px solid rgba(255,255,255,0.1)' : '1.5px solid #dc2626',
                           color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
+                          opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'no' ? 0.35 : 1,
+                          borderRadius: '12px',
+                          padding: '8px 4px',
                           fontSize: '13px',
-                          fontWeight: '700',
+                          fontWeight: proposalDetail.my_vote === 'no' ? '800' : '700',
                           cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minHeight: '58px',
+                          boxShadow: proposalDetail.my_vote === 'no' ? '0 0 10px rgba(248, 113, 113, 0.5)' : 'none',
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
+                        <span>👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}</span>
+                        {proposalDetail.my_vote === 'no' && (
+                          <span style={{
+                            marginTop: '4px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                            border: '1px solid #ffffff',
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            letterSpacing: '0.3px',
+                            color: '#ffffff'
+                          }}>
+                            ✓ Tu voto
+                          </span>
+                        )}
                       </button>
+
                       <button
                         type="button"
                         onClick={() => handleVotarInDetail('abstencion')}
                         disabled={submittingVote}
                         style={{
-                          backgroundColor: proposalDetail.my_vote === 'abstencion' ? '#475569' : '#64748b',
-                          border: proposalDetail.my_vote === 'abstencion' ? '2px solid #ffffff' : 'none',
+                          backgroundColor: proposalDetail.my_vote === 'abstencion' ? '#334155' : proposalDetail.my_vote ? '#0b1329' : '#1e293b',
+                          border: proposalDetail.my_vote === 'abstencion' ? '2.5px solid #38bdf8' : proposalDetail.my_vote ? '1px solid rgba(255,255,255,0.1)' : '1.5px solid #64748b',
                           color: '#ffffff',
-                          borderRadius: '10px',
-                          padding: '10px 4px',
+                          opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'abstencion' ? 0.35 : 1,
+                          borderRadius: '12px',
+                          padding: '8px 4px',
                           fontSize: '13px',
-                          fontWeight: '700',
+                          fontWeight: proposalDetail.my_vote === 'abstencion' ? '800' : '700',
                           cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minHeight: '58px',
+                          boxShadow: proposalDetail.my_vote === 'abstencion' ? '0 0 10px rgba(56, 189, 248, 0.5)' : 'none',
+                          transition: 'all 0.2s ease'
                         }}
                       >
-                        ⬜ Abstención
+                        <span>⬜ Abstención</span>
+                        {proposalDetail.my_vote === 'abstencion' && (
+                          <span style={{
+                            marginTop: '4px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(56, 189, 248, 0.25)',
+                            border: '1px solid #38bdf8',
+                            fontSize: '10px',
+                            fontWeight: '800',
+                            letterSpacing: '0.3px',
+                            color: '#38bdf8'
+                          }}>
+                            ✓ Tu voto
+                          </span>
+                        )}
                       </button>
                     </div>
 
                     {/* Conteo de Votos e Indicadores */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                       <div style={{
-                        border: '1.5px solid #10b981',
+                        border: proposalDetail.my_vote === 'si' ? '2px solid #10b981' : '1.5px solid #10b981',
                         borderRadius: '10px',
                         padding: '10px',
                         textAlign: 'center',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                        backgroundColor: proposalDetail.my_vote === 'si' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)'
                       }}>
                         <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
+                        <div style={{ color: proposalDetail.my_vote === 'si' ? '#34d399' : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
+                          A FAVOR (SÍ){proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
+                        </div>
                       </div>
                       <div style={{
-                        border: '1.5px solid #ef4444',
+                        border: proposalDetail.my_vote === 'no' ? '2px solid #ef4444' : '1.5px solid #ef4444',
                         borderRadius: '10px',
                         padding: '10px',
                         textAlign: 'center',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                        backgroundColor: proposalDetail.my_vote === 'no' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)'
                       }}>
                         <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
+                        <div style={{ color: proposalDetail.my_vote === 'no' ? '#f87171' : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
+                          EN CONTRA (NO){proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
+                        </div>
                       </div>
                       <div style={{
-                        border: '1.5px solid #94a3b8',
+                        border: proposalDetail.my_vote === 'abstencion' ? '2px solid #38bdf8' : '1.5px solid #94a3b8',
                         borderRadius: '10px',
                         padding: '10px',
                         textAlign: 'center',
-                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
+                        backgroundColor: proposalDetail.my_vote === 'abstencion' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(148, 163, 184, 0.1)'
                       }}>
-                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
+                        <div style={{ color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
+                        <div style={{ color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
+                          ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? ' • Tú' : ''}
+                        </div>
                       </div>
                     </div>
 
