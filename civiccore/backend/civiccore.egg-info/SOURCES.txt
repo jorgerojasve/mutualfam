@@ -9,8 +9,10 @@ civiccore.egg-info/top_level.txt
 civiccore/core/auth.py
 civiccore/core/config.py
 civiccore/core/database.py
+civiccore/core/maturity.py
 civiccore/core/permissions.py
 civiccore/core/router.py
+civiccore/core/websockets.py
 civiccore/modules/authorship/models.py
 civiccore/modules/authorship/router.py
 civiccore/modules/authorship/schemas.py
@@ -19,6 +21,16 @@ civiccore/modules/config/models.py
 civiccore/modules/config/router.py
 civiccore/modules/config/schemas.py
 civiccore/modules/config/service.py
+civiccore/modules/fund/__init__.py
+civiccore/modules/fund/models.py
+civiccore/modules/fund/router.py
+civiccore/modules/fund/schemas.py
+civiccore/modules/fund/service.py
+civiccore/modules/fusion/models.py
+civiccore/modules/fusion/router.py
+civiccore/modules/fusion/schemas.py
+civiccore/modules/fusion/service.py
+civiccore/modules/governance/__init__.py
 civiccore/modules/governance/models.py
 civiccore/modules/governance/points_service.py
 civiccore/modules/governance/representative_service.py
@@ -29,7 +41,11 @@ civiccore/modules/governance/mechanisms/__init__.py
 civiccore/modules/governance/mechanisms/base.py
 civiccore/modules/governance/mechanisms/quadratic.py
 civiccore/modules/governance/mechanisms/simple.py
+civiccore/modules/media/router.py
+civiccore/modules/membership/__init__.py
+civiccore/modules/membership/admission_service.py
 civiccore/modules/membership/expulsion_service.py
+civiccore/modules/membership/fusion_import.py
 civiccore/modules/membership/mitosis_export.py
 civiccore/modules/membership/models.py
 civiccore/modules/membership/organization_service.py
@@ -41,6 +57,7 @@ civiccore/modules/payments/models.py
 civiccore/modules/payments/router.py
 civiccore/modules/payments/schemas.py
 civiccore/modules/payments/service.py
+civiccore/testing/db_manager.py
 civiccore/testing/sandbox_router.py
 civiccore/testing/simulator.py
 tests/test_authorship.py

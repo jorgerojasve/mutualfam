@@ -48,6 +48,7 @@ const MembersList = () => {
   const [showExpulsionModal, setShowExpulsionModal] = useState(false);
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedPropuesta, setSelectedPropuesta] = useState(null);
+  const [throttleStatus, setThrottleStatus] = useState(null);
 
   // Modal Detalle de Propuesta y Debate (Homologado con Móvil)
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -160,6 +161,9 @@ const MembersList = () => {
       const list = Array.isArray(data) ? data : [];
       setPropuestas(list);
       setHasLoadedAsambleas(true);
+
+      // Consultar estado de enfriamiento y límites de propuestas
+      asambleasApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
       try {
         localStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(list));
       } catch (_) {}
@@ -513,6 +517,26 @@ const MembersList = () => {
     window.open(whatsappUrl, '_blank');
   };
 
+  // Abrir modal de Proponer Ingreso con validación de límite
+  const handleOpenIngresoModal = () => {
+    if (throttleStatus && !throttleStatus.can_propose) {
+      alert(throttleStatus.reason || 'Has alcanzado el límite de propuestas permitidas en este momento.');
+      return;
+    }
+    setCreatedInvite(null);
+    setShowIngresoModal(true);
+  };
+
+  // Abrir modal de Proponer Expulsión con validación de límite
+  const handleOpenExpulsionModal = () => {
+    if (throttleStatus && !throttleStatus.can_propose) {
+      alert(throttleStatus.reason || 'Has alcanzado el límite de propuestas permitidas en este momento.');
+      return;
+    }
+    fetchExpulsables();
+    setShowExpulsionModal(true);
+  };
+
   // Proponer Ingreso
   const handleProponerIngreso = async (e) => {
     e.preventDefault();
@@ -536,6 +560,7 @@ const MembersList = () => {
       await fetchPropuestas();
       alert('¡Propuesta de admisión creada! Se ha abierto el período en la asamblea familiar.');
     } catch (err) {
+      asambleasApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
       alert(err.message || 'Error al proponer ingreso');
     } finally {
       setSubmittingIngreso(false);
@@ -563,6 +588,7 @@ const MembersList = () => {
       await fetchPropuestas();
       alert('¡Propuesta de expulsión registrada para debate en la asamblea familiar!');
     } catch (err) {
+      asambleasApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
       alert(err.message || 'Error al proponer expulsión');
     } finally {
       setSubmittingExpulsion(false);
@@ -826,7 +852,7 @@ const MembersList = () => {
                     }}
                     onClick={() => {
                       setActiveMainTab('asamblea');
-                      setShowIngresoModal(true);
+                      handleOpenIngresoModal();
                     }}
                   >
                     + Proponer Ingreso en Asamblea
@@ -843,14 +869,31 @@ const MembersList = () => {
       {/* ========================================================= */}
       {activeMainTab === 'asamblea' && (
         <div>
+          {/* Indicador de límite o enfriamiento contra spam */}
+          {throttleStatus && !throttleStatus.can_propose && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              marginBottom: '14px',
+              color: '#fbbf24',
+              fontSize: '13px',
+              lineHeight: '1.4'
+            }}>
+              <span style={{ fontSize: '18px' }}>⏱️</span>
+              <span>{throttleStatus.reason}</span>
+            </div>
+          )}
+
           {/* Botones de acción principales Homologados con Android */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
             <button
               type="button"
-              onClick={() => {
-                setCreatedInvite(null);
-                setShowIngresoModal(true);
-              }}
+              onClick={handleOpenIngresoModal}
               style={{
                 flex: 1,
                 display: 'flex',
@@ -875,10 +918,7 @@ const MembersList = () => {
 
             <button
               type="button"
-              onClick={() => {
-                fetchExpulsables();
-                setShowExpulsionModal(true);
-              }}
+              onClick={handleOpenExpulsionModal}
               style={{
                 flex: 1,
                 display: 'flex',
@@ -978,7 +1018,7 @@ const MembersList = () => {
                 {asambleaFilter === 'activas' && (
                   <button
                     type="button"
-                    onClick={() => setShowIngresoModal(true)}
+                    onClick={handleOpenIngresoModal}
                     style={{
                       backgroundColor: '#0284c7',
                       color: '#ffffff',

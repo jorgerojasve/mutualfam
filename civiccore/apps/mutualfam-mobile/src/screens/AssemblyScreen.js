@@ -162,6 +162,9 @@ export default function AssemblyScreen({ embedded = false }) {
   const [motivoExpulsion, setMotivoExpulsion] = useState('');
   const [submittingExpulsion, setSubmittingExpulsion] = useState(false);
 
+  // Rate Limiting / Throttle Status
+  const [throttleStatus, setThrottleStatus] = useState(null);
+
   // Formulario Defensa (acusado)
   const [defenseInput, setDefenseInput] = useState('');
   const [submittingDefense, setSubmittingDefense] = useState(false);
@@ -203,6 +206,9 @@ export default function AssemblyScreen({ embedded = false }) {
       setPropuestas(data);
       if (setIsOffline) setIsOffline(false);
       AsyncStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+
+      // Consultar estado de enfriamiento y límites de propuestas
+      governanceApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
     } catch (e) {
       if (isNetworkError(e)) {
         setConnectionError(true);
@@ -540,6 +546,32 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
+  // Abrir modal de Proponer Ingreso con validación de límite
+  const handleOpenIngresoModal = () => {
+    if (throttleStatus && !throttleStatus.can_propose) {
+      Alert.alert(
+        'Límite de Propuestas',
+        throttleStatus.reason || 'Has alcanzado el límite de propuestas permitidas en este momento.'
+      );
+      return;
+    }
+    setCreatedInvite(null);
+    setShowIngresoModal(true);
+  };
+
+  // Abrir modal de Proponer Expulsión con validación de límite
+  const handleOpenExpulsionModal = () => {
+    if (throttleStatus && !throttleStatus.can_propose) {
+      Alert.alert(
+        'Límite de Propuestas',
+        throttleStatus.reason || 'Has alcanzado el límite de propuestas permitidas en este momento.'
+      );
+      return;
+    }
+    fetchExpulsables();
+    setShowExpulsionModal(true);
+  };
+
   // Proponer Ingreso
   const handleProponerIngreso = async () => {
     if (!candidateName.trim()) {
@@ -570,6 +602,7 @@ export default function AssemblyScreen({ embedded = false }) {
 
       fetchPropuestas(true);
     } catch (e) {
+      governanceApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
       Alert.alert('Error', getErrorMessage(e, 'No se pudo proponer el ingreso'));
     } finally {
       setSubmittingIngreso(false);
@@ -609,6 +642,7 @@ export default function AssemblyScreen({ embedded = false }) {
               setMotivoExpulsion('');
               fetchPropuestas(true);
             } catch (e) {
+              governanceApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
               Alert.alert('Error', getErrorMessage(e, 'No se pudo proponer la expulsión'));
             } finally {
               setSubmittingExpulsion(false);
@@ -1027,14 +1061,21 @@ export default function AssemblyScreen({ embedded = false }) {
     <View style={[styles.container, embedded && { paddingHorizontal: 0, backgroundColor: 'transparent' }]}>
       {!embedded && <ScreenTitle title="🏛️ Asamblea Familiar" />}
 
+      {/* Indicador de límite o enfriamiento contra spam */}
+      {throttleStatus && !throttleStatus.can_propose && (
+        <View style={styles.throttleNoticeContainer}>
+          <Text style={styles.throttleNoticeIcon}>⏱️</Text>
+          <Text style={styles.throttleNoticeText}>
+            {throttleStatus.reason}
+          </Text>
+        </View>
+      )}
+
       {/* Botones de acción principales */}
       <View style={styles.actionRow}>
         <TouchableOpacity
           style={styles.proposeAdmissionButton}
-          onPress={() => {
-            setCreatedInvite(null);
-            setShowIngresoModal(true);
-          }}
+          onPress={handleOpenIngresoModal}
         >
           <Text style={styles.buttonIcon}>📥</Text>
           <Text style={styles.admissionButtonText}>Proponer Ingreso</Text>
@@ -1042,10 +1083,7 @@ export default function AssemblyScreen({ embedded = false }) {
 
         <TouchableOpacity
           style={styles.proposeExpulsionButton}
-          onPress={() => {
-            fetchExpulsables();
-            setShowExpulsionModal(true);
-          }}
+          onPress={handleOpenExpulsionModal}
         >
           <Text style={styles.buttonIcon}>⚠️</Text>
           <Text style={styles.expulsionButtonText}>Proponer Expulsión</Text>
@@ -3729,5 +3767,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fbbf24',
     fontVariant: ['tabular-nums'],
+  },
+  throttleNoticeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  throttleNoticeIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  throttleNoticeText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: '#fbbf24',
+    lineHeight: 17,
+    fontWeight: '500',
   },
 });
