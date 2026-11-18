@@ -2,8 +2,9 @@ import os
 import sys
 
 # Ensure backend and mutualfam app are in path
-sys.path.insert(0, "/civiccore_backend")
-sys.path.insert(0, "/app")
+for p in ["./civiccore/backend", "./civiccore/apps/mutualfam", "/civiccore_backend", "/app"]:
+    if os.path.exists(p) and p not in sys.path:
+        sys.path.insert(0, p)
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

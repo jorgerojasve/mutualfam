@@ -220,6 +220,7 @@ export const colectasApi = {
 
 export const asambleasApi = {
   getPropuestas: () => request('/gobernanza/propuestas'),
+  getThrottleStatus: () => request('/gobernanza/throttle-status'),
   getPropuesta: (id) => request(`/gobernanza/propuestas/${id}`),
   proponerIngreso: (data) => request('/gobernanza/proponer-ingreso', { method: 'POST', body: JSON.stringify(data) }),
   proponerExpulsion: (data) => request('/gobernanza/proponer-expulsion', { method: 'POST', body: JSON.stringify(data) }),

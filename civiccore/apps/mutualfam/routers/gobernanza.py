@@ -36,6 +36,11 @@ from routers.membership import get_current_org_member, get_current_user
 from services.notifications import notify_users
 from services.realtime import notify_org
 from services.telegram_bot import send_telegram_notification, send_telegram_photo
+from services.limits import (
+    check_can_create_proposal,
+    record_proposal_created,
+    get_proposal_throttle_status
+)
 
 router = APIRouter()
 
@@ -412,6 +417,7 @@ def proponer_ingreso(
     req: ProponerIngresoRequest,
     current_org_member: dict = Depends(get_current_org_member),
     x_bypass_grace: Optional[str] = Header(None, alias="X-Bypass-Grace-Period"),
+    x_bypass_rate: Optional[str] = Header(None, alias="X-Bypass-Rate-Limit"),
     db: Session = Depends(get_db)
 ):
     """
@@ -432,6 +438,14 @@ def proponer_ingreso(
             status_code=400,
             detail="La asamblea está inhabilitada durante el período de gracia de 24 horas de la mutual. Durante este período, el fundador puede invitar miembros directamente sin pasar por asamblea."
         )
+
+    # Regla 3: Límite de frecuencia, concurrencia y enfriamiento progresivo contra spam en asamblea
+    throttle = check_can_create_proposal(
+        db=db,
+        user_id=user.id,
+        org_id=org.id,
+        x_bypass_rate_limit=x_bypass_rate
+    )
 
     candidate_name = (req.candidate_name or "").strip()
     if not candidate_name and req.candidate_user_id:
@@ -459,6 +473,9 @@ def proponer_ingreso(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Registrar propuesta creada para activar período de enfriamiento
+    record_proposal_created(db=db, throttle=throttle, x_bypass=bool(x_bypass_rate))
 
     # Notificaciones según estado (auto-aprobado vs asamblea en debate)
     if proposal.status == ProposalStatus.APPROVED:
@@ -492,6 +509,7 @@ def proponer_ingreso(
 def proponer_expulsion(
     req: ProponerExpulsionRequest,
     current_org_member: dict = Depends(get_current_org_member),
+    x_bypass_rate: Optional[str] = Header(None, alias="X-Bypass-Rate-Limit"),
     db: Session = Depends(get_db)
 ):
     """
@@ -504,6 +522,14 @@ def proponer_expulsion(
 
     if not membership or membership.status != MemberStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Debes ser miembro activo de la mutual para proponer expulsiones")
+
+    # Regla 3: Límite de frecuencia, concurrencia y enfriamiento progresivo contra spam en asamblea
+    throttle = check_can_create_proposal(
+        db=db,
+        user_id=user.id,
+        org_id=org.id,
+        x_bypass_rate_limit=x_bypass_rate
+    )
 
     target_user_id = req.target_user_id or req.target_member_id
     motivo = (req.motivo or req.motive or "").strip()
@@ -570,6 +596,9 @@ def proponer_expulsion(
     )
     proposal = GovernanceService.create_proposal(db, author_id=user.id, proposal_in=proposal_in)
 
+    # Registrar propuesta creada para activar período de enfriamiento
+    record_proposal_created(db=db, throttle=throttle, x_bypass=bool(x_bypass_rate))
+
     # Notificaciones
     other_members = db.query(OrganizationMembership).filter(
         OrganizationMembership.organization_id == org.id,
@@ -592,6 +621,19 @@ def proponer_expulsion(
     notify_org(org.id, "PROPUESTA_CREADA", {"proposal_id": proposal.id, "type": "expulsion"})
 
     return _serialize_proposal(db, proposal, user.id)
+
+
+@router.get("/throttle-status")
+def get_proposal_throttle_status_endpoint(
+    current_org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna el estado de enfriamiento y capacidad de emitir propuestas del miembro autenticado.
+    """
+    org = current_org_member["organization"]
+    user = current_org_member["user"]
+    return get_proposal_throttle_status(db=db, user_id=user.id, org_id=org.id)
 
 
 @router.get("/propuestas")

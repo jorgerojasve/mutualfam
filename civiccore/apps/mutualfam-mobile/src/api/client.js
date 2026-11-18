@@ -391,6 +391,10 @@ export const governanceApi = {
     const { data } = await apiClient.get('/gobernanza/propuestas');
     return data;
   },
+  getThrottleStatus: async () => {
+    const { data } = await apiClient.get('/gobernanza/throttle-status');
+    return data;
+  },
   getPropuesta: async (id) => {
     const { data } = await apiClient.get(`/gobernanza/propuestas/${id}`);
     return data;

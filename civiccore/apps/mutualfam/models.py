@@ -275,3 +275,25 @@ class CompromisoColecta(Base):
     colecta = relationship("Colecta", back_populates="compromisos")
     socio = relationship("User", foreign_keys=[socio_id])
 
+
+class ProposalRateLimit(Base):
+    """
+    Rastrea el límite de frecuencia y enfriamiento de propuestas por miembro en la asamblea familiar.
+    Implementa protección contra ataques de inundación de propuestas con ampliación progresiva (exponential backoff).
+    """
+    __tablename__ = "proposal_rate_limits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    last_proposal_at = Column(DateTime, nullable=True)
+    blocked_until = Column(DateTime, nullable=True)
+    penalty_level = Column(Integer, default=0)
+    failed_attempts_count = Column(Integer, default=0)
+    last_attempt_at = Column(DateTime, default=utcnow)
+    total_proposals_created = Column(Integer, default=0)
+
+    user = relationship("User", foreign_keys=[user_id])
+
+
