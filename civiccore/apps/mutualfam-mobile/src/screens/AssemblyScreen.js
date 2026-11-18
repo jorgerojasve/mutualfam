@@ -1208,21 +1208,21 @@ export default function AssemblyScreen({ embedded = false }) {
                 {proposalDetail.status === 'voting' && (
                   <View style={styles.votingActionContainer}>
                     <View style={styles.votingHeaderRow}>
-                      <Text style={styles.votingHeader}>Emite tu voto (nominativo):</Text>
+                      <Text style={styles.votingHeader} numberOfLines={1}>Emite tu voto (nominativo):</Text>
                       {proposalDetail.my_vote ? (
                         <View style={[
                           styles.myVotePill,
                           {
                             backgroundColor: proposalDetail.my_vote === 'si'
-                              ? 'rgba(16, 185, 129, 0.2)'
+                              ? 'rgba(16, 185, 129, 0.25)'
                               : proposalDetail.my_vote === 'no'
-                                ? 'rgba(239, 68, 68, 0.2)'
-                                : 'rgba(148, 163, 184, 0.2)',
+                                ? 'rgba(239, 68, 68, 0.25)'
+                                : 'rgba(56, 189, 248, 0.25)',
                             borderColor: proposalDetail.my_vote === 'si'
                               ? '#10b981'
                               : proposalDetail.my_vote === 'no'
                                 ? '#ef4444'
-                                : '#94a3b8'
+                                : '#38bdf8'
                           }
                         ]}>
                           <Text style={[
@@ -1232,7 +1232,7 @@ export default function AssemblyScreen({ embedded = false }) {
                                 ? '#34d399'
                                 : proposalDetail.my_vote === 'no'
                                   ? '#f87171'
-                                  : '#cbd5e1'
+                                  : '#38bdf8'
                             }
                           ]}>
                             Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
@@ -1244,45 +1244,115 @@ export default function AssemblyScreen({ embedded = false }) {
                     {/* Botones de Voto */}
                     <View style={styles.voteButtonsRow}>
                       <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnSi, proposalDetail.my_vote === 'si' && styles.voteBtnSelected]}
+                        style={[
+                          styles.voteBtn,
+                          styles.voteBtnSi,
+                          proposalDetail.my_vote
+                            ? (proposalDetail.my_vote === 'si' ? styles.voteBtnSelectedSi : styles.voteBtnDimmed)
+                            : null
+                        ]}
                         onPress={() => handleVotar('si')}
                         disabled={submittingVote}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.voteBtnText}>👍 SÍ</Text>
+                        <Text style={[
+                          styles.voteBtnText,
+                          proposalDetail.my_vote === 'si' && styles.voteBtnTextSelected,
+                          proposalDetail.my_vote && proposalDetail.my_vote !== 'si' && styles.voteBtnTextDimmed
+                        ]}>
+                          👍 SÍ
+                        </Text>
+                        {proposalDetail.my_vote === 'si' ? (
+                          <View style={[styles.voteBadge, styles.voteBadgeSi]}>
+                            <Text style={styles.voteBadgeTextSi}>✓ Tu voto</Text>
+                          </View>
+                        ) : null}
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnNo, proposalDetail.my_vote === 'no' && styles.voteBtnSelected]}
+                        style={[
+                          styles.voteBtn,
+                          styles.voteBtnNo,
+                          proposalDetail.my_vote
+                            ? (proposalDetail.my_vote === 'no' ? styles.voteBtnSelectedNo : styles.voteBtnDimmed)
+                            : null
+                        ]}
                         onPress={() => handleVotar('no')}
                         disabled={submittingVote}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.voteBtnText}>
+                        <Text style={[
+                          styles.voteBtnText,
+                          proposalDetail.my_vote === 'no' && styles.voteBtnTextSelected,
+                          proposalDetail.my_vote && proposalDetail.my_vote !== 'no' && styles.voteBtnTextDimmed
+                        ]}>
                           👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
                         </Text>
+                        {proposalDetail.my_vote === 'no' ? (
+                          <View style={[styles.voteBadge, styles.voteBadgeNo]}>
+                            <Text style={styles.voteBadgeTextNo}>✓ Tu voto</Text>
+                          </View>
+                        ) : null}
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnAbstain, proposalDetail.my_vote === 'abstencion' && styles.voteBtnSelected]}
+                        style={[
+                          styles.voteBtn,
+                          styles.voteBtnAbstain,
+                          proposalDetail.my_vote
+                            ? (proposalDetail.my_vote === 'abstencion' ? styles.voteBtnSelectedAbstain : styles.voteBtnDimmed)
+                            : null
+                        ]}
                         onPress={() => handleVotar('abstencion')}
                         disabled={submittingVote}
+                        activeOpacity={0.7}
                       >
-                        <Text style={styles.voteBtnText}>⬜ Abstención</Text>
+                        <Text style={[
+                          styles.voteBtnText,
+                          proposalDetail.my_vote === 'abstencion' && styles.voteBtnTextSelected,
+                          proposalDetail.my_vote && proposalDetail.my_vote !== 'abstencion' && styles.voteBtnTextDimmed
+                        ]}>
+                          ⬜ Abstención
+                        </Text>
+                        {proposalDetail.my_vote === 'abstencion' ? (
+                          <View style={[styles.voteBadge, styles.voteBadgeAbstain]}>
+                            <Text style={styles.voteBadgeTextAbstain}>✓ Tu voto</Text>
+                          </View>
+                        ) : null}
                       </TouchableOpacity>
                     </View>
 
                     {/* Indicadores de Votos */}
                     <View style={styles.voteStatsGrid}>
-                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
+                      <View style={[
+                        styles.voteStatBox,
+                        { borderColor: '#10b981' },
+                        proposalDetail.my_vote === 'si' && { backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 2 }
+                      ]}>
                         <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
+                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'si' && { color: '#34d399', fontWeight: '800' }]}>
+                          A FAVOR (SÍ){proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
+                        </Text>
                       </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
+                      <View style={[
+                        styles.voteStatBox,
+                        { borderColor: '#ef4444' },
+                        proposalDetail.my_vote === 'no' && { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 2 }
+                      ]}>
                         <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
+                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'no' && { color: '#f87171', fontWeight: '800' }]}>
+                          EN CONTRA (NO){proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
+                        </Text>
                       </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
-                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
+                      <View style={[
+                        styles.voteStatBox,
+                        { borderColor: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' },
+                        proposalDetail.my_vote === 'abstencion' && { backgroundColor: 'rgba(56, 189, 248, 0.2)', borderWidth: 2 }
+                      ]}>
+                        <Text style={[styles.voteStatVal, { color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'abstencion' && { color: '#38bdf8', fontWeight: '800' }]}>
+                          ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? ' • Tú' : ''}
+                        </Text>
                       </View>
                     </View>
 
@@ -2616,17 +2686,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    gap: 8,
   },
   votingHeader: {
     color: '#f8fafc',
     fontSize: 14,
     fontWeight: '700',
+    flexShrink: 1,
   },
   myVotePill: {
     borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 3,
+    flexShrink: 0,
   },
   myVotePillText: {
     fontSize: 11,
@@ -2655,34 +2728,118 @@ const styles = StyleSheet.create({
   },
   voteButtonsRow: {
     flexDirection: 'row',
-    gap: 8
+    gap: 8,
+    alignItems: 'stretch',
+    marginBottom: 12,
   },
   voteBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    minHeight: 58,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 1
+    justifyContent: 'center',
+    borderWidth: 1.5,
   },
   voteBtnSi: {
-    backgroundColor: '#065f46',
-    borderColor: '#10b981'
+    backgroundColor: '#064e3b',
+    borderColor: '#059669',
   },
   voteBtnNo: {
-    backgroundColor: '#881337',
-    borderColor: '#ef4444'
+    backgroundColor: '#7f1d1d',
+    borderColor: '#dc2626',
   },
   voteBtnAbstain: {
     backgroundColor: '#1e293b',
-    borderColor: '#475569'
+    borderColor: '#64748b',
   },
-  voteBtnSelected: {
-    borderWidth: 3
+  voteBtnSelectedSi: {
+    backgroundColor: '#059669',
+    borderColor: '#34d399',
+    borderWidth: 2.5,
+    shadowColor: '#34d399',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  voteBtnSelectedNo: {
+    backgroundColor: '#b91c1c',
+    borderColor: '#f87171',
+    borderWidth: 2.5,
+    shadowColor: '#f87171',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  voteBtnSelectedAbstain: {
+    backgroundColor: '#334155',
+    borderColor: '#38bdf8',
+    borderWidth: 2.5,
+    shadowColor: '#38bdf8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  voteBtnDimmed: {
+    opacity: 0.35,
+    backgroundColor: '#0b1329',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   voteBtnText: {
     color: '#ffffff',
     fontSize: 13,
-    fontWeight: '700'
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  voteBtnTextSelected: {
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  voteBtnTextDimmed: {
+    color: '#94a3b8',
+  },
+  voteBadge: {
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  voteBadgeSi: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  voteBadgeNo: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  voteBadgeAbstain: {
+    backgroundColor: 'rgba(56, 189, 248, 0.25)',
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  voteBadgeTextSi: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  voteBadgeTextNo: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  voteBadgeTextAbstain: {
+    color: '#38bdf8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   debateNoticeBox: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
