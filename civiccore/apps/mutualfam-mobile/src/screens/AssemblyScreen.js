@@ -144,6 +144,7 @@ export default function AssemblyScreen({ embedded = false }) {
   const [proposalDetail, setProposalDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showVotingRules, setShowVotingRules] = useState(false);
 
   // Modal Proponer Ingreso
   const [showIngresoModal, setShowIngresoModal] = useState(false);
@@ -518,6 +519,7 @@ export default function AssemblyScreen({ embedded = false }) {
   const openProposalDetail = async (proposal) => {
     setSelectedProposal(proposal);
     setShowDetailModal(true);
+    setShowVotingRules(false);
     setLoadingDetail(true);
     setCommentText('');
     setReplyingTo(null);
@@ -1200,88 +1202,314 @@ export default function AssemblyScreen({ embedded = false }) {
                   <Text style={styles.proposerNote}>👤 Propuesto por: {proposalDetail.author_name}</Text>
                 </View>
 
-                {/* Enlace de Invitación Oficial (Admisión) */}
-                {proposalDetail.proposal_type === 'member_admission' && (
-                  proposalDetail.status === 'approved' ? (
-                    (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
-                      <View style={styles.sectionCard}>
-                        <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
-                        <View style={[styles.infoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10b981' }]}>
-                          <Text style={[styles.infoBannerText, { color: '#a7f3d0' }]}>
-                            ✅ Ingreso Concretado: El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                {/* ======================================================== */}
+                {/* 1. SECCIÓN DE VOTACIÓN DIRECTA (Si está en Votación)    */}
+                {/* ======================================================== */}
+                {proposalDetail.status === 'voting' && (
+                  <View style={styles.votingActionContainer}>
+                    <View style={styles.votingHeaderRow}>
+                      <Text style={styles.votingHeader}>Emite tu voto (nominativo):</Text>
+                      {proposalDetail.my_vote ? (
+                        <View style={[
+                          styles.myVotePill,
+                          {
+                            backgroundColor: proposalDetail.my_vote === 'si'
+                              ? 'rgba(16, 185, 129, 0.2)'
+                              : proposalDetail.my_vote === 'no'
+                                ? 'rgba(239, 68, 68, 0.2)'
+                                : 'rgba(148, 163, 184, 0.2)',
+                            borderColor: proposalDetail.my_vote === 'si'
+                              ? '#10b981'
+                              : proposalDetail.my_vote === 'no'
+                                ? '#ef4444'
+                                : '#94a3b8'
+                          }
+                        ]}>
+                          <Text style={[
+                            styles.myVotePillText,
+                            {
+                              color: proposalDetail.my_vote === 'si'
+                                ? '#34d399'
+                                : proposalDetail.my_vote === 'no'
+                                  ? '#f87171'
+                                  : '#cbd5e1'
+                            }
+                          ]}>
+                            Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
                           </Text>
                         </View>
+                      ) : null}
+                    </View>
+
+                    {/* Botones de Voto */}
+                    <View style={styles.voteButtonsRow}>
+                      <TouchableOpacity
+                        style={[styles.voteBtn, styles.voteBtnSi, proposalDetail.my_vote === 'si' && styles.voteBtnSelected]}
+                        onPress={() => handleVotar('si')}
+                        disabled={submittingVote}
+                      >
+                        <Text style={styles.voteBtnText}>👍 SÍ</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.voteBtn, styles.voteBtnNo, proposalDetail.my_vote === 'no' && styles.voteBtnSelected]}
+                        onPress={() => handleVotar('no')}
+                        disabled={submittingVote}
+                      >
+                        <Text style={styles.voteBtnText}>
+                          👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.voteBtn, styles.voteBtnAbstain, proposalDetail.my_vote === 'abstencion' && styles.voteBtnSelected]}
+                        onPress={() => handleVotar('abstencion')}
+                        disabled={submittingVote}
+                      >
+                        <Text style={styles.voteBtnText}>⬜ Abstención</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Indicadores de Votos */}
+                    <View style={styles.voteStatsGrid}>
+                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
+                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
                       </View>
-                    ) : proposalDetail.admission_cancelled ? (
-                      <View style={styles.sectionCard}>
-                        <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
-                        <View style={[styles.infoBanner, { backgroundColor: 'rgba(100, 116, 139, 0.2)', borderColor: '#64748b' }]}>
-                          <Text style={[styles.infoBannerText, { color: '#cbd5e1' }]}>
-                            ⏱️ Ingreso Cancelado: La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
-                          </Text>
-                        </View>
+                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
+                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
                       </View>
-                    ) : (proposalDetail.is_author || (currentUser?.id && proposalDetail.author_id === currentUser.id) || proposalDetail.invite_token) ? (
-                      <View style={styles.sectionCard}>
-                        <Text style={styles.sectionHeader}>Enlace de Invitación Oficial:</Text>
-                        <View style={styles.detailInviteBox}>
-                          <Text style={styles.detailInviteCode}>
-                            {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
+                      </View>
+                    </View>
+
+                    {/* Avance del Censo y Participación */}
+                    <View style={styles.voteProgressStrip}>
+                      <Text style={styles.voteProgressText}>
+                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                        </Text>
+                        {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
+                          ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
+                          : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
+                            ? ' (100% del censo ha votado)'
+                            : ''}
+                      </Text>
+                    </View>
+
+                    {/* Botón para Concluir y Computar Votación si corresponde */}
+                    {proposalDetail.can_conclude ? (
+                      <View style={styles.concludeContainer}>
+                        <TouchableOpacity
+                          style={styles.concludeBtn}
+                          onPress={handleCerrarPropuesta}
+                          disabled={closingProposal}
+                          activeOpacity={0.8}
+                        >
+                          {closingProposal ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+
+                    {/* Desplegable de Reglas y Detalles */}
+                    <TouchableOpacity
+                      style={styles.rulesToggleBtn}
+                      onPress={() => setShowVotingRules(!showVotingRules)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.rulesToggleBtnText}>
+                        ℹ️ {showVotingRules ? 'Ocultar regla y detalles' : 'Ver regla de votación y detalles'} {showVotingRules ? '▲' : '▼'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {showVotingRules && (
+                      <View style={styles.rulesCollapsibleContent}>
+                        {proposalDetail.proposal_type === 'member_admission' && (
+                          <Text style={styles.ruleNote}>
+                            * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
                           </Text>
-                          <Text style={styles.detailInviteSub}>
-                            ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
+                        )}
+                        {proposalDetail.proposal_type === 'expulsion' && (
+                          <Text style={styles.ruleNote}>
+                            * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
                           </Text>
-                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                            <TouchableOpacity
-                              style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
-                              onPress={() =>
-                                handleShareInvite(
-                                  proposalDetail.invite_token,
-                                  proposalDetail.candidate_name,
-                                  proposalDetail.invite_code_formatted
-                                )
+                        )}
+                        <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
+                          {(() => {
+                            if (proposalDetail.has_veto) {
+                              return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
+                            }
+                            if (proposalDetail.proposal_type === 'member_admission') {
+                              const needed = proposalDetail.votes_yes_needed || 2;
+                              const currentYes = proposalDetail.votes_yes || 0;
+                              const total = proposalDetail.total_active_members || 2;
+                              const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+
+                              if (proposalDetail.threshold_reached && pending === 0) {
+                                return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
                               }
-                            >
-                              <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
-                              onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
-                            >
-                              <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
-                            </TouchableOpacity>
-                          </View>
+                              if (currentYes >= total) {
+                                return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
+                              }
+                              return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                            }
+
+                            if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
+                              return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
+                            }
+                            return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
+                          })()}
+                        </Text>
+                        {proposalDetail.proposal_type === 'member_admission' && (
+                          <Text style={[styles.ruleNote, { marginTop: 6 }]}>
+                            El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ======================================================== */}
+                {/* 2. INVITACIÓN OFICIAL (Solo si está Aprobada)           */}
+                {/* ======================================================== */}
+                {proposalDetail.proposal_type === 'member_admission' && proposalDetail.status === 'approved' && (
+                  (proposalDetail.member_joined || proposalDetail.redeemed_by_name) ? (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
+                      <View style={[styles.infoBanner, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: '#10b981' }]}>
+                        <Text style={[styles.infoBannerText, { color: '#a7f3d0' }]}>
+                          ✅ Ingreso Concretado: El familiar {proposalDetail.redeemed_by_name || proposalDetail.candidate_name} ya canjeó su invitación y es miembro activo de la mutual.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : proposalDetail.admission_cancelled ? (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Estado del Ingreso:</Text>
+                      <View style={[styles.infoBanner, { backgroundColor: 'rgba(100, 116, 139, 0.2)', borderColor: '#64748b' }]}>
+                        <Text style={[styles.infoBannerText, { color: '#cbd5e1' }]}>
+                          ⏱️ Ingreso Cancelado: La invitación de 15 días expiró sin que el nuevo miembro ingresara a la mutual.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (proposalDetail.is_author || (currentUser?.id && proposalDetail.author_id === currentUser.id) || proposalDetail.invite_token) ? (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Enlace de Invitación Oficial:</Text>
+                      <View style={styles.detailInviteBox}>
+                        <Text style={styles.detailInviteCode}>
+                          {proposalDetail.invite_code_formatted || proposalDetail.invite_token}
+                        </Text>
+                        <Text style={styles.detailInviteSub}>
+                          ⏳ Invitación aprobada de 15 días. Lista para compartir exclusivamente con el familiar.
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                           <TouchableOpacity
-                            style={styles.cancelInviteBtn}
-                            onPress={handleCancelarIngreso}
+                            style={[styles.primaryButton, { flex: 1, backgroundColor: '#16a34a', marginVertical: 0 }]}
+                            onPress={() =>
+                              handleShareInvite(
+                                proposalDetail.invite_token,
+                                proposalDetail.candidate_name,
+                                proposalDetail.invite_code_formatted
+                              )
+                            }
                           >
-                            <Text style={styles.cancelInviteBtnText}>⚠️ Cancelar Invitación de Ingreso</Text>
+                            <Text style={styles.primaryButtonText}>💬 WhatsApp</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.secondaryButton, { flex: 1, marginVertical: 0 }]}
+                            onPress={() => handleCopyCode(proposalDetail.invite_code_formatted || proposalDetail.invite_token)}
+                          >
+                            <Text style={styles.secondaryButtonText}>📋 Copiar</Text>
                           </TouchableOpacity>
                         </View>
+                        <TouchableOpacity
+                          style={styles.cancelInviteBtn}
+                          onPress={handleCancelarIngreso}
+                        >
+                          <Text style={styles.cancelInviteBtnText}>⚠️ Cancelar Invitación de Ingreso</Text>
+                        </TouchableOpacity>
                       </View>
-                    ) : (
-                      <View style={styles.sectionCard}>
-                        <Text style={styles.sectionHeader}>Estado de la Invitación:</Text>
-                        <View style={styles.infoBanner}>
-                          <Text style={styles.infoBannerText}>
-                            ⏳ Ingreso Aprobado • En Espera: La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
-                          </Text>
-                        </View>
-                      </View>
-                    )
-                  ) : (proposalDetail.status === 'debate' || proposalDetail.status === 'voting') ? (
+                    </View>
+                  ) : (
                     <View style={styles.sectionCard}>
                       <Text style={styles.sectionHeader}>Estado de la Invitación:</Text>
                       <View style={styles.infoBanner}>
                         <Text style={styles.infoBannerText}>
-                          ⚖️ La propuesta se encuentra en período de {proposalDetail.status === 'debate' ? 'debate' : 'votación'}. El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                          ⏳ Ingreso Aprobado • En Espera: La asamblea familiar aprobó el ingreso de {proposalDetail.candidate_name}. El código de invitación oficial fue asignado exclusivamente a {proposalDetail.author_name} (proponente) para su entrega al nuevo miembro.
                         </Text>
                       </View>
                     </View>
-                  ) : null
+                  )
                 )}
 
-                {/* Sección de Defensa (Expulsión) */}
+                {/* ======================================================== */}
+                {/* 3. RESULTADO DE VOTACIÓN (Para propuestas concluidas)    */}
+                {/* ======================================================== */}
+                {(proposalDetail.status === 'approved' || proposalDetail.status === 'rejected') && (
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionHeader}>Resultado de la Votación</Text>
+                    <View style={styles.voteStatsGrid}>
+                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
+                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
+                      </View>
+                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
+                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
+                      </View>
+                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
+                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
+                      </View>
+                    </View>
+
+                    {/* Avance del Censo y Participación */}
+                    <View style={styles.voteProgressStrip}>
+                      <Text style={styles.voteProgressText}>
+                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                        </Text>
+                      </Text>
+                    </View>
+
+                    {/* Desplegable de Reglas */}
+                    <TouchableOpacity
+                      style={styles.rulesToggleBtn}
+                      onPress={() => setShowVotingRules(!showVotingRules)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.rulesToggleBtnText}>
+                        ℹ️ {showVotingRules ? 'Ocultar regla de votación' : 'Ver regla de votación'} {showVotingRules ? '▲' : '▼'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {showVotingRules && (
+                      <View style={styles.rulesCollapsibleContent}>
+                        {proposalDetail.proposal_type === 'member_admission' && (
+                          <Text style={styles.ruleNote}>
+                            * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
+                          </Text>
+                        )}
+                        {proposalDetail.proposal_type === 'expulsion' && (
+                          <Text style={styles.ruleNote}>
+                            * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* ======================================================== */}
+                {/* 4. SECCIÓN DE DEFENSA (Si es Expulsión)                 */}
+                {/* ======================================================== */}
                 {proposalDetail.proposal_type === 'expulsion' && (
                   <View style={styles.sectionCard}>
                     <Text style={styles.sectionHeader}>Defensa del Miembro Acusado:</Text>
@@ -1323,131 +1551,6 @@ export default function AssemblyScreen({ embedded = false }) {
                         </TouchableOpacity>
                       </View>
                     )}
-                  </View>
-                )}
-
-                {/* Conteo de Votos y Resultados (Solo visible una vez iniciado el período de votación) */}
-                {proposalDetail.status !== 'debate' && (
-                  <View style={styles.sectionCard}>
-                    <Text style={styles.sectionHeader}>Estado de Votación</Text>
-                    <View style={styles.voteStatsGrid}>
-                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
-                      </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
-                      </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
-                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
-                      </View>
-                    </View>
-
-                    {/* Avance del Censo y Participación */}
-                    <View style={styles.voteProgressStrip}>
-                      <Text style={styles.voteProgressText}>
-                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
-                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
-                        </Text>
-                        {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
-                          ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
-                          : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
-                            ? ' (100% del censo ha votado)'
-                            : ''}
-                      </Text>
-                    </View>
-
-                    {proposalDetail.proposal_type === 'member_admission' && (
-                      <Text style={styles.ruleNote}>
-                        * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
-                      </Text>
-                    )}
-                    {proposalDetail.proposal_type === 'expulsion' && (
-                      <Text style={styles.ruleNote}>
-                        * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
-                      </Text>
-                    )}
-                  </View>
-                )}
-
-                {/* Botones de Voto si está en fase de votación */}
-                {proposalDetail.status === 'voting' && (
-                  <View style={styles.votingActionContainer}>
-                    <Text style={styles.votingHeader}>Emite tu voto (nominativo):</Text>
-                    <View style={styles.voteButtonsRow}>
-                      <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnSi, proposalDetail.my_vote === 'si' && styles.voteBtnSelected]}
-                        onPress={() => handleVotar('si')}
-                        disabled={submittingVote}
-                      >
-                        <Text style={styles.voteBtnText}>👍 SÍ</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnNo, proposalDetail.my_vote === 'no' && styles.voteBtnSelected]}
-                        onPress={() => handleVotar('no')}
-                        disabled={submittingVote}
-                      >
-                        <Text style={styles.voteBtnText}>
-                          👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.voteBtn, styles.voteBtnAbstain, proposalDetail.my_vote === 'abstencion' && styles.voteBtnSelected]}
-                        onPress={() => handleVotar('abstencion')}
-                        disabled={submittingVote}
-                      >
-                        <Text style={styles.voteBtnText}>⬜ Abstención</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Botón para Concluir y Computar Votación */}
-                    <View style={styles.concludeContainer}>
-                      {proposalDetail.can_conclude ? (
-                        <TouchableOpacity
-                          style={styles.concludeBtn}
-                          onPress={handleCerrarPropuesta}
-                          disabled={closingProposal}
-                          activeOpacity={0.8}
-                        >
-                          {closingProposal ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
-                          )}
-                        </TouchableOpacity>
-                      ) : null}
-
-                      <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
-                        {(() => {
-                          if (proposalDetail.has_veto) {
-                            return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
-                          }
-                          if (proposalDetail.proposal_type === 'member_admission') {
-                            const needed = proposalDetail.votes_yes_needed || 2;
-                            const currentYes = proposalDetail.votes_yes || 0;
-                            const total = proposalDetail.total_active_members || 2;
-                            const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
-
-                            if (proposalDetail.threshold_reached && pending === 0) {
-                              return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
-                            }
-                            if (currentYes >= total) {
-                              return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
-                            }
-                            return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
-                          }
-
-                          if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
-                            return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
-                          }
-                          return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
-                        })()}
-                      </Text>
-                    </View>
                   </View>
                 )}
 
@@ -2508,12 +2611,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#3b82f6'
   },
+  votingHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   votingHeader: {
     color: '#f8fafc',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center'
+  },
+  myVotePill: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  myVotePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  rulesToggleBtn: {
+    marginTop: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  rulesToggleBtnText: {
+    color: '#60a5fa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rulesCollapsibleContent: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   voteButtonsRow: {
     flexDirection: 'row',
