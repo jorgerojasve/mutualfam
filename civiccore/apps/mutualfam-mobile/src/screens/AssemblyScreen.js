@@ -194,32 +194,47 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
+  // Cargar propuestas desde caché local de inmediato
+  const loadCachedPropuestas = async (orgId) => {
+    if (!orgId) return;
+    try {
+      const cached = await AsyncStorage.getItem(`cached_asambleas_${orgId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPropuestas(parsed);
+        }
+      }
+    } catch (_) {}
+  };
+
   // Cargar propuestas
   const fetchPropuestas = async (isRefresh = false) => {
     if (!activeOrg?.id) return;
     try {
       if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+      else if (propuestas.length === 0) setLoading(true);
       setConnectionError(false);
 
+      // Si aún no tenemos propuestas en memoria, cargar de caché de inmediato
+      if (propuestas.length === 0) {
+        await loadCachedPropuestas(activeOrg.id);
+      }
+
       const data = await governanceApi.getPropuestas();
-      setPropuestas(data);
+      if (Array.isArray(data)) {
+        setPropuestas(data);
+        AsyncStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+      }
       if (setIsOffline) setIsOffline(false);
-      AsyncStorage.setItem(`cached_asambleas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
 
       // Consultar estado de enfriamiento y límites de propuestas
       governanceApi.getThrottleStatus().then(st => setThrottleStatus(st)).catch(() => {});
     } catch (e) {
-      if (isNetworkError(e)) {
-        setConnectionError(true);
-        if (setIsOffline) setIsOffline(true);
-        try {
-          const cached = await AsyncStorage.getItem(`cached_asambleas_${activeOrg.id}`);
-          if (cached) setPropuestas(JSON.parse(cached));
-        } catch (_) {}
-      } else {
-        console.warn('Error fetching propuestas', e);
-      }
+      setConnectionError(true);
+      if (isNetworkError(e) && setIsOffline) setIsOffline(true);
+      // Rescatar siempre de caché en caso de error
+      await loadCachedPropuestas(activeOrg.id);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -236,13 +251,13 @@ export default function AssemblyScreen({ embedded = false }) {
     }
   };
 
-
   useEffect(() => {
     fetchUser();
   }, []);
 
   useEffect(() => {
     if (activeOrg?.id) {
+      loadCachedPropuestas(activeOrg.id);
       fetchPropuestas();
     } else if (!orgLoading) {
       setLoading(false);
@@ -252,6 +267,7 @@ export default function AssemblyScreen({ embedded = false }) {
   useFocusEffect(
     useCallback(() => {
       if (activeOrg?.id) {
+        loadCachedPropuestas(activeOrg.id);
         fetchPropuestas();
       }
     }, [activeOrg?.id])
@@ -1097,7 +1113,7 @@ export default function AssemblyScreen({ embedded = false }) {
           onPress={() => setActiveTab('activas')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'activas' && styles.tabButtonTextActive]}>
-            {(isOffline || connectionError) && countActivas === 0 ? 'Activas (Sin conexión)' : `Activas (${countActivas})`}
+            {countActivas > 0 ? `Activas (${countActivas})` : 'Activas'}
           </Text>
         </TouchableOpacity>
 
@@ -1106,7 +1122,7 @@ export default function AssemblyScreen({ embedded = false }) {
           onPress={() => setActiveTab('historial')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'historial' && styles.tabButtonTextActive]}>
-            {(isOffline || connectionError) && countHistorial === 0 ? 'Historial (Sin conexión)' : `Historial (${countHistorial})`}
+            {countHistorial > 0 ? `Historial (${countHistorial})` : 'Historial'}
           </Text>
         </TouchableOpacity>
       </View>

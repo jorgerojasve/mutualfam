@@ -553,33 +553,50 @@ export default function FundsScreen({ navigation }) {
     }
   };
 
+  // Cargar datos de colectas y fondos desde caché de inmediato
+  const loadCachedFundsData = async (orgId) => {
+    if (!orgId) return;
+    try {
+      const [cColectas, cFunds] = await Promise.all([
+        AsyncStorage.getItem(`cached_colectas_${orgId}`).catch(() => null),
+        AsyncStorage.getItem(`cached_funds_${orgId}`).catch(() => null)
+      ]);
+      if (cColectas) {
+        const parsed = JSON.parse(cColectas);
+        if (Array.isArray(parsed) && parsed.length > 0) setColectas(parsed);
+      }
+      if (cFunds) {
+        const parsed = JSON.parse(cFunds);
+        if (Array.isArray(parsed) && parsed.length > 0) setFunds(parsed);
+      }
+    } catch (_) {}
+  };
+
   // Cargar Colectas y Tasas
   const fetchColectas = async () => {
     try {
-      setLoadingColectas(true);
+      if (colectas.length === 0) setLoadingColectas(true);
       setConnectionError(false);
+      if (activeOrg?.id && colectas.length === 0) {
+        await loadCachedFundsData(activeOrg.id);
+      }
       const [data, ratesData] = await Promise.all([
         colectasApi.getColectas(),
         colectasApi.getRates().catch(() => ({}))
       ]);
-      setColectas(data);
+      if (Array.isArray(data)) {
+        setColectas(data);
+        if (activeOrg?.id) {
+          AsyncStorage.setItem(`cached_colectas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
+        }
+      }
       setRates(ratesData);
       if (setIsOffline) setIsOffline(false);
-      if (activeOrg?.id) {
-        AsyncStorage.setItem(`cached_colectas_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
-      }
     } catch (e) {
-      if (isNetworkError(e)) {
-        setConnectionError(true);
-        if (setIsOffline) setIsOffline(true);
-        if (activeOrg?.id) {
-          try {
-            const cached = await AsyncStorage.getItem(`cached_colectas_${activeOrg.id}`);
-            if (cached) setColectas(JSON.parse(cached));
-          } catch (_) {}
-        }
-      } else {
-        console.warn('Error loading colectas', e);
+      setConnectionError(true);
+      if (isNetworkError(e) && setIsOffline) setIsOffline(true);
+      if (activeOrg?.id) {
+        await loadCachedFundsData(activeOrg.id);
       }
     } finally {
       setLoadingColectas(false);
@@ -589,26 +606,21 @@ export default function FundsScreen({ navigation }) {
   // Cargar Fondos Comunes
   const fetchFunds = async () => {
     try {
-      setLoadingFunds(true);
+      if (funds.length === 0) setLoadingFunds(true);
       setConnectionError(false);
       const data = await fundsApi.getFunds();
-      setFunds(data);
-      if (setIsOffline) setIsOffline(false);
-      if (activeOrg?.id) {
-        AsyncStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
-      }
-    } catch (e) {
-      if (isNetworkError(e)) {
-        setConnectionError(true);
-        if (setIsOffline) setIsOffline(true);
+      if (Array.isArray(data)) {
+        setFunds(data);
         if (activeOrg?.id) {
-          try {
-            const cached = await AsyncStorage.getItem(`cached_funds_${activeOrg.id}`);
-            if (cached) setFunds(JSON.parse(cached));
-          } catch (_) {}
+          AsyncStorage.setItem(`cached_funds_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
         }
-      } else {
-        console.warn('Error loading funds', e);
+      }
+      if (setIsOffline) setIsOffline(false);
+    } catch (e) {
+      setConnectionError(true);
+      if (isNetworkError(e) && setIsOffline) setIsOffline(true);
+      if (activeOrg?.id) {
+        await loadCachedFundsData(activeOrg.id);
       }
     } finally {
       setLoadingFunds(false);
@@ -637,6 +649,7 @@ export default function FundsScreen({ navigation }) {
 
   useEffect(() => {
     if (activeOrg?.id) {
+      loadCachedFundsData(activeOrg.id);
       fetchColectas();
       fetchFunds();
     } else if (!orgLoading) {
@@ -648,6 +661,7 @@ export default function FundsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (activeOrg?.id) {
+        loadCachedFundsData(activeOrg.id);
         fetchColectas();
         fetchFunds();
         fetchUserPaymentConfig();
@@ -798,7 +812,7 @@ export default function FundsScreen({ navigation }) {
 
   const handlePressCreateColecta = async () => {
     try {
-      if (activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1) {
+      if (!isOffline && activeOrg?.role === 'founder' && activeOrg?.members_count === 1) {
         Alert.alert(
           'Invitaciones Requeridas',
           'Tu mutual aún no tiene otros miembros familiares. Debes invitar a tus familiares antes de proponer una colecta solidaria.',
@@ -2468,7 +2482,7 @@ export default function FundsScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1 && (
+      {!isOffline && activeOrg?.role === 'founder' && activeOrg?.members_count === 1 && (
         <TouchableOpacity
           style={styles.missingPmBanner}
           onPress={() => navigation.navigate('Familia')}

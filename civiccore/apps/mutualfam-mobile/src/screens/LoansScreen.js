@@ -207,7 +207,7 @@ export default function LoansScreen({ navigation }) {
   };
 
   const handlePressCreateLoan = async () => {
-    if (activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1) {
+    if (!isOffline && activeOrg?.role === 'founder' && activeOrg?.members_count === 1) {
       Alert.alert(
         "Invitaciones Requeridas",
         "Tu mutual aún no tiene otros miembros familiares. Debes invitar a tus familiares antes de solicitar un préstamo.",
@@ -341,31 +341,39 @@ export default function LoansScreen({ navigation }) {
     ? parsedLoanAmount / effectiveBcvRate
     : null;
 
+  const loadCachedLoans = async (orgId) => {
+    if (!orgId) return;
+    try {
+      const cached = await AsyncStorage.getItem(`cached_loans_${orgId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLoans(parsed);
+        }
+      }
+    } catch (_) {}
+  };
+
   const fetchLoans = async () => {
-    setLoading(true);
+    if (loans.length === 0) setLoading(true);
     setConnectionError(false);
+    if (activeOrg?.id && loans.length === 0) {
+      await loadCachedLoans(activeOrg.id);
+    }
     try {
       const data = await loansApi.getLoans();
-      setLoans(data);
-      if (setIsOffline) setIsOffline(false);
-      if (activeOrg?.id) {
-        AsyncStorage.setItem(`cached_loans_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
-      }
-    } catch (error) {
-      if (isNetworkError(error)) {
-        setConnectionError(true);
-        if (setIsOffline) setIsOffline(true);
-        // Rescatar préstamos cacheados si existen
+      if (Array.isArray(data)) {
+        setLoans(data);
         if (activeOrg?.id) {
-          try {
-            const cached = await AsyncStorage.getItem(`cached_loans_${activeOrg.id}`);
-            if (cached) {
-              setLoans(JSON.parse(cached));
-            }
-          } catch (_) {}
+          AsyncStorage.setItem(`cached_loans_${activeOrg.id}`, JSON.stringify(data)).catch(() => {});
         }
-      } else {
-        Alert.alert('Error', 'No se pudieron cargar los préstamos');
+      }
+      if (setIsOffline) setIsOffline(false);
+    } catch (error) {
+      setConnectionError(true);
+      if (isNetworkError(error) && setIsOffline) setIsOffline(true);
+      if (activeOrg?.id) {
+        await loadCachedLoans(activeOrg.id);
       }
     } finally {
       setLoading(false);
@@ -385,6 +393,7 @@ export default function LoansScreen({ navigation }) {
   useEffect(() => {
     fetchPaymentConfig();
     if (activeOrg?.id) {
+      loadCachedLoans(activeOrg.id);
       fetchLoans();
     } else if (!orgLoading) {
       setLoading(false);
@@ -397,6 +406,7 @@ export default function LoansScreen({ navigation }) {
       fetchUser();
       fetchPaymentConfig();
       if (activeOrg?.id) {
+        loadCachedLoans(activeOrg.id);
         fetchLoans();
       } else if (!orgLoading) {
         setLoading(false);
@@ -1266,7 +1276,7 @@ export default function LoansScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {activeOrg?.role === 'founder' && activeOrg?.members_count !== undefined && activeOrg?.members_count <= 1 && (
+      {!isOffline && activeOrg?.role === 'founder' && activeOrg?.members_count === 1 && (
         <TouchableOpacity 
           style={styles.missingPmBanner} 
           onPress={() => navigation.navigate('Familia')}
