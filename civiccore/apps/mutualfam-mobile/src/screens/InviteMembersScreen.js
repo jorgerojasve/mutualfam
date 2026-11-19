@@ -21,6 +21,7 @@ export default function InviteMembersScreen({ navigation, route }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [debugOrgId, setDebugOrgId] = useState('');
   const [members, setMembers] = useState([]);
+  const [hasLoadedMembers, setHasLoadedMembers] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [showSecurityZone, setShowSecurityZone] = useState(false);
@@ -60,20 +61,41 @@ export default function InviteMembersScreen({ navigation, route }) {
     );
   };
 
+  const loadCachedMembers = async (orgId) => {
+    if (!orgId) return;
+    try {
+      const cached = await AsyncStorage.getItem(`cached_members_${orgId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMembers(parsed);
+          setHasLoadedMembers(true);
+          if (activeOrg && !activeOrg.members_count) {
+            activeOrg.members_count = parsed.length;
+          }
+        }
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
     if (activeOrg?.id) {
+      loadCachedMembers(activeOrg.id);
       fetchOrgInfo();
     } else if (!orgLoading) {
       setLoading(false);
+      setHasLoadedMembers(true);
     }
   }, [activeOrg?.id, orgLoading]);
 
   useFocusEffect(
     useCallback(() => {
       if (activeOrg?.id) {
+        loadCachedMembers(activeOrg.id);
         fetchOrgInfo();
       } else if (!orgLoading) {
         setLoading(false);
+        setHasLoadedMembers(true);
       }
     }, [activeOrg?.id, orgLoading])
   );
@@ -104,32 +126,45 @@ export default function InviteMembersScreen({ navigation, route }) {
   }, [orgData]);
 
   const fetchOrgInfo = async () => {
-    setLoading(true);
     try {
       if (!activeOrg?.id) {
         setErrorMsg('Tu ID de mutual no coincide con ninguna mutual de tu cuenta.');
         setOrgData(null);
+        setLoading(false);
         return;
       }
       setOrgData(activeOrg);
+
+      // Si aún no tenemos miembros en memoria, cargar caché de inmediato
+      if (members.length === 0) {
+        await loadCachedMembers(activeOrg.id);
+      }
+
       try {
         const [membersData, meData] = await Promise.all([
-          authApi.getMembers(activeOrg.id).catch(() => []),
+          authApi.getMembers(activeOrg.id),
           authApi.me().catch(() => null)
         ]);
-        setMembers(membersData);
-        if (activeOrg && membersData) {
-          activeOrg.members_count = membersData.length;
+        if (Array.isArray(membersData) && membersData.length > 0) {
+          setMembers(membersData);
+          setHasLoadedMembers(true);
+          if (activeOrg) {
+            activeOrg.members_count = membersData.length;
+          }
+          await AsyncStorage.setItem(`cached_members_${activeOrg.id}`, JSON.stringify(membersData)).catch(() => {});
         }
         if (meData) setCurrentUser(meData);
       } catch (memErr) {
-        console.warn("Could not fetch members", memErr);
+        console.warn("Could not fetch members online, preserving cached data", memErr);
+        // En caso de fallo de red, asegurar que la caché local esté activa
+        await loadCachedMembers(activeOrg.id);
       }
     } catch (e) {
       console.warn(e);
       setErrorMsg(getErrorMessage(e, 'Error de API'));
     } finally {
       setLoading(false);
+      setHasLoadedMembers(true);
     }
   };
 
@@ -171,7 +206,12 @@ export default function InviteMembersScreen({ navigation, route }) {
     }
   };
 
-  const isSoleMember = !loading && orgData?.role === 'founder' && members.length <= 1;
+  const effectiveMemberCount = members.length > 0
+    ? members.length
+    : (activeOrg?.members_count || 0);
+
+  // Solo considerar miembro único si NO estamos offline y efectivamente hay exactamente 1 miembro verificado
+  const isSoleMember = !loading && !isOffline && orgData?.role === 'founder' && effectiveMemberCount === 1;
 
   const renderInviteCard = () => (
     <View style={styles.card}>
@@ -267,7 +307,7 @@ export default function InviteMembersScreen({ navigation, route }) {
           onPress={() => setActiveTab('miembros')}
         >
           <Text style={[styles.tabButtonText, activeTab === 'miembros' && styles.tabButtonTextActive]}>
-            {isOffline && members.length === 0 ? '👥 Miembros (Sin conexión)' : `👥 Miembros (${members.length})`}
+            {hasLoadedMembers && effectiveMemberCount > 0 ? `👥 Miembros (${effectiveMemberCount})` : '👥 Miembros'}
           </Text>
         </TouchableOpacity>
 
@@ -367,10 +407,12 @@ export default function InviteMembersScreen({ navigation, route }) {
 
           <View style={[styles.card, { marginBottom: 20 }]}>
             <Text style={styles.cardTitle}>
-              {isOffline && members.length === 0 ? 'Miembros Actuales (Sin conexión)' : `Miembros Actuales (${members.length})`}
+              {hasLoadedMembers && effectiveMemberCount > 0 ? `Miembros Actuales (${effectiveMemberCount})` : 'Miembros Actuales'}
             </Text>
             {members.length === 0 ? (
-              <Text style={styles.cardText}>No hay miembros que mostrar.</Text>
+              <Text style={styles.cardText}>
+                {isOffline ? 'Sin conexión de red. Conéctate para actualizar la lista de miembros.' : 'No hay miembros que mostrar.'}
+              </Text>
             ) : (
               members.map(member => {
                 const isMe = (currentUser?.id && member.id === currentUser.id) ||

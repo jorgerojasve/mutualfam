@@ -5,22 +5,32 @@ import { Users, TrendingUp, AlertTriangle } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [stats, setStats] = useState(null);
+  const { user, activeOrg } = useAuthStore();
+  const [stats, setStats] = useState(() => {
+    try {
+      const cached = localStorage.getItem('cached_dashboard_stats');
+      return cached ? JSON.parse(cached) : null;
+    } catch (_) {
+      return null;
+    }
+  });
   const [activeProposals, setActiveProposals] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!stats);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true);
+        if (!stats) setIsLoading(true);
         const [statsData, proposalsData] = await Promise.all([
-          membershipApi.stats(),
-          gobernanzaApi.listarPropuestas()
+          membershipApi.stats().catch(() => null),
+          gobernanzaApi.listarPropuestas().catch(() => [])
         ]);
-        setStats(statsData);
+        if (statsData) {
+          setStats(statsData);
+          localStorage.setItem('cached_dashboard_stats', JSON.stringify(statsData));
+        }
         // Filter voting proposals
-        const votingCount = proposalsData.filter(p => p.status === 'VOTING').length;
+        const votingCount = (proposalsData || []).filter(p => p.status === 'VOTING').length;
         setActiveProposals(votingCount);
       } catch (error) {
         console.error("Failed to load dashboard data", error);
@@ -65,7 +75,7 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="stat-value">
-            {isLoading ? '...' : stats?.total_members || 0}
+            {isLoading && !stats ? '...' : (stats?.total_members || activeOrg?.members_count || (isLoading ? '...' : '-'))}
           </div>
           <p className="stat-footer text-muted">
             <span className="text-success flex items-center gap-2">
