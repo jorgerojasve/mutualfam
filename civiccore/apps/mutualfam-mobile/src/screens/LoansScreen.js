@@ -31,6 +31,21 @@ import {
 
 const AVAILABLE_PAYMENT_METHODS = ["Pago Móvil", /* "Zelle", */ "Efectivo USD", "Efectivo Bolívares", "Transferencia Bancaria", "Binance"];
 
+const isContribInCashUsd = (contrib, loan) => {
+  if (!contrib) return false;
+  const pm = String(contrib.payment_method || '').toLowerCase().trim();
+  if (pm === 'efectivo usd' || pm === 'efectivo_usd' || pm === 'efectivo' || pm.includes('efectivo')) {
+    return true;
+  }
+  if (loan?.accepted_payment_methods && Array.isArray(loan.accepted_payment_methods)) {
+    const methods = loan.accepted_payment_methods;
+    if (methods.includes('Efectivo USD') && !methods.includes('Pago Móvil') && !methods.includes('Transferencia Bancaria')) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export default function LoansScreen({ navigation }) {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -231,7 +246,15 @@ export default function LoansScreen({ navigation }) {
       return;
     }
     const userAvail = getAvailablePaymentMethods(latestConfig);
-    setAcceptedMethods(userAvail.length > 0 ? userAvail : []);
+    const bsMethods = userAvail.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria');
+    const hasUsd = userAvail.includes('Efectivo USD');
+    let initialAccepted = [];
+    if (loanCurrency === 'VES') {
+      initialAccepted = bsMethods;
+    } else {
+      initialAccepted = bsMethods.length > 0 ? bsMethods : (hasUsd ? ['Efectivo USD'] : []);
+    }
+    setAcceptedMethods(initialAccepted);
     setShowModal(true);
   };
 
@@ -294,7 +317,23 @@ export default function LoansScreen({ navigation }) {
     const remaining = Math.max(0, +(c.amount_usd - totalRepaid).toFixed(2));
     setSelectedContrib(c);
     setSelectedLoan(loanItem);
-    setNotifyMethod('');
+    
+    // Regla: Las devoluciones de dólares en efectivo deben ser en dólares en efectivo
+    const isCashOriginal = isContribInCashUsd(c, loanItem);
+    if (isCashOriginal) {
+      setNotifyMethod('Efectivo USD');
+    } else {
+      let defaultBsMethod = 'Pago Móvil';
+      if (c.funder_payment_methods_json) {
+        try {
+          const methods = Object.keys(JSON.parse(c.funder_payment_methods_json));
+          if (methods.includes('Pago Móvil')) defaultBsMethod = 'Pago Móvil';
+          else if (methods.includes('Transferencia Bancaria')) defaultBsMethod = 'Transferencia Bancaria';
+        } catch (_) {}
+      }
+      setNotifyMethod(defaultBsMethod);
+    }
+
     setCashPayroll({});
     setCashSerials('');
     setCashDeliveryNote('');
@@ -317,6 +356,16 @@ export default function LoansScreen({ navigation }) {
         const calculatedUsd = parsed / effectiveBcvRate;
         setAmount(formatVE(calculatedUsd));
       }
+    }
+    if (newCurr === 'VES') {
+      const available = getAvailablePaymentMethods(paymentConfig);
+      const bsMethods = available.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria');
+      setAcceptedMethods(prev => {
+        if (prev.includes('Efectivo USD')) {
+          return bsMethods.length > 0 ? bsMethods : [];
+        }
+        return prev;
+      });
     }
     setLoanCurrency(newCurr);
     try {
@@ -448,9 +497,25 @@ export default function LoansScreen({ navigation }) {
       );
       return;
     }
-    setAcceptedMethods(prev => 
-      prev.includes(method) ? prev.filter(m => m !== method) : [...prev, method]
-    );
+    const isCashUsd = method === 'Efectivo USD';
+    const isBs = method === 'Pago Móvil' || method === 'Transferencia Bancaria';
+
+    setAcceptedMethods(prev => {
+      const isCurrentlySelected = prev.includes(method);
+      if (isCurrentlySelected) {
+        return prev.filter(m => m !== method);
+      } else {
+        if (isCashUsd) {
+          // Si se selecciona efectivo en dólares debe deseleccionarse pago móvil y transferencia
+          return ['Efectivo USD'];
+        } else if (isBs) {
+          // Si se selecciona pago móvil o transferencia debe deseleccionarse efectivo dólares
+          return [...prev.filter(m => m !== 'Efectivo USD'), method];
+        } else {
+          return [...prev, method];
+        }
+      }
+    });
   };
 
   const handleCreateRequest = async () => {
@@ -460,6 +525,12 @@ export default function LoansScreen({ navigation }) {
     }
     if (acceptedMethods.length === 0) {
       Alert.alert('Error', 'Debes aceptar al menos un método de pago');
+      return;
+    }
+    const hasBs = acceptedMethods.includes('Pago Móvil') || acceptedMethods.includes('Transferencia Bancaria');
+    const hasUsd = acceptedMethods.includes('Efectivo USD');
+    if (hasBs && hasUsd) {
+      Alert.alert('Error', 'La solicitud de préstamos no puede mezclar métodos de pago en bolívares con métodos de pago en dólares.');
       return;
     }
     
@@ -699,6 +770,15 @@ export default function LoansScreen({ navigation }) {
     }
     if (!notifyMethod || !repayAmount) {
       Alert.alert('Error', 'Debes elegir el método de pago y el monto'); return;
+    }
+    const isCashOriginal = isContribInCashUsd(selectedContrib, selectedLoan);
+    if (isCashOriginal && notifyMethod !== 'Efectivo USD') {
+      Alert.alert('Devolución en Efectivo Requerida', 'Las devoluciones de aportes en dólares en efectivo deben ser en dólares en efectivo.');
+      return;
+    }
+    if (!isCashOriginal && notifyMethod === 'Efectivo USD') {
+      Alert.alert('Devolución en Bolívares Requerida', 'Las devoluciones de aportes en bolívares deben realizarse mediante Pago Móvil o Transferencia Bancaria.');
+      return;
     }
     const parsedAmount = parseFloat(repayAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -1805,46 +1885,80 @@ export default function LoansScreen({ navigation }) {
                 </View>
               )}
 
-              {isBcvOutdated && (
-                <View style={{backgroundColor: 'rgba(239, 68, 68, 0.2)', padding: 10, borderRadius: 8, marginBottom: 15}}>
-                  <Text style={{color: '#ef4444', fontSize: 13, fontWeight: 'bold'}}>⚠️ La tasa BCV ({bcvDate}) podría estar desactualizada.</Text>
-                  <Text style={{color: '#f8fafc', fontSize: 13, marginTop: 5}}>Ingresa la tasa actual a continuación si deseas ajustar el cálculo en Bolívares:</Text>
-                  <TextInput 
-                    style={[styles.input, {marginTop: 10, marginBottom: 0, height: 40}]} 
-                    placeholder="Ej. 45.50" 
-                    placeholderTextColor="#94a3b8" 
-                    keyboardType="numeric" 
-                    value={manualBcvRate} 
-                    onChangeText={setManualBcvRate} 
-                  />
-                </View>
-              )}
+              {(() => {
+                const isCashOriginal = isContribInCashUsd(selectedContrib, selectedLoan);
+                if (isCashOriginal) {
+                  return (
+                    <View style={{backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10b981', borderRadius: 8, padding: 12, marginBottom: 15}}>
+                      <Text style={{color: '#34d399', fontSize: 13, fontWeight: 'bold'}}>💵 Devolución en Efectivo USD</Text>
+                      <Text style={{color: '#f8fafc', fontSize: 12.5, marginTop: 4}}>
+                        El aporte original fue en dólares en efectivo. La devolución debe entregarse en dólares en efectivo.
+                      </Text>
+                    </View>
+                  );
+                } else if (isBcvOutdated) {
+                  return (
+                    <View style={{backgroundColor: 'rgba(239, 68, 68, 0.2)', padding: 10, borderRadius: 8, marginBottom: 15}}>
+                      <Text style={{color: '#ef4444', fontSize: 13, fontWeight: 'bold'}}>⚠️ La tasa BCV ({bcvDate}) podría estar desactualizada.</Text>
+                      <Text style={{color: '#f8fafc', fontSize: 13, marginTop: 5}}>Ingresa la tasa actual a continuación si deseas ajustar el cálculo en Bolívares:</Text>
+                      <TextInput 
+                        style={[styles.input, {marginTop: 10, marginBottom: 0, height: 40}]} 
+                        placeholder="Ej. 45.50" 
+                        placeholderTextColor="#94a3b8" 
+                        keyboardType="numeric" 
+                        value={manualBcvRate} 
+                        onChangeText={setManualBcvRate} 
+                      />
+                    </View>
+                  );
+                }
+                return null;
+              })()}
 
               <Text style={styles.label}>Monto a devolver (USD)</Text>
               <TextInput style={styles.input} keyboardType="numeric" value={repayAmount} onChangeText={setRepayAmount} placeholder="Ej. 10" placeholderTextColor="#475569" />
 
               <Text style={styles.label}>¿Cómo transfieres?</Text>
               <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15}}>
-                {selectedContrib?.funder_payment_methods_json && Object.keys(JSON.parse(selectedContrib.funder_payment_methods_json)).map(method => {
-                  const isSelected = notifyMethod === method;
-                  return (
-                    <TouchableOpacity 
-                      key={method} 
-                      style={[styles.methodChip, isSelected && styles.methodChipSelected]}
-                      onPress={() => setNotifyMethod(method)}
-                    >
-                      <Text style={[styles.methodChipText, isSelected && {color: '#fff'}]}>{method}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {(() => {
+                  const isCashOriginal = isContribInCashUsd(selectedContrib, selectedLoan);
+                  let methods = [];
+                  if (selectedContrib?.funder_payment_methods_json) {
+                    try {
+                      methods = Object.keys(JSON.parse(selectedContrib.funder_payment_methods_json));
+                    } catch (_) {}
+                  }
+                  const availableRepayMethods = isCashOriginal
+                    ? ['Efectivo USD']
+                    : (methods.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria').length > 0
+                        ? methods.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria')
+                        : ['Pago Móvil', 'Transferencia Bancaria']);
+
+                  return availableRepayMethods.map(method => {
+                    const isSelected = notifyMethod === method;
+                    return (
+                      <TouchableOpacity 
+                        key={method} 
+                        style={[styles.methodChip, isSelected && styles.methodChipSelected]}
+                        onPress={() => setNotifyMethod(method)}
+                      >
+                        <Text style={[styles.methodChipText, isSelected && {color: '#fff'}]}>{method}</Text>
+                      </TouchableOpacity>
+                    );
+                  });
+                })()}
               </View>
 
-              {notifyMethod && selectedContrib?.funder_payment_methods_json ? (
+              {notifyMethod ? (
                 <View style={{backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: 15, borderRadius: 8, marginBottom: 15}}>
                   <Text style={{color: '#60a5fa', fontWeight: 'bold', marginBottom: 10}}>Instrucciones de Pago de {selectedContrib?.funder_name} ({notifyMethod}):</Text>
                   {(() => {
                     try {
-                      const config = JSON.parse(selectedContrib.funder_payment_methods_json)[notifyMethod];
+                      let parsedJson = {};
+                      try {
+                        parsedJson = JSON.parse(selectedContrib?.funder_payment_methods_json || '{}');
+                      } catch (_) {}
+                      const config = parsedJson[notifyMethod] || (notifyMethod === 'Efectivo USD' ? { lugar: 'Entrega acordada en persona' } : null);
                       if (!config) return <Text style={{color: '#94a3b8'}}>No tiene este método bien configurado.</Text>;
                       if (notifyMethod === 'Efectivo USD' && typeof config === 'object') {
                         return (
