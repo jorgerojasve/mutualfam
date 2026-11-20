@@ -1075,12 +1075,12 @@ const MembersList = () => {
                     statusColor = '#64748b';
                     statusLabel = '⏱️ Ingreso Cancelado';
                   } else {
-                    statusColor = '#10b981';
-                    statusLabel = isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada';
+                    statusColor = isExpulsion ? '#ef4444' : '#10b981';
+                    statusLabel = isExpulsion ? '⚠️ Miembro Expulsado' : (isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada');
                   }
                 } else if (isRejected) {
-                  statusColor = '#ef4444';
-                  statusLabel = item.veto_activated ? '🚫 Vetada' : '❌ Rechazada';
+                  statusColor = isExpulsion ? '#10b981' : '#ef4444';
+                  statusLabel = isExpulsion ? '🛡️ Miembro Mantenido' : (item.veto_activated ? '🚫 Vetada' : '❌ Rechazada');
                 }
 
                 return (
@@ -1437,36 +1437,60 @@ const MembersList = () => {
                 </h2>
 
                 {/* Fase y Tiempo */}
-                <div style={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '12px',
-                  padding: '12px',
-                  marginBottom: '14px',
-                }}>
-                  <div style={{ color: '#38bdf8', fontWeight: '700', fontSize: '14px', marginBottom: '4px' }}>
-                    {proposalDetail.phase_label}
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#cbd5e1' }}>
-                    {proposalDetail.status === 'voting' ? (
-                      proposalDetail.time_remaining_seconds > 0
-                        ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
-                        : '⏱️ Plazo concluido • Votación lista para computar resolución'
-                    ) : proposalDetail.status === 'debate' ? (
-                      proposalDetail.time_remaining_seconds > 0
-                        ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
-                        : '💬 Deliberación concluida • Pasando a votación'
-                    ) : proposalDetail.status === 'approved' ? (
-                      <span style={{ color: '#34d399' }}>✅ Propuesta aprobada por la asamblea familiar</span>
-                    ) : proposalDetail.status === 'rejected' ? (
-                      <span style={{ color: '#f87171' }}>
-                        {proposalDetail.veto_activated
-                          ? '🚫 Propuesta rechazada por veto nominativo'
-                          : '❌ Propuesta no aprobada por la asamblea'}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
+                {(() => {
+                  const typeLower = String(proposalDetail.proposal_type || '').toLowerCase();
+                  const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(proposalDetail.category || '').toUpperCase() === 'EXPULSION' || (proposalDetail.title && proposalDetail.title.toLowerCase().includes('expulsi'));
+
+                  return (
+                    <div style={{
+                      backgroundColor: isExpulsion
+                        ? (proposalDetail.status === 'approved' ? 'rgba(239, 68, 68, 0.12)' : proposalDetail.status === 'rejected' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.75)')
+                        : 'rgba(15, 23, 42, 0.75)',
+                      border: `1px solid ${isExpulsion
+                        ? (proposalDetail.status === 'approved' ? '#ef4444' : proposalDetail.status === 'rejected' ? '#10b981' : 'rgba(255, 255, 255, 0.08)')
+                        : 'rgba(255, 255, 255, 0.08)'}`,
+                      borderRadius: '12px',
+                      padding: '12px',
+                      marginBottom: '14px',
+                    }}>
+                      <div style={{
+                        color: isExpulsion
+                          ? (proposalDetail.status === 'approved' ? '#ef4444' : proposalDetail.status === 'rejected' ? '#10b981' : '#38bdf8')
+                          : '#38bdf8',
+                        fontWeight: '700',
+                        fontSize: '14px',
+                        marginBottom: '4px'
+                      }}>
+                        {isExpulsion
+                          ? (proposalDetail.status === 'approved' ? '⚠️ Expulsión Aprobada' : proposalDetail.status === 'rejected' ? '🛡️ Expulsión Rechazada' : proposalDetail.phase_label)
+                          : proposalDetail.phase_label}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#cbd5e1' }}>
+                        {proposalDetail.status === 'voting' ? (
+                          proposalDetail.time_remaining_seconds > 0
+                            ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                            : '⏱️ Plazo concluido • Votación lista para computar resolución'
+                        ) : proposalDetail.status === 'debate' ? (
+                          proposalDetail.time_remaining_seconds > 0
+                            ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                            : '💬 Deliberación concluida • Pasando a votación'
+                        ) : proposalDetail.status === 'approved' ? (
+                          <span style={{ color: isExpulsion ? '#f87171' : '#34d399' }}>
+                            {isExpulsion ? '⚠️ Miembro expulsado por la asamblea familiar' : '✅ Propuesta aprobada por la asamblea familiar'}
+                          </span>
+                        ) : proposalDetail.status === 'rejected' ? (
+                          <span style={{ color: isExpulsion ? '#34d399' : '#f87171' }}>
+                            {isExpulsion
+                              ? '🛡️ El miembro permanece en la mutual (expulsión no aprobada)'
+                              : (proposalDetail.veto_activated
+                                  ? '🚫 Propuesta rechazada por veto nominativo'
+                                  : '❌ Propuesta no aprobada por la asamblea')}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Sección Motivo / Justificación */}
                 <div style={{
