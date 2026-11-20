@@ -153,13 +153,19 @@ class GovernanceService:
             else:
                 total_members = db.query(Member).count()
             total_members = total_members if total_members > 0 else 1
-            quorum_percentage = float(ConfigService.get_value(db, "QUORUM_ASAMBLEA", "20"))
-            
-            # If the proposal is a constitutional change, enforce 50% minimum quorum
-            if p.category == "configuracion":
-                quorum_percentage = max(quorum_percentage, 50.0)
+
+            from .models import ProposalType
+            if p.proposal_type == ProposalType.EXPULSION:
+                eligible = max(1, total_members - 1) if (p.target_member_id and total_members > 1) else total_members
+                expulsion_quorum_pct = float(ConfigService.get_value(db, "EXPULSION_QUORUM_MINIMO", "75"))
+                p.quorum_needed = int(math.ceil(eligible * (expulsion_quorum_pct / 100.0)))
+            else:
+                quorum_percentage = float(ConfigService.get_value(db, "QUORUM_ASAMBLEA", "20"))
+                # If the proposal is a constitutional change, enforce 50% minimum quorum
+                if p.category == "configuracion":
+                    quorum_percentage = max(quorum_percentage, 50.0)
+                p.quorum_needed = int(math.ceil(total_members * (quorum_percentage / 100.0)))
                 
-            p.quorum_needed = int(math.ceil(total_members * (quorum_percentage / 100.0)))
             if p.quorum_needed < 1:
                 p.quorum_needed = 1
                 
@@ -378,11 +384,17 @@ class GovernanceService:
             yes_count = sum(1 for v in votes if v.vote_value == 1.0)
             total_casted = len(votes)
 
-            # Regla Opción 3: Unanimidad afirmativa del 100% del censo activo
-            unanimidad_censo = (total_active_members > 0 and yes_count >= total_active_members)
-
-            # 100% del censo ha votado (conclusión natural sin votos pendientes)
-            censo_completo = (total_active_members > 0 and total_casted >= total_active_members)
+            from .models import ProposalType
+            if proposal.proposal_type == ProposalType.EXPULSION:
+                target_id = proposal.target_member_id
+                eligible_active = max(1, total_active_members - 1) if (target_id and total_active_members > 1) else total_active_members
+                unanimidad_censo = (eligible_active > 0 and yes_count >= eligible_active)
+                censo_completo = (eligible_active > 0 and total_casted >= eligible_active)
+            else:
+                # Regla Opción 3: Unanimidad afirmativa del 100% del censo activo
+                unanimidad_censo = (total_active_members > 0 and yes_count >= total_active_members)
+                # 100% del censo ha votado (conclusión natural sin votos pendientes)
+                censo_completo = (total_active_members > 0 and total_casted >= total_active_members)
 
             if deadline_passed or unanimidad_censo or censo_completo:
                 GovernanceService.calculate_proposal_results(db, proposal)
@@ -538,12 +550,38 @@ class GovernanceService:
                 extra["vetantes_ids"] = vetantes
                 extra["veto_activated"] = True
                 proposal.extra_fields = extra
+        elif proposal.proposal_type == ProposalType.EXPULSION:
+            # Blindaje contra ausencias: Quórum ≥75% y Aprobación ≥75% del Censo Total Habilitado (excluyendo al acusado)
+            target_id = proposal.target_member_id
+            eligible_members = max(1, total_members - 1) if (target_id and total_members > 1) else total_members
+            expulsion_quorum_pct = float(ConfigService.get_value(db, "EXPULSION_QUORUM_MINIMO", "75"))
+            expulsion_quorum_needed = int(math.ceil(eligible_members * (expulsion_quorum_pct / 100.0)))
+            expulsion_votes_needed = int(math.ceil(eligible_members * threshold))
+            
+            quorum_ok = len(votes) >= expulsion_quorum_needed
+            has_supermajority = yes_votes >= expulsion_votes_needed
+            
+            extra = dict(proposal.extra_fields or {})
+            extra["eligible_members"] = eligible_members
+            extra["quorum_needed"] = expulsion_quorum_needed
+            extra["votes_yes_needed"] = expulsion_votes_needed
+            extra["quorum_reached"] = quorum_ok
+            
+            if not quorum_ok:
+                passed = False
+                extra["rejection_reason"] = f"Falta de quórum reglamentario: votaron {len(votes)} de {expulsion_quorum_needed} miembros habilitados requeridos (mín. {int(expulsion_quorum_pct)}%)."
+            elif not has_supermajority:
+                passed = False
+                extra["rejection_reason"] = f"No se alcanzó la supermayoría: se obtuvieron {int(yes_votes)} de {expulsion_votes_needed} votos SÍ requeridos (mín. {int(threshold*100)}% del censo habilitado)."
+            else:
+                passed = True
+            proposal.extra_fields = extra
         elif sistema_gobernanza == "DOS_FASES" and proposal.proposal_type == ProposalType.STANDARD:
             # DOS_FASES standard rule: requires > 50% of ALL members (not just voters) for standard proposals
             if yes_votes > (total_members / 2):
                 passed = True
         else:
-            # For special proposals (EXPULSION, DIVISION, FUSION) or UNA_FASE, threshold is based on casted votes
+            # For special proposals (DIVISION, FUSION) or UNA_FASE, threshold is based on casted votes
             # But the quorum must be met, which we already verified.
             total_yes_no = yes_votes + no_votes
             if total_yes_no > 0:
