@@ -1482,7 +1482,7 @@ export default function AssemblyScreen({ embedded = false }) {
                         ]}>
                           <Text style={[styles.voteStatVal, { color: isExpulsion ? '#ef4444' : '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
                           <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'si' && { color: isExpulsion ? '#f87171' : '#34d399', fontWeight: '800' }]}>
-                            {isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
+                            {isExpulsion ? 'EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? '\n• Tú' : ''}
                           </Text>
                         </View>
                         <View style={[
@@ -1495,7 +1495,7 @@ export default function AssemblyScreen({ embedded = false }) {
                         ]}>
                           <Text style={[styles.voteStatVal, { color: isExpulsion ? '#10b981' : '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
                           <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'no' && { color: isExpulsion ? '#34d399' : '#f87171', fontWeight: '800' }]}>
-                            {isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
+                            {isExpulsion ? 'MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? '\n• Tú' : ''}
                           </Text>
                         </View>
                         <View style={[
@@ -1505,7 +1505,7 @@ export default function AssemblyScreen({ embedded = false }) {
                         ]}>
                           <Text style={[styles.voteStatVal, { color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
                           <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'abstencion' && { color: '#38bdf8', fontWeight: '800' }]}>
-                            ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? ' • Tú' : ''}
+                            ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? '\n• Tú' : ''}
                           </Text>
                         </View>
                       </View>
@@ -1686,11 +1686,11 @@ export default function AssemblyScreen({ embedded = false }) {
                       <View style={styles.voteStatsGrid}>
                         <View style={[styles.voteStatBox, { borderColor: isExpulsion ? '#ef4444' : '#10b981' }]}>
                           <Text style={[styles.voteStatVal, { color: isExpulsion ? '#ef4444' : '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</Text>
+                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</Text>
                         </View>
                         <View style={[styles.voteStatBox, { borderColor: isExpulsion ? '#10b981' : '#ef4444' }]}>
                           <Text style={[styles.voteStatVal, { color: isExpulsion ? '#10b981' : '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}</Text>
+                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'MANTENER (NO)' : 'EN CONTRA (NO)'}</Text>
                         </View>
                         <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
                           <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
@@ -2801,18 +2801,24 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center'
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 68
   },
   voteStatVal: {
     fontSize: 20,
-    fontWeight: '800'
+    fontWeight: '800',
+    textAlign: 'center'
   },
   voteStatLbl: {
     color: '#94a3b8',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
-    marginTop: 2
+    marginTop: 2,
+    textAlign: 'center',
+    lineHeight: 13
   },
   ruleNote: {
     color: '#64748b',
