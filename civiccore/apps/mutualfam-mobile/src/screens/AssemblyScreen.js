@@ -849,12 +849,12 @@ export default function AssemblyScreen({ embedded = false }) {
         statusColor = '#64748b';
         statusLabel = '⏱️ Ingreso Cancelado';
       } else {
-        statusColor = '#10b981';
-        statusLabel = isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada';
+        statusColor = isExpulsion ? '#ef4444' : '#10b981';
+        statusLabel = isExpulsion ? '⚠️ Miembro Expulsado' : (isAdmission ? '✅ Ingreso Completado' : '✅ Aprobada');
       }
     } else if (isRejected) {
-      statusColor = '#ef4444';
-      statusLabel = item.veto_activated ? '🚫 Vetada' : '❌ Rechazada';
+      statusColor = isExpulsion ? '#10b981' : '#ef4444';
+      statusLabel = isExpulsion ? '🛡️ Miembro Mantenido' : (item.veto_activated ? '🚫 Vetada' : '❌ Rechazada');
     }
 
     const totalVotos = (item.votes_yes || 0) + (item.votes_no || 0) + (item.votes_abstain || 0);
@@ -1271,32 +1271,61 @@ export default function AssemblyScreen({ embedded = false }) {
                 <Text style={styles.modalTitle}>{proposalDetail.title}</Text>
 
                 {/* Fase y tiempo */}
-                <View style={styles.phaseAlert}>
-                  <Text style={styles.phaseAlertTitle}>{proposalDetail.phase_label}</Text>
-                  {proposalDetail.status === 'voting' ? (
-                    <Text style={styles.phaseAlertSub}>
-                      {proposalDetail.time_remaining_seconds > 0
-                        ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
-                        : '⏱️ Plazo concluido • Votación lista para computar resolución'}
-                    </Text>
-                  ) : proposalDetail.status === 'debate' ? (
-                    <Text style={styles.phaseAlertSub}>
-                      {proposalDetail.time_remaining_seconds > 0
-                        ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
-                        : '💬 Deliberación concluida • Pasando a votación'}
-                    </Text>
-                  ) : proposalDetail.status === 'approved' ? (
-                    <Text style={[styles.phaseAlertSub, { color: '#34d399' }]}>
-                      ✅ Propuesta aprobada por la asamblea familiar
-                    </Text>
-                  ) : proposalDetail.status === 'rejected' ? (
-                    <Text style={[styles.phaseAlertSub, { color: '#f87171' }]}>
-                      {proposalDetail.veto_activated
-                        ? '🚫 Propuesta rechazada por veto nominativo'
-                        : '❌ Propuesta no aprobada por la asamblea'}
-                    </Text>
-                  ) : null}
-                </View>
+                {(() => {
+                  const typeLower = String(proposalDetail.proposal_type || '').toLowerCase();
+                  const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(proposalDetail.category || '').toUpperCase() === 'EXPULSION' || (proposalDetail.title && proposalDetail.title.toLowerCase().includes('expulsi'));
+
+                  return (
+                    <View style={[
+                      styles.phaseAlert,
+                      proposalDetail.status === 'approved' && isExpulsion && {
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.12)'
+                      },
+                      proposalDetail.status === 'rejected' && isExpulsion && {
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.12)'
+                      }
+                    ]}>
+                      <Text style={[
+                        styles.phaseAlertTitle,
+                        proposalDetail.status === 'approved' && isExpulsion && { color: '#ef4444' },
+                        proposalDetail.status === 'rejected' && isExpulsion && { color: '#10b981' }
+                      ]}>
+                        {isExpulsion
+                          ? (proposalDetail.status === 'approved' ? '⚠️ Expulsión Aprobada' : proposalDetail.status === 'rejected' ? '🛡️ Expulsión Rechazada' : proposalDetail.phase_label)
+                          : proposalDetail.phase_label}
+                      </Text>
+                      {proposalDetail.status === 'voting' ? (
+                        <Text style={styles.phaseAlertSub}>
+                          {proposalDetail.time_remaining_seconds > 0
+                            ? `⏱️ Tiempo restante: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                            : '⏱️ Plazo concluido • Votación lista para computar resolución'}
+                        </Text>
+                      ) : proposalDetail.status === 'debate' ? (
+                        <Text style={styles.phaseAlertSub}>
+                          {proposalDetail.time_remaining_seconds > 0
+                            ? `💬 Tiempo de debate: ${formatRemainingTime(proposalDetail.time_remaining_seconds)}`
+                            : '💬 Deliberación concluida • Pasando a votación'}
+                        </Text>
+                      ) : proposalDetail.status === 'approved' ? (
+                        <Text style={[styles.phaseAlertSub, { color: isExpulsion ? '#f87171' : '#34d399' }]}>
+                          {isExpulsion
+                            ? '⚠️ Miembro expulsado por la asamblea familiar'
+                            : '✅ Propuesta aprobada por la asamblea familiar'}
+                        </Text>
+                      ) : proposalDetail.status === 'rejected' ? (
+                        <Text style={[styles.phaseAlertSub, { color: isExpulsion ? '#34d399' : '#f87171' }]}>
+                          {isExpulsion
+                            ? '🛡️ El miembro permanece en la mutual (expulsión no aprobada)'
+                            : (proposalDetail.veto_activated
+                                ? '🚫 Propuesta rechazada por veto nominativo'
+                                : '❌ Propuesta no aprobada por la asamblea')}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })()}
 
                 {/* Info Justificación / Motivo */}
                 <View style={styles.sectionCard}>
