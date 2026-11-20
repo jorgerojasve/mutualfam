@@ -1049,6 +1049,7 @@ const MembersList = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {displayedPropuestas.map((item) => {
                 const isAdmission = item.proposal_type === 'member_admission' || item.category === 'ADMISSION' || item.proposal_type === 'ADMISSION';
+                const isExpulsion = item.proposal_type === 'expulsion' || item.proposal_type === 'member_expulsion' || item.category === 'EXPULSION';
                 const st = String(item.status || '').toLowerCase();
                 const isDebate = st === 'debate';
                 const isVoting = st === 'voting';
@@ -1232,23 +1233,54 @@ const MembersList = () => {
                         borderRadius: '10px',
                         padding: '10px',
                         marginBottom: '10px',
+                        flexWrap: 'wrap',
+                        gap: '8px'
                       }}>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#cbd5e1' }}>
-                          <span>👍 <strong style={{ color: '#10b981' }}>{item.votes_yes || 0}</strong> SÍ</span>
-                          <span>👎 <strong style={{ color: '#ef4444' }}>{item.votes_no || 0}</strong> NO</span>
-                          <span>⬜ <strong style={{ color: '#94a3b8' }}>{item.votes_abstain || 0}</strong> Abst.</span>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#cbd5e1', flexWrap: 'wrap' }}>
+                          {isExpulsion ? (
+                            <>
+                              <span>⚠️ <strong style={{ color: '#ef4444' }}>{item.votes_yes || 0}</strong> Expulsar</span>
+                              <span>🛡️ <strong style={{ color: '#10b981' }}>{item.votes_no || 0}</strong> Mantener</span>
+                              <span>⬜ <strong style={{ color: '#94a3b8' }}>{item.votes_abstain || 0}</strong> Abst.</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>👍 <strong style={{ color: '#10b981' }}>{item.votes_yes || 0}</strong> SÍ</span>
+                              <span>👎 <strong style={{ color: '#ef4444' }}>{item.votes_no || 0}</strong> NO</span>
+                              <span>⬜ <strong style={{ color: '#94a3b8' }}>{item.votes_abstain || 0}</strong> Abst.</span>
+                            </>
+                          )}
                         </div>
                         {item.my_vote && (
                           <div style={{
-                            backgroundColor: '#334155',
+                            backgroundColor: isExpulsion
+                              ? (item.my_vote === 'si'
+                                  ? 'rgba(239, 68, 68, 0.25)'
+                                  : item.my_vote === 'no'
+                                    ? 'rgba(16, 185, 129, 0.25)'
+                                    : 'rgba(56, 189, 248, 0.25)')
+                              : (item.my_vote === 'si'
+                                  ? 'rgba(16, 185, 129, 0.25)'
+                                  : item.my_vote === 'no'
+                                    ? 'rgba(239, 68, 68, 0.25)'
+                                    : 'rgba(56, 189, 248, 0.25)'),
+                            border: `1px solid ${isExpulsion
+                              ? (item.my_vote === 'si' ? '#ef4444' : item.my_vote === 'no' ? '#10b981' : '#38bdf8')
+                              : (item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#38bdf8')}`,
                             padding: '3px 8px',
                             borderRadius: '6px',
                             fontSize: '11px',
                             color: '#e2e8f0',
                           }}>
                             Tu voto: <strong style={{
-                              color: item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#94a3b8'
-                            }}>{item.my_vote.toUpperCase()}</strong>
+                              color: isExpulsion
+                                ? (item.my_vote === 'si' ? '#f87171' : item.my_vote === 'no' ? '#34d399' : '#38bdf8')
+                                : (item.my_vote === 'si' ? '#34d399' : item.my_vote === 'no' ? '#f87171' : '#38bdf8')
+                            }}>
+                              {isExpulsion
+                                ? (item.my_vote === 'si' ? '⚠️ Sí, expulsar' : item.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abst.')
+                                : (item.my_vote === 'si' ? '👍 SÍ' : item.my_vote === 'no' ? '👎 NO' : '⬜ Abst.')}
+                            </strong>
                           </div>
                         )}
                       </div>
@@ -1965,64 +1997,68 @@ const MembersList = () => {
                 )}
 
                 {/* 3. Conteo de Votos y Resultados Históricos (Solo para estados ya concluidos / rechazados / aprobados) */}
-                {proposalDetail.status !== 'debate' && proposalDetail.status !== 'voting' && (
-                  <div style={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    marginBottom: '14px',
-                  }}>
-                    <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>
-                      Resultado Final de Votación
-                    </div>
+                {proposalDetail.status !== 'debate' && proposalDetail.status !== 'voting' && (() => {
+                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                      <div style={{
-                        border: '1.5px solid #10b981',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
-                      }}>
-                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>A FAVOR (SÍ)</div>
-                      </div>
-                      <div style={{
-                        border: '1.5px solid #ef4444',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
-                      }}>
-                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>EN CONTRA (NO)</div>
-                      </div>
-                      <div style={{
-                        border: '1.5px solid #94a3b8',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        textAlign: 'center',
-                        backgroundColor: 'rgba(148, 163, 184, 0.1)'
-                      }}>
-                        <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
-                      </div>
-                    </div>
-
-                    {/* Avance del Censo y Participación */}
+                  return (
                     <div style={{
-                      backgroundColor: '#1e293b',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      color: '#cbd5e1',
+                      backgroundColor: '#0f172a',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      marginBottom: '14px',
                     }}>
-                      👥 Participación Final: <strong style={{ color: '#f8fafc' }}>
-                        {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
-                      </strong>
+                      <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>
+                        Resultado Final de Votación
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                        <div style={{
+                          border: `1.5px solid ${isExpulsion ? '#ef4444' : '#10b981'}`,
+                          borderRadius: '10px',
+                          padding: '10px',
+                          textAlign: 'center',
+                          backgroundColor: isExpulsion ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'
+                        }}>
+                          <div style={{ color: isExpulsion ? '#ef4444' : '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</div>
+                        </div>
+                        <div style={{
+                          border: `1.5px solid ${isExpulsion ? '#10b981' : '#ef4444'}`,
+                          borderRadius: '10px',
+                          padding: '10px',
+                          textAlign: 'center',
+                          backgroundColor: isExpulsion ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'
+                        }}>
+                          <div style={{ color: isExpulsion ? '#10b981' : '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}</div>
+                        </div>
+                        <div style={{
+                          border: '1.5px solid #94a3b8',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          textAlign: 'center',
+                          backgroundColor: 'rgba(148, 163, 184, 0.1)'
+                        }}>
+                          <div style={{ color: '#94a3b8', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_abstain || 0}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>ABSTENCIÓN</div>
+                        </div>
+                      </div>
+
+                      {/* Avance del Censo y Participación */}
+                      <div style={{
+                        backgroundColor: '#1e293b',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        color: '#cbd5e1',
+                      }}>
+                        👥 Participación Final: <strong style={{ color: '#f8fafc' }}>
+                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                        </strong>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 4. Sección de Defensa (Expulsión) */}
                 {proposalDetail.proposal_type === 'expulsion' && (
