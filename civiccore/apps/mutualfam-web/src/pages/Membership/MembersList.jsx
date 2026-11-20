@@ -1706,7 +1706,7 @@ const MembersList = () => {
                           ? (proposalDetail.my_vote === 'si' ? '2px solid #ef4444' : '1.5px solid #ef4444')
                           : (proposalDetail.my_vote === 'si' ? '2px solid #10b981' : '1.5px solid #10b981'),
                         borderRadius: '10px',
-                        padding: '10px',
+                        padding: '10px 4px',
                         textAlign: 'center',
                         backgroundColor: isExpulsion
                           ? (proposalDetail.my_vote === 'si' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)')
@@ -1714,7 +1714,7 @@ const MembersList = () => {
                       }}>
                         <div style={{ color: isExpulsion ? '#ef4444' : '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
                         <div style={{ color: proposalDetail.my_vote === 'si' ? (isExpulsion ? '#f87171' : '#34d399') : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
-                          {isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
+                          {isExpulsion ? 'EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
                         </div>
                       </div>
                       <div style={{
@@ -1722,7 +1722,7 @@ const MembersList = () => {
                           ? (proposalDetail.my_vote === 'no' ? '2px solid #10b981' : '1.5px solid #10b981')
                           : (proposalDetail.my_vote === 'no' ? '2px solid #ef4444' : '1.5px solid #ef4444'),
                         borderRadius: '10px',
-                        padding: '10px',
+                        padding: '10px 4px',
                         textAlign: 'center',
                         backgroundColor: isExpulsion
                           ? (proposalDetail.my_vote === 'no' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)')
@@ -1730,13 +1730,13 @@ const MembersList = () => {
                       }}>
                         <div style={{ color: isExpulsion ? '#10b981' : '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
                         <div style={{ color: proposalDetail.my_vote === 'no' ? (isExpulsion ? '#34d399' : '#f87171') : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
-                          {isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
+                          {isExpulsion ? 'MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
                         </div>
                       </div>
                       <div style={{
                         border: proposalDetail.my_vote === 'abstencion' ? '2px solid #38bdf8' : '1.5px solid #94a3b8',
                         borderRadius: '10px',
-                        padding: '10px',
+                        padding: '10px 4px',
                         textAlign: 'center',
                         backgroundColor: proposalDetail.my_vote === 'abstencion' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(148, 163, 184, 0.1)'
                       }}>
@@ -2015,27 +2015,27 @@ const MembersList = () => {
                         <div style={{
                           border: `1.5px solid ${isExpulsion ? '#ef4444' : '#10b981'}`,
                           borderRadius: '10px',
-                          padding: '10px',
+                          padding: '10px 4px',
                           textAlign: 'center',
                           backgroundColor: isExpulsion ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'
                         }}>
                           <div style={{ color: isExpulsion ? '#ef4444' : '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
-                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</div>
                         </div>
                         <div style={{
                           border: `1.5px solid ${isExpulsion ? '#10b981' : '#ef4444'}`,
                           borderRadius: '10px',
-                          padding: '10px',
+                          padding: '10px 4px',
                           textAlign: 'center',
                           backgroundColor: isExpulsion ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'
                         }}>
                           <div style={{ color: isExpulsion ? '#10b981' : '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
-                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700' }}>{isExpulsion ? 'MANTENER (NO)' : 'EN CONTRA (NO)'}</div>
                         </div>
                         <div style={{
                           border: '1.5px solid #94a3b8',
                           borderRadius: '10px',
-                          padding: '10px',
+                          padding: '10px 4px',
                           textAlign: 'center',
                           backgroundColor: 'rgba(148, 163, 184, 0.1)'
                         }}>
