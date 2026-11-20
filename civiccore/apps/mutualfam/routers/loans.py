@@ -115,6 +115,16 @@ def create_loan_request(
             status_code=400,
             detail="Debes cargar por lo menos un dato de pago antes de pedir prestado o solicitar un préstamo."
         )
+
+    # Validar que no se mezclen métodos de pago en Bolívares con Efectivo USD
+    accepted = loan.accepted_payment_methods or []
+    has_bs = any(m in ["Pago Móvil", "Transferencia Bancaria", "pago_movil", "transferencia"] for m in accepted)
+    has_usd = any(m in ["Efectivo USD", "efectivo_usd", "Efectivo", "efectivo"] for m in accepted)
+    if has_bs and has_usd:
+        raise HTTPException(
+            status_code=400,
+            detail="La solicitud de préstamos no puede mezclar métodos de pago en bolívares con métodos de pago en dólares."
+        )
         
     new_loan = LoanRequest(
         organization_id=org_member["organization"].id,
@@ -647,6 +657,31 @@ def notify_return_payment(
         
     if contrib.status not in (ContributionStatus.VERIFIED, ContributionStatus.REPAY_NOTIFIED):
         raise HTTPException(status_code=400, detail="Solo se puede devolver aportes que hayan sido validados por ti")
+
+    # Validación de correspondencia de moneda en la devolución:
+    # Las devoluciones de dólares en efectivo deben ser en dólares en efectivo.
+    contrib_pm = (contrib.payment_method or "").strip()
+    is_cash_usd_contrib = contrib_pm in ["Efectivo USD", "efectivo_usd", "Efectivo", "efectivo"]
+    if not is_cash_usd_contrib and not contrib_pm:
+        try:
+            loan_accepted = json.loads(loan.accepted_payment_methods or "[]")
+            is_cash_usd_contrib = (loan_accepted == ["Efectivo USD"])
+        except Exception:
+            is_cash_usd_contrib = False
+
+    repay_pm = (repay.payment_method or "").strip()
+    is_cash_usd_repay = repay_pm in ["Efectivo USD", "efectivo_usd", "Efectivo", "efectivo"]
+
+    if is_cash_usd_contrib and not is_cash_usd_repay:
+        raise HTTPException(
+            status_code=400,
+            detail="Las devoluciones de aportes en dólares en efectivo deben ser en dólares en efectivo."
+        )
+    if not is_cash_usd_contrib and is_cash_usd_repay:
+        raise HTTPException(
+            status_code=400,
+            detail="Las devoluciones de aportes en bolívares deben realizarse mediante métodos en bolívares (Pago Móvil o Transferencia Bancaria)."
+        )
 
     # Validar monto ya reportado o verificado para permitir devoluciones parciales
     total_repaid_so_far = db.query(func.sum(LoanRepayment.amount_usd)).filter(

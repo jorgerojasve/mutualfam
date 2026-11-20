@@ -33,6 +33,21 @@ const getInitialCachedLoans = () => {
   return [];
 };
 
+const isContribInCashUsd = (contrib, loan) => {
+  if (!contrib) return false;
+  const pm = String(contrib.payment_method || '').toLowerCase().trim();
+  if (pm === 'efectivo usd' || pm === 'efectivo_usd' || pm === 'efectivo' || pm.includes('efectivo')) {
+    return true;
+  }
+  if (loan?.accepted_payment_methods && Array.isArray(loan.accepted_payment_methods)) {
+    const methods = loan.accepted_payment_methods;
+    if (methods.includes('Efectivo USD') && !methods.includes('Pago Móvil') && !methods.includes('Transferencia Bancaria')) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export default function LoansDashboard() {
   const initialLoans = getInitialCachedLoans();
   const [loans, setLoans] = useState(initialLoans);
@@ -219,6 +234,16 @@ export default function LoansDashboard() {
         setAmount(formatVE(calculatedUsd));
       }
     }
+    if (newCurr === 'VES') {
+      const available = getAvailablePaymentMethods(paymentConfig);
+      const bsMethods = available.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria');
+      setAcceptedMethods(prev => {
+        if (prev.includes('Efectivo USD')) {
+          return bsMethods.length > 0 ? bsMethods : [];
+        }
+        return prev;
+      });
+    }
     setLoanCurrency(newCurr);
     try {
       localStorage.setItem('loan_currency_pref', newCurr);
@@ -318,7 +343,15 @@ export default function LoansDashboard() {
         }
         return;
       }
-      setAcceptedMethods(userAvail);
+      const bsMethods = userAvail.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria');
+      const hasUsd = userAvail.includes('Efectivo USD');
+      let initialAccepted = [];
+      if (loanCurrency === 'VES') {
+        initialAccepted = bsMethods;
+      } else {
+        initialAccepted = bsMethods.length > 0 ? bsMethods : (hasUsd ? ['Efectivo USD'] : []);
+      }
+      setAcceptedMethods(initialAccepted);
       setShowModal(true);
     } catch (err) {
       console.warn('Error al verificar datos de pago para préstamo:', err);
@@ -336,9 +369,25 @@ export default function LoansDashboard() {
       }
       return;
     }
-    setAcceptedMethods((prev) =>
-      prev.includes(m) ? prev.filter((item) => item !== m) : [...prev, m]
-    );
+    const isCashUsd = m === 'Efectivo USD';
+    const isBs = m === 'Pago Móvil' || m === 'Transferencia Bancaria';
+
+    setAcceptedMethods((prev) => {
+      const isCurrentlySelected = prev.includes(m);
+      if (isCurrentlySelected) {
+        return prev.filter((item) => item !== m);
+      } else {
+        if (isCashUsd) {
+          // Si se selecciona efectivo en dólares debe deseleccionarse pago móvil y transferencia
+          return ['Efectivo USD'];
+        } else if (isBs) {
+          // Si se selecciona pago móvil o transferencia debe deseleccionarse efectivo dólares
+          return [...prev.filter((item) => item !== 'Efectivo USD'), m];
+        } else {
+          return [...prev, m];
+        }
+      }
+    });
   };
 
   const handleCreateRequest = async (e) => {
@@ -359,6 +408,13 @@ export default function LoansDashboard() {
     const validAccepted = (acceptedMethods || []).filter((m) => available.includes(m));
     if (validAccepted.length === 0) {
       alert("Debes seleccionar al menos un método de pago con datos cargados que aceptas para recibir el préstamo.");
+      return;
+    }
+
+    const hasBs = validAccepted.includes('Pago Móvil') || validAccepted.includes('Transferencia Bancaria');
+    const hasUsd = validAccepted.includes('Efectivo USD');
+    if (hasBs && hasUsd) {
+      alert("La solicitud de préstamos no puede mezclar métodos de pago en bolívares con métodos de pago en dólares.");
       return;
     }
 
@@ -547,16 +603,22 @@ export default function LoansDashboard() {
     setSelectedRepayContrib(c);
     setSelectedLoan(loan);
     setRepayAmount(String(c.amount_usd || ''));
-    let defaultMethod = 'Pago Móvil';
-    if (c.funder_payment_methods_json) {
-      try {
-        const methods = Object.keys(JSON.parse(c.funder_payment_methods_json));
-        if (methods.length > 0) {
-          defaultMethod = methods.includes('Pago Móvil') ? 'Pago Móvil' : methods[0];
-        }
-      } catch (_) {}
+    
+    // Regla: Las devoluciones de dólares en efectivo deben ser en dólares en efectivo
+    const isCashOriginal = isContribInCashUsd(c, loan);
+    if (isCashOriginal) {
+      setRepayMethod('Efectivo USD');
+    } else {
+      let defaultMethod = 'Pago Móvil';
+      if (c.funder_payment_methods_json) {
+        try {
+          const methods = Object.keys(JSON.parse(c.funder_payment_methods_json));
+          if (methods.includes('Pago Móvil')) defaultMethod = 'Pago Móvil';
+          else if (methods.includes('Transferencia Bancaria')) defaultMethod = 'Transferencia Bancaria';
+        } catch (_) {}
+      }
+      setRepayMethod(defaultMethod);
     }
-    setRepayMethod(defaultMethod);
     setRepayReference('');
     setRepayReceiptFile(null);
     setRepayReceiptPreview(null);
@@ -568,6 +630,15 @@ export default function LoansDashboard() {
     if (!selectedRepayContrib) return;
     if (!repayMethod || !repayAmount) {
       alert("Debes elegir el método de pago y el monto a devolver.");
+      return;
+    }
+    const isCashOriginal = isContribInCashUsd(selectedRepayContrib, selectedLoan);
+    if (isCashOriginal && repayMethod !== 'Efectivo USD') {
+      alert("Las devoluciones de aportes en dólares en efectivo deben ser en dólares en efectivo.");
+      return;
+    }
+    if (!isCashOriginal && repayMethod === 'Efectivo USD') {
+      alert("Las devoluciones de aportes en bolívares deben realizarse mediante Pago Móvil o Transferencia Bancaria.");
       return;
     }
     const parsedAmount = parseFloat(repayAmount);
@@ -2058,6 +2129,23 @@ export default function LoansDashboard() {
               </div>
             </div>
 
+            {(() => {
+              const isCashOriginal = isContribInCashUsd(selectedRepayContrib, selectedLoan);
+              if (isCashOriginal) {
+                return (
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', borderRadius: '10px' }}>
+                    <div style={{ color: '#34d399', fontSize: '0.9rem', fontWeight: '700' }}>
+                      💵 Devolución en Efectivo USD
+                    </div>
+                    <div style={{ color: '#cbd5e1', fontSize: '0.8rem', marginTop: '2px' }}>
+                      El aporte original fue en dólares en efectivo. La devolución debe entregarse en dólares en efectivo.
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <form onSubmit={handleSubmitRepay} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Monto a devolver (USD) */}
               <div>
@@ -2090,6 +2178,7 @@ export default function LoansDashboard() {
                 </label>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {(() => {
+                    const isCashOriginal = isContribInCashUsd(selectedRepayContrib, selectedLoan);
                     let availableMethods = [];
                     if (selectedRepayContrib.funder_payment_methods_json) {
                       try {
@@ -2097,8 +2186,13 @@ export default function LoansDashboard() {
                         availableMethods = Object.keys(parsed);
                       } catch (_) {}
                     }
-                    if (availableMethods.length === 0) {
-                      availableMethods = ['Pago Móvil', 'Transferencia Bancaria', 'Efectivo USD'];
+                    if (isCashOriginal) {
+                      availableMethods = ['Efectivo USD'];
+                    } else {
+                      availableMethods = availableMethods.filter(m => m === 'Pago Móvil' || m === 'Transferencia Bancaria');
+                      if (availableMethods.length === 0) {
+                        availableMethods = ['Pago Móvil', 'Transferencia Bancaria'];
+                      }
                     }
                     return availableMethods.map((m) => {
                       const isSelected = repayMethod === m;
@@ -2136,7 +2230,7 @@ export default function LoansDashboard() {
                       funderConfig = JSON.parse(selectedRepayContrib.funder_payment_methods_json || '{}');
                     } catch (_) {}
 
-                    const config = funderConfig[repayMethod];
+                    const config = funderConfig[repayMethod] || (repayMethod === 'Efectivo USD' ? { lugar: 'Entrega acordada en persona' } : null);
 
                     if (!config) {
                       return (
