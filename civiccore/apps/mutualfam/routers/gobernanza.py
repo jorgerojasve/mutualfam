@@ -145,11 +145,14 @@ def dispatch_proposal_resolution_notifications(db: Session, proposal: Proposal, 
                     {"proposal_id": proposal.id}
                 )
             elif proposal.proposal_type == ProposalType.EXPULSION:
+                reason_info = ""
+                if proposal.extra_fields and proposal.extra_fields.get("rejection_reason"):
+                    reason_info = f" ({proposal.extra_fields.get('rejection_reason')})"
                 notify_users(
                     db,
                     all_user_ids,
-                    "✅ Expulsión Rechazada",
-                    f"La propuesta de expulsión de {target_name} fue rechazada. El miembro permanece activo.",
+                    "🛡️ Expulsión Rechazada",
+                    f"La propuesta de expulsión de {target_name} fue rechazada{reason_info}. El miembro permanece activo.",
                     {"proposal_id": proposal.id}
                 )
 
@@ -330,7 +333,11 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
 
     votes = db.query(Vote).filter(Vote.proposal_id == p.id).all()
     total_casted = len(votes)
-    pending_votes = max(0, total_active_members - total_casted)
+
+    target_id = p.target_member_id
+    is_expulsion = (p.proposal_type == ProposalType.EXPULSION)
+    eligible_active_members = max(1, total_active_members - 1) if (is_expulsion and target_id and total_active_members > 1) else total_active_members
+    pending_votes = max(0, (eligible_active_members if is_expulsion else total_active_members) - total_casted)
 
     deadline_passed = False
     if p.voting_ends_at:
@@ -353,14 +360,14 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         threshold_label = f"≥{int(threshold_ratio*100)}% ({votes_yes_needed} de {total_active_members} SÍ) y 0 votos NO"
     elif p.proposal_type == ProposalType.EXPULSION:
         threshold_ratio = float(ConfigService.get_value(db, "EXPULSION_UMBRAL_APROBACION", "0.75"))
-        quorum_needed = getattr(p, "quorum_needed", 1)
+        expulsion_quorum_pct = float(ConfigService.get_value(db, "EXPULSION_QUORUM_MINIMO", "75"))
+        quorum_needed = int(math.ceil(eligible_active_members * (expulsion_quorum_pct / 100.0)))
         quorum_met = (total_casted >= quorum_needed)
-        total_yes_no = yes_votes + no_votes
-        threshold_reached = quorum_met and (total_yes_no > 0) and ((yes_votes / total_yes_no) >= threshold_ratio)
-        can_conclude = deadline_passed or (pending_votes == 0)
-        votes_yes_needed = int(math.ceil(total_active_members * threshold_ratio))
+        votes_yes_needed = int(math.ceil(eligible_active_members * threshold_ratio))
+        threshold_reached = quorum_met and (yes_votes >= votes_yes_needed)
+        can_conclude = deadline_passed or (pending_votes == 0) or (yes_votes >= eligible_active_members)
         has_veto = False
-        threshold_label = f"≥{int(threshold_ratio*100)}% de votos emitidos (Quórum mín: {quorum_needed})"
+        threshold_label = f"≥{int(threshold_ratio*100)}% del censo habilitado ({votes_yes_needed} de {eligible_active_members} SÍ) · Quórum mín: {quorum_needed} de {eligible_active_members}"
     else:
         quorum_needed = getattr(p, "quorum_needed", 1)
         quorum_met = (total_casted >= quorum_needed)
@@ -399,7 +406,8 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         "votes_no": no_votes,
         "votes_null": getattr(p, "votes_null", 0.0),
         "votes_abstain": abstain_votes,
-        "total_active_members": total_active_members,
+        "total_active_members": eligible_active_members if is_expulsion else total_active_members,
+        "eligible_members": eligible_active_members,
         "total_votes_casted": total_casted,
         "pending_votes": pending_votes,
         "votes_yes_needed": votes_yes_needed,
@@ -407,7 +415,9 @@ def _serialize_proposal(db: Session, p: Proposal, current_user_id: int) -> Dict[
         "threshold_label": threshold_label,
         "can_conclude": can_conclude,
         "has_veto": has_veto,
-        "quorum_needed": getattr(p, "quorum_needed", 1),
+        "quorum_needed": quorum_needed if is_expulsion else getattr(p, "quorum_needed", 1),
+        "quorum_reached": quorum_met if is_expulsion else (total_casted >= getattr(p, "quorum_needed", 1)),
+        "rejection_reason": p.extra_fields.get("rejection_reason") if p.extra_fields else None,
         "my_vote": my_vote,
         "phase_label": phase_label,
         "time_remaining_seconds": time_remaining_seconds,

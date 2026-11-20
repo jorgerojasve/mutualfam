@@ -145,6 +145,7 @@ export default function AssemblyScreen({ embedded = false }) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showVotingRules, setShowVotingRules] = useState(false);
+  const [showAssemblyRules, setShowAssemblyRules] = useState(false);
 
   // Modal Proponer Ingreso
   const [showIngresoModal, setShowIngresoModal] = useState(false);
@@ -1158,6 +1159,50 @@ export default function AssemblyScreen({ embedded = false }) {
         </TouchableOpacity>
       </View>
 
+      {/* Botón desplegable informativo de Reglas de Asamblea y Quórum */}
+      <TouchableOpacity
+        style={styles.assemblyRulesToggleBtn}
+        onPress={() => setShowAssemblyRules(!showAssemblyRules)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.assemblyRulesHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Ionicons name="information-circle-outline" size={17} color="#38bdf8" />
+            <Text style={styles.assemblyRulesToggleText}>
+              {showAssemblyRules ? 'Ocultar Reglas de Votación y Quórum' : 'Ver Reglas de Votación y Quórum de Asamblea'}
+            </Text>
+          </View>
+          <Ionicons name={showAssemblyRules ? 'chevron-up' : 'chevron-down'} size={17} color="#38bdf8" />
+        </View>
+      </TouchableOpacity>
+
+      {showAssemblyRules && (
+        <View style={styles.assemblyRulesCard}>
+          <View style={styles.ruleItem}>
+            <Text style={styles.ruleItemTitle}>👥 Regla de Admisión de Nuevos Miembros:</Text>
+            <Text style={styles.ruleItemDesc}>
+              • Supermayoría calificada: Requiere ≥75% de votos SÍ sobre el <Text style={{ fontWeight: '700', color: '#f8fafc' }}>censo total de miembros activos</Text>.{"\n"}
+              • Consenso con Veto: Un solo voto NO (veto) anula y rechaza la admisión. Si los miembros no participan, la propuesta no se aprueba.
+            </Text>
+          </View>
+
+          <View style={[styles.ruleItem, { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', paddingTop: 8 }]}>
+            <Text style={[styles.ruleItemTitle, { color: '#f87171' }]}>⚠️ Regla de Expulsión (Blindaje Anti-Ausencias):</Text>
+            <Text style={styles.ruleItemDesc}>
+              • <Text style={{ fontWeight: '700', color: '#f8fafc' }}>Quórum mínimo obligatorio de ≥75%</Text> de miembros habilitados (excluyendo al acusado). Si no se alcanza la participación, la propuesta caduca sin sanción.{"\n"}
+              • Requiere supermayoría de ≥75% de votos SÍ sobre el <Text style={{ fontWeight: '700', color: '#f8fafc' }}>censo total habilitado</Text>. No es posible expulsar aprovechando ausencias temporales.
+            </Text>
+          </View>
+
+          <View style={[styles.ruleItem, { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', paddingTop: 8 }]}>
+            <Text style={[styles.ruleItemTitle, { color: '#38bdf8' }]}>🏛️ Propuestas Ordinarias:</Text>
+            <Text style={styles.ruleItemDesc}>
+              • Quórum mínimo del 20% y mayoría absoluta (>50% de los votos) para resoluciones generales.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Tabs Activas vs Historial */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
@@ -1317,7 +1362,9 @@ export default function AssemblyScreen({ embedded = false }) {
                       ) : proposalDetail.status === 'rejected' ? (
                         <Text style={[styles.phaseAlertSub, { color: isExpulsion ? '#34d399' : '#f87171' }]}>
                           {isExpulsion
-                            ? '🛡️ El miembro permanece en la mutual (expulsión no aprobada)'
+                            ? (proposalDetail.extra_fields?.rejection_reason || proposalDetail.rejection_reason
+                                ? `🛡️ El miembro permanece en la mutual (${proposalDetail.extra_fields?.rejection_reason || proposalDetail.rejection_reason})`
+                                : '🛡️ El miembro permanece en la mutual (expulsión no aprobada)')
                             : (proposalDetail.veto_activated
                                 ? '🚫 Propuesta rechazada por veto nominativo'
                                 : '❌ Propuesta no aprobada por la asamblea')}
@@ -1581,7 +1628,7 @@ export default function AssemblyScreen({ embedded = false }) {
                           )}
                           {proposalDetail.proposal_type === 'expulsion' && (
                             <Text style={styles.ruleNote}>
-                              * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                              * Regla de Expulsión (Blindaje contra ausencias): Requiere quórum de participación obligatorio de al menos {proposalDetail.quorum_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75)} de {proposalDetail.total_active_members || 2} miembros habilitados (≥75% de participación) y supermayoría afirmativa de {proposalDetail.votes_yes_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75)} de {proposalDetail.total_active_members || 2} miembros habilitados (≥75% SÍ). Si la participación o los votos afirmativos no alcanzan el umbral, la expulsión es rechazada automáticamente para proteger al miembro ante inasistencias.
                             </Text>
                           )}
                           <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
@@ -1602,6 +1649,23 @@ export default function AssemblyScreen({ embedded = false }) {
                                   return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
                                 }
                                 return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                              }
+
+                              if (proposalDetail.proposal_type === 'expulsion') {
+                                const quorumReq = proposalDetail.quorum_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75);
+                                const needed = proposalDetail.votes_yes_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75);
+                                const currentYes = proposalDetail.votes_yes || 0;
+                                const totalCasted = (proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+                                const total = proposalDetail.total_active_members || 2;
+                                const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : Math.max(0, total - totalCasted);
+
+                                if (proposalDetail.threshold_reached && pending === 0) {
+                                  return '✓ Votación concluida: Se cumplió el quórum obligatorio y el umbral de aprobación (≥75% del censo habilitado). Puedes registrar la resolución oficial ahora.';
+                                }
+                                if (currentYes >= total) {
+                                  return '🎉 ¡Unanimidad afirmativa alcanzada (100% de miembros habilitados)! Puedes registrar la resolución oficial ahora.';
+                                }
+                                return `⏳ Votación en curso (${currentYes} de ${needed} SÍ requeridos · Quórum: ${totalCasted} de ${quorumReq}). Faltan ${pending} miembro(s) por votar.`;
                               }
 
                               if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
@@ -1747,7 +1811,7 @@ export default function AssemblyScreen({ embedded = false }) {
                           )}
                           {proposalDetail.proposal_type === 'expulsion' && (
                             <Text style={styles.ruleNote}>
-                              * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                              * Regla de Expulsión (Blindaje contra ausencias): Requiere quórum de participación obligatorio de al menos {proposalDetail.quorum_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75)} de {proposalDetail.total_active_members || 2} miembros habilitados (≥75% de participación) y supermayoría afirmativa de {proposalDetail.votes_yes_needed || Math.ceil((proposalDetail.total_active_members || 2) * 0.75)} de {proposalDetail.total_active_members || 2} miembros habilitados (≥75% SÍ). Si la participación o los votos afirmativos no alcanzan el umbral, la expulsión es rechazada automáticamente para proteger al miembro ante inasistencias.
                             </Text>
                           )}
                         </View>
@@ -2912,6 +2976,47 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  assemblyRulesToggleBtn: {
+    backgroundColor: 'rgba(30, 41, 59, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  assemblyRulesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  assemblyRulesToggleText: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  assemblyRulesCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  ruleItem: {
+    marginBottom: 2,
+  },
+  ruleItemTitle: {
+    color: '#38bdf8',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  ruleItemDesc: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    lineHeight: 16,
   },
   voteButtonsRow: {
     flexDirection: 'row',
