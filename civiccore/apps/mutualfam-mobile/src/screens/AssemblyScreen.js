@@ -823,6 +823,7 @@ export default function AssemblyScreen({ embedded = false }) {
   // Render de tarjeta de propuesta
   const renderProposalCard = ({ item }) => {
     const isAdmission = item.proposal_type === 'member_admission';
+    const isExpulsion = item.proposal_type === 'expulsion' || item.proposal_type === 'member_expulsion' || item.category === 'EXPULSION';
     const isDebate = item.status === 'debate';
     const isVoting = item.status === 'voting';
     const isApproved = item.status === 'approved';
@@ -952,21 +953,73 @@ export default function AssemblyScreen({ embedded = false }) {
         {!isDebate ? (
           <View style={styles.voteSummaryContainer}>
             <View style={styles.voteCounter}>
-              <Text style={styles.voteCounterText}>
-                👍 <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> SÍ
-              </Text>
-              <Text style={styles.voteCounterText}>
-                👎 <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> NO
-              </Text>
-              <Text style={styles.voteCounterText}>
-                ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
-              </Text>
+              {isExpulsion ? (
+                <>
+                  <Text style={styles.voteCounterText}>
+                    ⚠️ <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> Expulsar
+                  </Text>
+                  <Text style={styles.voteCounterText}>
+                    🛡️ <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> Mantener
+                  </Text>
+                  <Text style={styles.voteCounterText}>
+                    ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.voteCounterText}>
+                    👍 <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> SÍ
+                  </Text>
+                  <Text style={styles.voteCounterText}>
+                    👎 <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> NO
+                  </Text>
+                  <Text style={styles.voteCounterText}>
+                    ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
+                  </Text>
+                </>
+              )}
             </View>
 
             {item.my_vote && (
-              <View style={styles.myVoteBadge}>
+              <View style={[
+                styles.myVoteBadge,
+                isExpulsion ? {
+                  backgroundColor: item.my_vote === 'si'
+                    ? 'rgba(239, 68, 68, 0.25)'
+                    : item.my_vote === 'no'
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : 'rgba(56, 189, 248, 0.25)',
+                  borderColor: item.my_vote === 'si'
+                    ? '#ef4444'
+                    : item.my_vote === 'no'
+                      ? '#10b981'
+                      : '#38bdf8',
+                  borderWidth: 1,
+                } : {
+                  backgroundColor: item.my_vote === 'si'
+                    ? 'rgba(16, 185, 129, 0.25)'
+                    : item.my_vote === 'no'
+                      ? 'rgba(239, 68, 68, 0.25)'
+                      : 'rgba(56, 189, 248, 0.25)',
+                  borderColor: item.my_vote === 'si'
+                    ? '#10b981'
+                    : item.my_vote === 'no'
+                      ? '#ef4444'
+                      : '#38bdf8',
+                  borderWidth: 1,
+                }
+              ]}>
                 <Text style={styles.myVoteText}>
-                  Tu voto: <Text style={{ fontWeight: 'bold', color: item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#94a3b8' }}>{item.my_vote.toUpperCase()}</Text>
+                  Tu voto: <Text style={{
+                    fontWeight: 'bold',
+                    color: isExpulsion
+                      ? (item.my_vote === 'si' ? '#f87171' : item.my_vote === 'no' ? '#34d399' : '#38bdf8')
+                      : (item.my_vote === 'si' ? '#34d399' : item.my_vote === 'no' ? '#f87171' : '#38bdf8')
+                  }}>
+                    {isExpulsion
+                      ? (item.my_vote === 'si' ? '⚠️ Sí, expulsar' : item.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abst.')
+                      : (item.my_vote === 'si' ? '👍 SÍ' : item.my_vote === 'no' ? '👎 NO' : '⬜ Abst.')}
+                  </Text>
                 </Text>
               </View>
             )}
@@ -1624,60 +1677,64 @@ export default function AssemblyScreen({ embedded = false }) {
                 {/* ======================================================== */}
                 {/* 3. RESULTADO DE VOTACIÓN (Para propuestas concluidas)    */}
                 {/* ======================================================== */}
-                {(proposalDetail.status === 'approved' || proposalDetail.status === 'rejected') && (
-                  <View style={styles.sectionCard}>
-                    <Text style={styles.sectionHeader}>Resultado de la Votación</Text>
-                    <View style={styles.voteStatsGrid}>
-                      <View style={[styles.voteStatBox, { borderColor: '#10b981' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                        <Text style={styles.voteStatLbl}>A FAVOR (SÍ)</Text>
-                      </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#ef4444' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                        <Text style={styles.voteStatLbl}>EN CONTRA (NO)</Text>
-                      </View>
-                      <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
-                        <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
-                        <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
-                      </View>
-                    </View>
+                {(proposalDetail.status === 'approved' || proposalDetail.status === 'rejected') && (() => {
+                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
 
-                    {/* Avance del Censo y Participación */}
-                    <View style={styles.voteProgressStrip}>
-                      <Text style={styles.voteProgressText}>
-                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
-                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                  return (
+                    <View style={styles.sectionCard}>
+                      <Text style={styles.sectionHeader}>Resultado de la Votación</Text>
+                      <View style={styles.voteStatsGrid}>
+                        <View style={[styles.voteStatBox, { borderColor: isExpulsion ? '#ef4444' : '#10b981' }]}>
+                          <Text style={[styles.voteStatVal, { color: isExpulsion ? '#ef4444' : '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
+                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}</Text>
+                        </View>
+                        <View style={[styles.voteStatBox, { borderColor: isExpulsion ? '#10b981' : '#ef4444' }]}>
+                          <Text style={[styles.voteStatVal, { color: isExpulsion ? '#10b981' : '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
+                          <Text style={styles.voteStatLbl}>{isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}</Text>
+                        </View>
+                        <View style={[styles.voteStatBox, { borderColor: '#94a3b8' }]}>
+                          <Text style={[styles.voteStatVal, { color: '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                          <Text style={styles.voteStatLbl}>ABSTENCIÓN</Text>
+                        </View>
+                      </View>
+
+                      {/* Avance del Censo y Participación */}
+                      <View style={styles.voteProgressStrip}>
+                        <Text style={styles.voteProgressText}>
+                          👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                            {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                          </Text>
                         </Text>
-                      </Text>
-                    </View>
-
-                    {/* Desplegable de Reglas */}
-                    <TouchableOpacity
-                      style={styles.rulesToggleBtn}
-                      onPress={() => setShowVotingRules(!showVotingRules)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.rulesToggleBtnText}>
-                        ℹ️ {showVotingRules ? 'Ocultar regla de votación' : 'Ver regla de votación'} {showVotingRules ? '▲' : '▼'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {showVotingRules && (
-                      <View style={styles.rulesCollapsibleContent}>
-                        {proposalDetail.proposal_type === 'member_admission' && (
-                          <Text style={styles.ruleNote}>
-                            * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
-                          </Text>
-                        )}
-                        {proposalDetail.proposal_type === 'expulsion' && (
-                          <Text style={styles.ruleNote}>
-                            * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
-                          </Text>
-                        )}
                       </View>
-                    )}
-                  </View>
-                )}
+
+                      {/* Desplegable de Reglas */}
+                      <TouchableOpacity
+                        style={styles.rulesToggleBtn}
+                        onPress={() => setShowVotingRules(!showVotingRules)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.rulesToggleBtnText}>
+                          ℹ️ {showVotingRules ? 'Ocultar regla de votación' : 'Ver regla de votación'} {showVotingRules ? '▲' : '▼'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {showVotingRules && (
+                        <View style={styles.rulesCollapsibleContent}>
+                          {proposalDetail.proposal_type === 'member_admission' && (
+                            <Text style={styles.ruleNote}>
+                              * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
+                            </Text>
+                          )}
+                          {proposalDetail.proposal_type === 'expulsion' && (
+                            <Text style={styles.ruleNote}>
+                              * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
 
                 {/* ======================================================== */}
                 {/* 4. SECCIÓN DE DEFENSA (Si es Expulsión)                 */}
@@ -2482,7 +2539,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f172a',
     borderRadius: 10,
     padding: 10,
-    marginBottom: 10
+    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 6
   },
   voteCounter: {
     flexDirection: 'row',
