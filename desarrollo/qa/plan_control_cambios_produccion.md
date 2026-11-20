@@ -182,9 +182,14 @@ Ejecutar inmediatamente después de que el backend y web estén en línea:
 Si ocurre una falla crítica no subsanable en los primeros 30 minutos:
 
 ### Procedimiento de Rollback:
-1. **Restauración de Base de Datos:**
+1. **Restauración Automatizada de Base de Datos:**
+   Se utiliza el script especializado con verificación de integridad SQLite (`PRAGMA integrity_check`) y reemplazo atómico:
    ```bash
-   flyctl ssh sftp put ./backups/mutualfam-backend_latest.db /app/data/mutualfam.db -a mutualfam-backend
+   # En producción (solicitará confirmación de seguridad explícita)
+   ./scripts/restore_db.sh --env=prod
+   
+   # O especificando un respaldo histórico exacto:
+   ./scripts/restore_db.sh --env=prod --file=./backups/mutualfam-backend_YYYYMMDD_HHMMSS.db
    ```
 2. **Reversión de Imagen / Release en Fly.io:**
    ```bash
@@ -200,6 +205,26 @@ Si ocurre una falla crítica no subsanable en los primeros 30 minutos:
    ```
 4. **Notificación de Contingencia:**
    Informar al grupo familiar que se mantiene temporalmente la versión anterior mientras se evalúa el incidente.
+
+---
+
+## 7.1. Garantía de Preservación de Estado en QA durante Pruebas Automatizadas
+
+Para evitar que las suites de pruebas automatizadas E2E borren los datos de usuarios reales o miembros evaluadores que interactúan en el entorno de QA:
+
+1. **Snapshot Atómico Previo Automático:**
+   Al invocar `./scripts/run_qa_tests.sh` o `node scripts/qa_test_suite.mjs`, el sistema ejecuta automáticamente:
+   - Respaldo local de contingencia en `./backups/mutualfam-qa-backend_latest.db` vía SFTP.
+   - Snapshot en caliente en el servidor a través de `POST /api/v1/sandbox/snapshot` (usando el API nativo `sqlite3.backup`).
+2. **Restitución Obligatoria Post-Pruebas (Garantizada por Bloque `finally` y Señales OS):**
+   - Tanto si las pruebas **superan**, **fallan** o son **interrumpidas con Ctrl+C (SIGINT / SIGTERM)**, el runner ejecuta de inmediato `POST /api/v1/sandbox/restore`.
+   - La base de datos es restituida a su estado original previo en menos de 100 ms, manteniendo las cuentas reales, contraseñas, propuestas y datos de pago 100% operativos.
+   - Si se desea deliberadamente inspeccionar el estado posterior a las pruebas sin restaurar, se debe pasar explícitamente el modificador `--keep-state`.
+3. **Restauración Manual de Emergencia en QA:**
+   Si por cualquier razón se requiere forzar la restauración del último estado auténtico en QA:
+   ```bash
+   ./scripts/restore_db.sh --env=qa
+   ```
 
 ---
 

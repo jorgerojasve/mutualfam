@@ -41,6 +41,70 @@ const API_BASE = targetArg
   : (process.env.QA_API_URL || 'https://mutualfam-qa-backend.fly.dev/api/v1').replace(/\/+$/, '');
 
 const VERBOSE = args.includes('--verbose') || args.includes('-v');
+const NO_RESTORE = args.includes('--no-restore') || args.includes('--keep-state');
+
+// Mecanismo de salvaguarda y restitución de estado previo en QA
+let snapshotCreated = false;
+let isRestored = false;
+
+async function takeSnapshot() {
+  if (NO_RESTORE) {
+    console.log(`${c.yellow}ℹ Bandera --keep-state: No se capturará snapshot para restauración.${c.reset}\n`);
+    return;
+  }
+  console.log(`${c.bold}${c.yellow}🛡️  FASE 0.0: Capturando snapshot atómico de seguridad en QA...${c.reset}`);
+  try {
+    const res = await fetch(`${API_BASE}/sandbox/snapshot`, { method: 'POST' }).then(r => r.json()).catch(() => null);
+    if (res && res.status === 'success') {
+      snapshotCreated = true;
+      console.log(`   ${c.green}✔ Snapshot previo capturado exitosamente en el servidor de QA.${c.reset}`);
+      console.log(`   ${c.dim}Al culminar o interrumpirse las pruebas, el estado auténtico será restituido automáticamente.${c.reset}\n`);
+    } else {
+      console.log(`   ${c.yellow}ℹ Aviso: /sandbox/snapshot no retornó éxito (${res?.detail || 'sin respuesta'}).${c.reset}`);
+      console.log(`   ${c.dim}Se recomienda verificar respaldo local en ./backups/ antes de continuar.${c.reset}\n`);
+    }
+  } catch (err) {
+    console.log(`   ${c.yellow}ℹ Aviso capturando snapshot: ${err.message}${c.reset}\n`);
+  }
+}
+
+async function restoreState(reason = 'normal') {
+  if (isRestored) return;
+  if (NO_RESTORE) {
+    console.log(`\n${c.yellow}ℹ Bandera --keep-state: Se conserva el estado posterior a las pruebas.${c.reset}\n`);
+    return;
+  }
+  isRestored = true;
+  console.log(`\n${c.bold}${c.cyan}====================================================================${c.reset}`);
+  console.log(`${c.bold}${c.cyan}   🛡️  RESTITUCIÓN AUTOMÁTICA DEL ESTADO PREVIO DE QA                  ${c.reset}`);
+  console.log(`${c.bold}${c.cyan}====================================================================${c.reset}`);
+  try {
+    const res = await fetch(`${API_BASE}/sandbox/restore`, { method: 'POST' }).then(r => r.json()).catch(() => null);
+    if (res && res.status === 'success') {
+      console.log(`${c.green}${c.bold}✔ ¡ESTADO PREVIO RESTITUIDO AL 100%!${c.reset}`);
+      console.log(`${c.green}✔ Miembros auténticos, credenciales, métodos de pago y propuestas devueltos a su estado original.${c.reset}\n`);
+    } else {
+      console.log(`${c.yellow}⚠️ No se pudo restituir automáticamente vía /sandbox/restore (${res?.detail || 'sin respuesta'}).${c.reset}`);
+      console.log(`${c.bold}💡 Para restituir manualmente ejecuta:${c.reset} ${c.cyan}./scripts/restore_db.sh --env=qa${c.reset}\n`);
+    }
+  } catch (err) {
+    console.log(`${c.yellow}⚠️ Error conectando con endpoint de restitución: ${err.message}${c.reset}`);
+    console.log(`${c.bold}💡 Para restituir manualmente ejecuta:${c.reset} ${c.cyan}./scripts/restore_db.sh --env=qa${c.reset}\n`);
+  }
+}
+
+// Registro de señales de interrupción (Ctrl+C o kill) para nunca dejar la BD vacía
+process.on('SIGINT', async () => {
+  console.log(`\n${c.yellow}⚠️ Proceso interrumpido por el usuario (SIGINT). Ejecutando restitución de seguridad...${c.reset}`);
+  await restoreState('SIGINT');
+  process.exit(130);
+});
+
+process.on('SIGTERM', async () => {
+  console.log(`\n${c.yellow}⚠️ Proceso terminado (SIGTERM). Ejecutando restitución de seguridad...${c.reset}`);
+  await restoreState('SIGTERM');
+  process.exit(143);
+});
 
 console.log(`${c.bold}${c.cyan}====================================================================${c.reset}`);
 console.log(`${c.bold}${c.cyan}   🧪 MUTUALFAM - SUITE DE PRUEBAS AUTOMATIZADAS QA (PRE-PRODUCCIÓN)  ${c.reset}`);
@@ -127,9 +191,13 @@ const ctx = {
 };
 
 async function executeTestSuite() {
-  // ============================================================================
-  // FASE 0: Inicialización y Puesta a Punto del Sandbox QA
-  // ============================================================================
+  await takeSnapshot();
+
+  let suiteExitCode = 0;
+  try {
+    // ============================================================================
+    // FASE 0: Inicialización y Puesta a Punto del Sandbox QA
+    // ============================================================================
   console.log(`${c.bold}${c.yellow}⚙️  FASE 0: Preparación y Limpieza del Entorno Sandbox QA...${c.reset}`);
   const resetRes = await fetch(`${API_BASE}/sandbox/reset-all`, { method: 'POST' }).then(r => r.json()).catch(() => ({}));
   if (resetRes.status === 'success') {
@@ -721,15 +789,23 @@ async function executeTestSuite() {
   console.log(`Pruebas Fallidas:         ${failedTests === 0 ? c.green + '0' : c.red + c.bold + failedTests}${c.reset}`);
   console.log(`Tasa de Éxito:            ${passRate === '100.0' ? c.green : c.yellow}${c.bold}${passRate}%${c.reset}\n`);
 
-  if (failedTests === 0) {
-    console.log(`${c.bold}${c.green}🎉 ¡TODAS LAS FUNCIONALIDADES EN QA FUERON CERTIFICADAS EXITOSAMENTE (100%)!${c.reset}`);
-    console.log(`${c.green}✔ El entorno de QA cumple con todos los criterios de aceptación para el pase a Producción.${c.reset}\n`);
-    process.exit(0);
-  } else {
-    console.log(`${c.bold}${c.red}⚠️ SE DETECTARON FALLOS EN ${failedTests} PRUEBA(S).${c.reset}`);
-    console.log(`${c.red}Revisa los mensajes de error antes de autorizar el pase a Producción.${c.reset}\n`);
-    process.exit(1);
+    if (failedTests === 0) {
+      console.log(`${c.bold}${c.green}🎉 ¡TODAS LAS FUNCIONALIDADES EN QA FUERON CERTIFICADAS EXITOSAMENTE (100%)!${c.reset}`);
+      console.log(`${c.green}✔ El entorno de QA cumple con todos los criterios de aceptación para el pase a Producción.${c.reset}\n`);
+      suiteExitCode = 0;
+    } else {
+      console.log(`${c.bold}${c.red}⚠️ SE DETECTARON FALLOS EN ${failedTests} PRUEBA(S).${c.reset}`);
+      console.log(`${c.red}Revisa los mensajes de error antes de autorizar el pase a Producción.${c.reset}\n`);
+      suiteExitCode = 1;
+    }
+  } catch (suiteErr) {
+    console.error(`\n${c.red}${c.bold}Error durante la ejecución de las pruebas:${c.reset}`, suiteErr);
+    suiteExitCode = 1;
+  } finally {
+    await restoreState();
   }
+
+  process.exit(suiteExitCode);
 }
 
 executeTestSuite().catch((err) => {

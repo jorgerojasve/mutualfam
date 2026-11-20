@@ -2,21 +2,29 @@
 DB Manager Router for Testing/Sandbox Environment
 """
 import os
-import shutil
+import sqlite3
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from ..core.config import settings
+from ..core.database import engine
 
 router = APIRouter()
 
-# The database file is assumed to be in the project root if sqlite:///./civiccore.db
-db_path = settings.database_url.replace("sqlite:///", "")
+def _get_sqlite_db_path() -> str:
+    url = settings.database_url
+    if url.startswith("sqlite:////"):
+        return "/" + url[len("sqlite:////"):]
+    elif url.startswith("sqlite:///"):
+        return url[len("sqlite:///"):]
+    return url
+
+db_path = _get_sqlite_db_path()
 backup_dir = os.path.join(os.path.dirname(db_path), "backups")
 
 @router.get("/list")
 def list_backups():
     if not os.path.exists(backup_dir):
-        os.makedirs(backup_dir)
+        os.makedirs(backup_dir, exist_ok=True)
     
     backups = []
     for f in os.listdir(backup_dir):
@@ -35,7 +43,7 @@ def list_backups():
 @router.post("/backup")
 def create_backup(name_prefix: str = "manual"):
     if not os.path.exists(backup_dir):
-        os.makedirs(backup_dir)
+        os.makedirs(backup_dir, exist_ok=True)
         
     if not os.path.exists(db_path):
         raise HTTPException(status_code=404, detail="Database file not found to backup.")
@@ -45,7 +53,12 @@ def create_backup(name_prefix: str = "manual"):
     backup_path = os.path.join(backup_dir, backup_name)
     
     try:
-        shutil.copy2(db_path, backup_path)
+        src = sqlite3.connect(db_path)
+        dst = sqlite3.connect(backup_path)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
         return {"status": "success", "backup_name": backup_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -57,17 +70,20 @@ def restore_backup(filename: str):
         raise HTTPException(status_code=404, detail="Backup file not found.")
         
     try:
-        # We perform a direct file copy. In SQLite this might cause temporary issues 
-        # for active connections if not careful, but for a dev tool it's usually fine.
-        shutil.copy2(backup_path, db_path)
-        return {"status": "success", "message": f"Restored {filename}. You may need to restart the server if you encounter locked database errors."}
+        engine.dispose()
+        src = sqlite3.connect(backup_path)
+        dst = sqlite3.connect(db_path)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
+        return {"status": "success", "message": f"Restored {filename} atomically using SQLite backup API."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset")
 def reset_database():
     """Vacía completamente todas las tablas de la base de datos SQLite."""
-    import sqlite3
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
@@ -89,4 +105,3 @@ def reset_database():
             return {"status": "success", "message": "Archivo de base de datos no encontrado"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
