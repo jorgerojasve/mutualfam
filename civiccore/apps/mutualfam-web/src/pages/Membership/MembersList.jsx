@@ -363,8 +363,18 @@ const MembersList = () => {
   // Emitir Voto en el Modal de Detalle
   const handleVotarInDetail = async (voto) => {
     if (!proposalDetail) return;
+    const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+
     let confirmMsg = `¿Deseas registrar tu voto como "${voto.toUpperCase()}"?`;
-    if (voto === 'no' && (proposalDetail.proposal_type === 'member_admission' || proposalDetail.category === 'ADMISSION')) {
+    if (isExpulsion) {
+      if (voto === 'si') {
+        confirmMsg = '⚠️ ATENCIÓN: Estás a punto de votar a favor de EXPULSAR al miembro de la mutual familiar. ¿Confirmas tu voto?';
+      } else if (voto === 'no') {
+        confirmMsg = '🛡️ Estás votando en contra de la expulsión para MANTENER al miembro en la mutual familiar. ¿Confirmas tu voto?';
+      } else {
+        confirmMsg = '⬜ ¿Deseas registrar tu voto como ABSTENCIÓN en esta propuesta de expulsión?';
+      }
+    } else if (voto === 'no' && (proposalDetail.proposal_type === 'member_admission' || proposalDetail.category === 'ADMISSION')) {
       confirmMsg = '⚠️ ATENCIÓN: Un voto en contra (NO) en una propuesta de ingreso activará el VETO nominativo del grupo y rechazará la admisión. ¿Confirmas tu voto?';
     }
     if (!window.confirm(confirmMsg)) return;
@@ -1447,132 +1457,173 @@ const MembersList = () => {
                 </div>
 
                 {/* 1. SECCIÓN DE VOTACIÓN DIRECTA (Si está en Votación Abierta) */}
-                {proposalDetail.status === 'voting' && (
-                  <div style={{
-                    backgroundColor: '#0f172a',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    marginBottom: '14px',
-                    border: '1.5px solid #1e293b'
-                  }}>
+                {proposalDetail.status === 'voting' && (() => {
+                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+                  const targetName = proposalDetail.target_member_name || (proposalDetail.title && proposalDetail.title.startsWith('Expulsión de ') ? proposalDetail.title.replace('Expulsión de ', '').trim() : null);
+                  const expulsionQuestion = targetName ? `¿Deseas expulsar a ${targetName} de la mutual?` : '¿Deseas expulsar al miembro de la mutual?';
+
+                  return (
                     <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '10px',
-                      flexWrap: 'wrap',
-                      gap: '8px'
+                      backgroundColor: '#0f172a',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      marginBottom: '14px',
+                      border: '1.5px solid #1e293b'
                     }}>
-                      <div style={{ fontSize: '13px', color: '#f8fafc', fontWeight: '700' }}>
-                        Emite tu voto (nominativo):
-                      </div>
-                      {proposalDetail.my_vote && (
-                        <div style={{
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          flexShrink: 0,
-                          backgroundColor: proposalDetail.my_vote === 'si'
-                            ? 'rgba(16, 185, 129, 0.25)'
-                            : proposalDetail.my_vote === 'no'
-                              ? 'rgba(239, 68, 68, 0.25)'
-                              : 'rgba(56, 189, 248, 0.25)',
-                          color: proposalDetail.my_vote === 'si'
-                            ? '#34d399'
-                            : proposalDetail.my_vote === 'no'
-                              ? '#f87171'
-                              : '#38bdf8',
-                          border: `1px solid ${proposalDetail.my_vote === 'si' ? '#10b981' : proposalDetail.my_vote === 'no' ? '#ef4444' : '#38bdf8'}`
-                        }}>
-                          Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '10px',
+                        flexWrap: 'wrap',
+                        gap: '8px'
+                      }}>
+                        <div style={{ fontSize: '13px', color: isExpulsion ? '#fca5a5' : '#f8fafc', fontWeight: '700' }}>
+                          {isExpulsion ? expulsionQuestion : 'Emite tu voto (nominativo):'}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Botones de Voto */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px', alignItems: 'stretch' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleVotarInDetail('si')}
-                        disabled={submittingVote}
-                        style={{
-                          backgroundColor: proposalDetail.my_vote === 'si' ? '#059669' : proposalDetail.my_vote ? '#0b1329' : '#064e3b',
-                          border: proposalDetail.my_vote === 'si' ? '2.5px solid #34d399' : proposalDetail.my_vote ? '1px solid rgba(255,255,255,0.1)' : '1.5px solid #059669',
-                          color: '#ffffff',
-                          opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'si' ? 0.35 : 1,
-                          borderRadius: '12px',
-                          padding: '8px 4px',
-                          fontSize: '13px',
-                          fontWeight: proposalDetail.my_vote === 'si' ? '800' : '700',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          minHeight: '58px',
-                          boxShadow: proposalDetail.my_vote === 'si' ? '0 0 10px rgba(52, 211, 153, 0.5)' : 'none',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <span>👍 SÍ</span>
-                        {proposalDetail.my_vote === 'si' && (
-                          <span style={{
-                            marginTop: '4px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.25)',
-                            border: '1px solid #ffffff',
-                            fontSize: '10px',
-                            fontWeight: '800',
-                            letterSpacing: '0.3px',
-                            color: '#ffffff'
+                        {proposalDetail.my_vote && (
+                          <div style={{
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            flexShrink: 0,
+                            backgroundColor: isExpulsion
+                              ? (proposalDetail.my_vote === 'si'
+                                  ? 'rgba(239, 68, 68, 0.25)'
+                                  : proposalDetail.my_vote === 'no'
+                                    ? 'rgba(16, 185, 129, 0.25)'
+                                    : 'rgba(56, 189, 248, 0.25)')
+                              : (proposalDetail.my_vote === 'si'
+                                  ? 'rgba(16, 185, 129, 0.25)'
+                                  : proposalDetail.my_vote === 'no'
+                                    ? 'rgba(239, 68, 68, 0.25)'
+                                    : 'rgba(56, 189, 248, 0.25)'),
+                            color: isExpulsion
+                              ? (proposalDetail.my_vote === 'si'
+                                  ? '#f87171'
+                                  : proposalDetail.my_vote === 'no'
+                                    ? '#34d399'
+                                    : '#38bdf8')
+                              : (proposalDetail.my_vote === 'si'
+                                  ? '#34d399'
+                                  : proposalDetail.my_vote === 'no'
+                                    ? '#f87171'
+                                    : '#38bdf8'),
+                            border: `1px solid ${isExpulsion
+                              ? (proposalDetail.my_vote === 'si' ? '#ef4444' : proposalDetail.my_vote === 'no' ? '#10b981' : '#38bdf8')
+                              : (proposalDetail.my_vote === 'si' ? '#10b981' : proposalDetail.my_vote === 'no' ? '#ef4444' : '#38bdf8')}`
                           }}>
-                            ✓ Tu voto
-                          </span>
+                            Tu voto: {isExpulsion
+                              ? (proposalDetail.my_vote === 'si' ? '⚠️ Sí, expulsar' : proposalDetail.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abstención')
+                              : (proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención')}
+                          </div>
                         )}
-                      </button>
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleVotarInDetail('no')}
-                        disabled={submittingVote}
-                        style={{
-                          backgroundColor: proposalDetail.my_vote === 'no' ? '#b91c1c' : proposalDetail.my_vote ? '#0b1329' : '#7f1d1d',
-                          border: proposalDetail.my_vote === 'no' ? '2.5px solid #f87171' : proposalDetail.my_vote ? '1px solid rgba(255,255,255,0.1)' : '1.5px solid #dc2626',
-                          color: '#ffffff',
-                          opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'no' ? 0.35 : 1,
-                          borderRadius: '12px',
-                          padding: '8px 4px',
-                          fontSize: '13px',
-                          fontWeight: proposalDetail.my_vote === 'no' ? '800' : '700',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          minHeight: '58px',
-                          boxShadow: proposalDetail.my_vote === 'no' ? '0 0 10px rgba(248, 113, 113, 0.5)' : 'none',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        <span>👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}</span>
-                        {proposalDetail.my_vote === 'no' && (
-                          <span style={{
-                            marginTop: '4px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.25)',
-                            border: '1px solid #ffffff',
-                            fontSize: '10px',
-                            fontWeight: '800',
-                            letterSpacing: '0.3px',
-                            color: '#ffffff'
-                          }}>
-                            ✓ Tu voto
-                          </span>
-                        )}
-                      </button>
+                      {/* Botones de Voto */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px', alignItems: 'stretch' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleVotarInDetail('si')}
+                          disabled={submittingVote}
+                          style={{
+                            backgroundColor: proposalDetail.my_vote === 'si'
+                              ? (isExpulsion ? '#b91c1c' : '#059669')
+                              : proposalDetail.my_vote
+                                ? '#0b1329'
+                                : (isExpulsion ? '#7f1d1d' : '#064e3b'),
+                            border: proposalDetail.my_vote === 'si'
+                              ? (isExpulsion ? '2.5px solid #f87171' : '2.5px solid #34d399')
+                              : proposalDetail.my_vote
+                                ? '1px solid rgba(255,255,255,0.1)'
+                                : (isExpulsion ? '1.5px solid #dc2626' : '1.5px solid #059669'),
+                            color: '#ffffff',
+                            opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'si' ? 0.35 : 1,
+                            borderRadius: '12px',
+                            padding: '8px 4px',
+                            fontSize: '13px',
+                            fontWeight: proposalDetail.my_vote === 'si' ? '800' : '700',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: '58px',
+                            boxShadow: proposalDetail.my_vote === 'si'
+                              ? (isExpulsion ? '0 0 10px rgba(248, 113, 113, 0.5)' : '0 0 10px rgba(52, 211, 153, 0.5)')
+                              : 'none',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span>{isExpulsion ? '⚠️ Sí, expulsar' : '👍 SÍ'}</span>
+                          {proposalDetail.my_vote === 'si' && (
+                            <span style={{
+                              marginTop: '4px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                              border: '1px solid #ffffff',
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              letterSpacing: '0.3px',
+                              color: '#ffffff'
+                            }}>
+                              ✓ Tu voto
+                            </span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleVotarInDetail('no')}
+                          disabled={submittingVote}
+                          style={{
+                            backgroundColor: proposalDetail.my_vote === 'no'
+                              ? (isExpulsion ? '#059669' : '#b91c1c')
+                              : proposalDetail.my_vote
+                                ? '#0b1329'
+                                : (isExpulsion ? '#064e3b' : '#7f1d1d'),
+                            border: proposalDetail.my_vote === 'no'
+                              ? (isExpulsion ? '2.5px solid #34d399' : '2.5px solid #f87171')
+                              : proposalDetail.my_vote
+                                ? '1px solid rgba(255,255,255,0.1)'
+                                : (isExpulsion ? '1.5px solid #059669' : '1.5px solid #dc2626'),
+                            color: '#ffffff',
+                            opacity: proposalDetail.my_vote && proposalDetail.my_vote !== 'no' ? 0.35 : 1,
+                            borderRadius: '12px',
+                            padding: '8px 4px',
+                            fontSize: '13px',
+                            fontWeight: proposalDetail.my_vote === 'no' ? '800' : '700',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: '58px',
+                            boxShadow: proposalDetail.my_vote === 'no'
+                              ? (isExpulsion ? '0 0 10px rgba(52, 211, 153, 0.5)' : '0 0 10px rgba(248, 113, 113, 0.5)')
+                              : 'none',
+                            transition: 'all 0.2s ease'
+                          }}
+                        >
+                          <span>{isExpulsion ? '🛡️ No, mantener' : `👎 NO ${proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}`}</span>
+                          {proposalDetail.my_vote === 'no' && (
+                            <span style={{
+                              marginTop: '4px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                              border: '1px solid #ffffff',
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              letterSpacing: '0.3px',
+                              color: '#ffffff'
+                            }}>
+                              ✓ Tu voto
+                            </span>
+                          )}
+                        </button>
 
                       <button
                         type="button"
@@ -1619,27 +1670,35 @@ const MembersList = () => {
                     {/* Conteo de Votos e Indicadores */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                       <div style={{
-                        border: proposalDetail.my_vote === 'si' ? '2px solid #10b981' : '1.5px solid #10b981',
+                        border: isExpulsion
+                          ? (proposalDetail.my_vote === 'si' ? '2px solid #ef4444' : '1.5px solid #ef4444')
+                          : (proposalDetail.my_vote === 'si' ? '2px solid #10b981' : '1.5px solid #10b981'),
                         borderRadius: '10px',
                         padding: '10px',
                         textAlign: 'center',
-                        backgroundColor: proposalDetail.my_vote === 'si' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)'
+                        backgroundColor: isExpulsion
+                          ? (proposalDetail.my_vote === 'si' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)')
+                          : (proposalDetail.my_vote === 'si' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)')
                       }}>
-                        <div style={{ color: '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
-                        <div style={{ color: proposalDetail.my_vote === 'si' ? '#34d399' : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
-                          A FAVOR (SÍ){proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
+                        <div style={{ color: isExpulsion ? '#ef4444' : '#10b981', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_yes || 0}</div>
+                        <div style={{ color: proposalDetail.my_vote === 'si' ? (isExpulsion ? '#f87171' : '#34d399') : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
+                          {isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
                         </div>
                       </div>
                       <div style={{
-                        border: proposalDetail.my_vote === 'no' ? '2px solid #ef4444' : '1.5px solid #ef4444',
+                        border: isExpulsion
+                          ? (proposalDetail.my_vote === 'no' ? '2px solid #10b981' : '1.5px solid #10b981')
+                          : (proposalDetail.my_vote === 'no' ? '2px solid #ef4444' : '1.5px solid #ef4444'),
                         borderRadius: '10px',
                         padding: '10px',
                         textAlign: 'center',
-                        backgroundColor: proposalDetail.my_vote === 'no' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)'
+                        backgroundColor: isExpulsion
+                          ? (proposalDetail.my_vote === 'no' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)')
+                          : (proposalDetail.my_vote === 'no' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(239, 68, 68, 0.1)')
                       }}>
-                        <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
-                        <div style={{ color: proposalDetail.my_vote === 'no' ? '#f87171' : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
-                          EN CONTRA (NO){proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
+                        <div style={{ color: isExpulsion ? '#10b981' : '#ef4444', fontSize: '20px', fontWeight: '800' }}>{proposalDetail.votes_no || 0}</div>
+                        <div style={{ color: proposalDetail.my_vote === 'no' ? (isExpulsion ? '#34d399' : '#f87171') : '#94a3b8', fontSize: '11px', fontWeight: '700' }}>
+                          {isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
                         </div>
                       </div>
                       <div style={{
@@ -1774,7 +1833,8 @@ const MembersList = () => {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* 2. Enlace de Invitación Oficial (Admisión - Solo cuando está Aprobada) */}
                 {proposalDetail.proposal_type === 'member_admission' && proposalDetail.status === 'approved' && (
