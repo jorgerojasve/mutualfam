@@ -1049,7 +1049,8 @@ const MembersList = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {displayedPropuestas.map((item) => {
                 const isAdmission = item.proposal_type === 'member_admission' || item.category === 'ADMISSION' || item.proposal_type === 'ADMISSION';
-                const isExpulsion = item.proposal_type === 'expulsion' || item.proposal_type === 'member_expulsion' || item.category === 'EXPULSION';
+                const typeLower = String(item.proposal_type || '').toLowerCase();
+                const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(item.category || '').toUpperCase() === 'EXPULSION' || (item.title && item.title.toLowerCase().includes('expulsi'));
                 const st = String(item.status || '').toLowerCase();
                 const isDebate = st === 'debate';
                 const isVoting = st === 'voting';
@@ -1239,8 +1240,8 @@ const MembersList = () => {
                         <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#cbd5e1', flexWrap: 'wrap' }}>
                           {isExpulsion ? (
                             <>
-                              <span>⚠️ <strong style={{ color: '#ef4444' }}>{item.votes_yes || 0}</strong> Expulsar</span>
-                              <span>🛡️ <strong style={{ color: '#10b981' }}>{item.votes_no || 0}</strong> Mantener</span>
+                              <span>⚠️ <strong style={{ color: '#ef4444' }}>{item.votes_yes || 0}</strong> Expulsar (Sí)</span>
+                              <span>🛡️ <strong style={{ color: '#10b981' }}>{item.votes_no || 0}</strong> Mantener (No)</span>
                               <span>⬜ <strong style={{ color: '#94a3b8' }}>{item.votes_abstain || 0}</strong> Abst.</span>
                             </>
                           ) : (
@@ -1251,38 +1252,41 @@ const MembersList = () => {
                             </>
                           )}
                         </div>
-                        {item.my_vote && (
-                          <div style={{
-                            backgroundColor: isExpulsion
-                              ? (item.my_vote === 'si'
-                                  ? 'rgba(239, 68, 68, 0.25)'
-                                  : item.my_vote === 'no'
-                                    ? 'rgba(16, 185, 129, 0.25)'
-                                    : 'rgba(56, 189, 248, 0.25)')
-                              : (item.my_vote === 'si'
-                                  ? 'rgba(16, 185, 129, 0.25)'
-                                  : item.my_vote === 'no'
-                                    ? 'rgba(239, 68, 68, 0.25)'
-                                    : 'rgba(56, 189, 248, 0.25)'),
-                            border: `1px solid ${isExpulsion
-                              ? (item.my_vote === 'si' ? '#ef4444' : item.my_vote === 'no' ? '#10b981' : '#38bdf8')
-                              : (item.my_vote === 'si' ? '#10b981' : item.my_vote === 'no' ? '#ef4444' : '#38bdf8')}`,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            color: '#e2e8f0',
-                          }}>
-                            Tu voto: <strong style={{
-                              color: isExpulsion
-                                ? (item.my_vote === 'si' ? '#f87171' : item.my_vote === 'no' ? '#34d399' : '#38bdf8')
-                                : (item.my_vote === 'si' ? '#34d399' : item.my_vote === 'no' ? '#f87171' : '#38bdf8')
+                        {item.my_vote && (() => {
+                          const mv = String(item.my_vote).toLowerCase();
+                          const isSi = mv === 'si' || mv === 'yes';
+                          const isNo = mv === 'no';
+                          const isAbst = mv === 'abstencion' || mv === 'abstain';
+
+                          const voteBg = isExpulsion
+                            ? (isSi ? 'rgba(239, 68, 68, 0.25)' : isNo ? 'rgba(16, 185, 129, 0.25)' : 'rgba(56, 189, 248, 0.25)')
+                            : (isSi ? 'rgba(16, 185, 129, 0.25)' : isNo ? 'rgba(239, 68, 68, 0.25)' : 'rgba(56, 189, 248, 0.25)');
+
+                          const voteBorder = isExpulsion
+                            ? (isSi ? '#ef4444' : isNo ? '#10b981' : '#38bdf8')
+                            : (isSi ? '#10b981' : isNo ? '#ef4444' : '#38bdf8');
+
+                          const voteTextColor = isExpulsion
+                            ? (isSi ? '#f87171' : isNo ? '#34d399' : '#38bdf8')
+                            : (isSi ? '#34d399' : isNo ? '#f87171' : '#38bdf8');
+
+                          const voteLabel = isExpulsion
+                            ? (isSi ? '⚠️ Sí, expulsar' : isNo ? '🛡️ No, mantener' : '⬜ Abst.')
+                            : (isSi ? '👍 SÍ' : isNo ? '👎 NO' : '⬜ Abst.');
+
+                          return (
+                            <div style={{
+                              backgroundColor: voteBg,
+                              border: `1px solid ${voteBorder}`,
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              color: '#e2e8f0',
                             }}>
-                              {isExpulsion
-                                ? (item.my_vote === 'si' ? '⚠️ Sí, expulsar' : item.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abst.')
-                                : (item.my_vote === 'si' ? '👍 SÍ' : item.my_vote === 'no' ? '👎 NO' : '⬜ Abst.')}
-                            </strong>
-                          </div>
-                        )}
+                              Tu voto: <strong style={{ color: voteTextColor }}>{voteLabel}</strong>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div style={{

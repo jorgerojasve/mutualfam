@@ -673,7 +673,8 @@ export default function AssemblyScreen({ embedded = false }) {
   const handleVotar = async (voto) => {
     if (!proposalDetail) return;
 
-    const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+    const typeLower = String(proposalDetail.proposal_type || '').toLowerCase();
+    const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(proposalDetail.category || '').toUpperCase() === 'EXPULSION' || (proposalDetail.title && proposalDetail.title.toLowerCase().includes('expulsi'));
 
     let confirmMsg = `¿Deseas registrar tu voto como "${voto.toUpperCase()}"?`;
     if (isExpulsion) {
@@ -823,7 +824,8 @@ export default function AssemblyScreen({ embedded = false }) {
   // Render de tarjeta de propuesta
   const renderProposalCard = ({ item }) => {
     const isAdmission = item.proposal_type === 'member_admission';
-    const isExpulsion = item.proposal_type === 'expulsion' || item.proposal_type === 'member_expulsion' || item.category === 'EXPULSION';
+    const typeLower = String(item.proposal_type || '').toLowerCase();
+    const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(item.category || '').toUpperCase() === 'EXPULSION' || (item.title && item.title.toLowerCase().includes('expulsi'));
     const isDebate = item.status === 'debate';
     const isVoting = item.status === 'voting';
     const isApproved = item.status === 'approved';
@@ -956,10 +958,10 @@ export default function AssemblyScreen({ embedded = false }) {
               {isExpulsion ? (
                 <>
                   <Text style={styles.voteCounterText}>
-                    ⚠️ <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> Expulsar
+                    ⚠️ <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.votes_yes || 0}</Text> Expulsar (Sí)
                   </Text>
                   <Text style={styles.voteCounterText}>
-                    🛡️ <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> Mantener
+                    🛡️ <Text style={{ color: '#10b981', fontWeight: 'bold' }}>{item.votes_no || 0}</Text> Mantener (No)
                   </Text>
                   <Text style={styles.voteCounterText}>
                     ⬜ <Text style={{ color: '#94a3b8', fontWeight: 'bold' }}>{item.votes_abstain || 0}</Text> Abst.
@@ -980,49 +982,36 @@ export default function AssemblyScreen({ embedded = false }) {
               )}
             </View>
 
-            {item.my_vote && (
-              <View style={[
-                styles.myVoteBadge,
-                isExpulsion ? {
-                  backgroundColor: item.my_vote === 'si'
-                    ? 'rgba(239, 68, 68, 0.25)'
-                    : item.my_vote === 'no'
-                      ? 'rgba(16, 185, 129, 0.25)'
-                      : 'rgba(56, 189, 248, 0.25)',
-                  borderColor: item.my_vote === 'si'
-                    ? '#ef4444'
-                    : item.my_vote === 'no'
-                      ? '#10b981'
-                      : '#38bdf8',
-                  borderWidth: 1,
-                } : {
-                  backgroundColor: item.my_vote === 'si'
-                    ? 'rgba(16, 185, 129, 0.25)'
-                    : item.my_vote === 'no'
-                      ? 'rgba(239, 68, 68, 0.25)'
-                      : 'rgba(56, 189, 248, 0.25)',
-                  borderColor: item.my_vote === 'si'
-                    ? '#10b981'
-                    : item.my_vote === 'no'
-                      ? '#ef4444'
-                      : '#38bdf8',
-                  borderWidth: 1,
-                }
-              ]}>
-                <Text style={styles.myVoteText}>
-                  Tu voto: <Text style={{
-                    fontWeight: 'bold',
-                    color: isExpulsion
-                      ? (item.my_vote === 'si' ? '#f87171' : item.my_vote === 'no' ? '#34d399' : '#38bdf8')
-                      : (item.my_vote === 'si' ? '#34d399' : item.my_vote === 'no' ? '#f87171' : '#38bdf8')
-                  }}>
-                    {isExpulsion
-                      ? (item.my_vote === 'si' ? '⚠️ Sí, expulsar' : item.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abst.')
-                      : (item.my_vote === 'si' ? '👍 SÍ' : item.my_vote === 'no' ? '👎 NO' : '⬜ Abst.')}
+            {item.my_vote && (() => {
+              const mv = String(item.my_vote).toLowerCase();
+              const isSi = mv === 'si' || mv === 'yes';
+              const isNo = mv === 'no';
+              const isAbst = mv === 'abstencion' || mv === 'abstain';
+
+              const voteBg = isExpulsion
+                ? (isSi ? 'rgba(239, 68, 68, 0.25)' : isNo ? 'rgba(16, 185, 129, 0.25)' : 'rgba(56, 189, 248, 0.25)')
+                : (isSi ? 'rgba(16, 185, 129, 0.25)' : isNo ? 'rgba(239, 68, 68, 0.25)' : 'rgba(56, 189, 248, 0.25)');
+
+              const voteBorder = isExpulsion
+                ? (isSi ? '#ef4444' : isNo ? '#10b981' : '#38bdf8')
+                : (isSi ? '#10b981' : isNo ? '#ef4444' : '#38bdf8');
+
+              const voteTextColor = isExpulsion
+                ? (isSi ? '#f87171' : isNo ? '#34d399' : '#38bdf8')
+                : (isSi ? '#34d399' : isNo ? '#f87171' : '#38bdf8');
+
+              const voteLabel = isExpulsion
+                ? (isSi ? '⚠️ Sí, expulsar' : isNo ? '🛡️ No, mantener' : '⬜ Abst.')
+                : (isSi ? '👍 SÍ' : isNo ? '👎 NO' : '⬜ Abst.');
+
+              return (
+                <View style={[styles.myVoteBadge, { backgroundColor: voteBg, borderColor: voteBorder, borderWidth: 1 }]}>
+                  <Text style={styles.myVoteText}>
+                    Tu voto: <Text style={{ fontWeight: 'bold', color: voteTextColor }}>{voteLabel}</Text>
                   </Text>
-                </Text>
-              </View>
-            )}
+                </View>
+              );
+            })()}
           </View>
         ) : (
           <View style={styles.voteSummaryContainer}>
@@ -1323,7 +1312,8 @@ export default function AssemblyScreen({ embedded = false }) {
                 {/* 1. SECCIÓN DE VOTACIÓN DIRECTA (Si está en Votación)    */}
                 {/* ======================================================== */}
                 {proposalDetail.status === 'voting' && (() => {
-                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+                  const typeLower = String(proposalDetail.proposal_type || '').toLowerCase();
+                  const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(proposalDetail.category || '').toUpperCase() === 'EXPULSION' || (proposalDetail.title && proposalDetail.title.toLowerCase().includes('expulsi'));
                   const targetName = proposalDetail.target_member_name || (proposalDetail.title && proposalDetail.title.startsWith('Expulsión de ') ? proposalDetail.title.replace('Expulsión de ', '').trim() : null);
                   const expulsionQuestion = targetName ? `¿Deseas expulsar a ${targetName} de la mutual?` : '¿Deseas expulsar al miembro de la mutual?';
 
@@ -1678,7 +1668,8 @@ export default function AssemblyScreen({ embedded = false }) {
                 {/* 3. RESULTADO DE VOTACIÓN (Para propuestas concluidas)    */}
                 {/* ======================================================== */}
                 {(proposalDetail.status === 'approved' || proposalDetail.status === 'rejected') && (() => {
-                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+                  const typeLower = String(proposalDetail.proposal_type || '').toLowerCase();
+                  const isExpulsion = typeLower === 'expulsion' || typeLower === 'member_expulsion' || String(proposalDetail.category || '').toUpperCase() === 'EXPULSION' || (proposalDetail.title && proposalDetail.title.toLowerCase().includes('expulsi'));
 
                   return (
                     <View style={styles.sectionCard}>
