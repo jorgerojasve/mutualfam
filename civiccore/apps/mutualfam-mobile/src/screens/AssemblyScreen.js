@@ -673,12 +673,22 @@ export default function AssemblyScreen({ embedded = false }) {
   const handleVotar = async (voto) => {
     if (!proposalDetail) return;
 
+    const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+
     let confirmMsg = `¿Deseas registrar tu voto como "${voto.toUpperCase()}"?`;
-    if (voto === 'no' && proposalDetail.proposal_type === 'member_admission') {
+    if (isExpulsion) {
+      if (voto === 'si') {
+        confirmMsg = '⚠️ ATENCIÓN: Estás a punto de votar a favor de EXPULSAR al miembro de la mutual familiar. ¿Confirmas tu voto?';
+      } else if (voto === 'no') {
+        confirmMsg = '🛡️ Estás votando en contra de la expulsión para MANTENER al miembro en la mutual familiar. ¿Confirmas tu voto?';
+      } else {
+        confirmMsg = '⬜ ¿Deseas registrar tu voto como ABSTENCIÓN en esta propuesta de expulsión?';
+      }
+    } else if (voto === 'no' && proposalDetail.proposal_type === 'member_admission') {
       confirmMsg = '⚠️ ATENCIÓN: Un voto en contra (NO) en una propuesta de ingreso activará el VETO nominativo del grupo y rechazará la admisión. ¿Confirmas tu voto?';
     }
 
-    Alert.alert('Confirmar Voto', confirmMsg, [
+    Alert.alert(isExpulsion ? 'Confirmar Decisión de Expulsión' : 'Confirmar Voto', confirmMsg, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Confirmar',
@@ -1259,247 +1269,285 @@ export default function AssemblyScreen({ embedded = false }) {
                 {/* ======================================================== */}
                 {/* 1. SECCIÓN DE VOTACIÓN DIRECTA (Si está en Votación)    */}
                 {/* ======================================================== */}
-                {proposalDetail.status === 'voting' && (
-                  <View style={styles.votingActionContainer}>
-                    <View style={styles.votingHeaderRow}>
-                      <Text style={styles.votingHeader} numberOfLines={1}>Emite tu voto (nominativo):</Text>
-                      {proposalDetail.my_vote ? (
-                        <View style={[
-                          styles.myVotePill,
-                          {
-                            backgroundColor: proposalDetail.my_vote === 'si'
-                              ? 'rgba(16, 185, 129, 0.25)'
-                              : proposalDetail.my_vote === 'no'
-                                ? 'rgba(239, 68, 68, 0.25)'
-                                : 'rgba(56, 189, 248, 0.25)',
-                            borderColor: proposalDetail.my_vote === 'si'
-                              ? '#10b981'
-                              : proposalDetail.my_vote === 'no'
-                                ? '#ef4444'
-                                : '#38bdf8'
-                          }
-                        ]}>
-                          <Text style={[
-                            styles.myVotePillText,
+                {proposalDetail.status === 'voting' && (() => {
+                  const isExpulsion = proposalDetail.proposal_type === 'expulsion' || proposalDetail.proposal_type === 'member_expulsion' || proposalDetail.category === 'EXPULSION';
+                  const targetName = proposalDetail.target_member_name || (proposalDetail.title && proposalDetail.title.startsWith('Expulsión de ') ? proposalDetail.title.replace('Expulsión de ', '').trim() : null);
+                  const expulsionQuestion = targetName ? `¿Deseas expulsar a ${targetName} de la mutual?` : '¿Deseas expulsar al miembro de la mutual?';
+
+                  return (
+                    <View style={styles.votingActionContainer}>
+                      <View style={styles.votingHeaderRow}>
+                        <Text style={[styles.votingHeader, isExpulsion && { color: '#fca5a5' }]} numberOfLines={2}>
+                          {isExpulsion ? expulsionQuestion : 'Emite tu voto (nominativo):'}
+                        </Text>
+                        {proposalDetail.my_vote ? (
+                          <View style={[
+                            styles.myVotePill,
                             {
-                              color: proposalDetail.my_vote === 'si'
-                                ? '#34d399'
-                                : proposalDetail.my_vote === 'no'
-                                  ? '#f87171'
-                                  : '#38bdf8'
+                              backgroundColor: isExpulsion
+                                ? (proposalDetail.my_vote === 'si'
+                                    ? 'rgba(239, 68, 68, 0.25)'
+                                    : proposalDetail.my_vote === 'no'
+                                      ? 'rgba(16, 185, 129, 0.25)'
+                                      : 'rgba(56, 189, 248, 0.25)')
+                                : (proposalDetail.my_vote === 'si'
+                                    ? 'rgba(16, 185, 129, 0.25)'
+                                    : proposalDetail.my_vote === 'no'
+                                      ? 'rgba(239, 68, 68, 0.25)'
+                                      : 'rgba(56, 189, 248, 0.25)'),
+                              borderColor: isExpulsion
+                                ? (proposalDetail.my_vote === 'si'
+                                    ? '#ef4444'
+                                    : proposalDetail.my_vote === 'no'
+                                      ? '#10b981'
+                                      : '#38bdf8')
+                                : (proposalDetail.my_vote === 'si'
+                                    ? '#10b981'
+                                    : proposalDetail.my_vote === 'no'
+                                      ? '#ef4444'
+                                      : '#38bdf8')
                             }
                           ]}>
-                            Tu voto: {proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención'}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-
-                    {/* Botones de Voto */}
-                    <View style={styles.voteButtonsRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.voteBtn,
-                          styles.voteBtnSi,
-                          proposalDetail.my_vote
-                            ? (proposalDetail.my_vote === 'si' ? styles.voteBtnSelectedSi : styles.voteBtnDimmed)
-                            : null
-                        ]}
-                        onPress={() => handleVotar('si')}
-                        disabled={submittingVote}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[
-                          styles.voteBtnText,
-                          proposalDetail.my_vote === 'si' && styles.voteBtnTextSelected,
-                          proposalDetail.my_vote && proposalDetail.my_vote !== 'si' && styles.voteBtnTextDimmed
-                        ]}>
-                          👍 SÍ
-                        </Text>
-                        {proposalDetail.my_vote === 'si' ? (
-                          <View style={[styles.voteBadge, styles.voteBadgeSi]}>
-                            <Text style={styles.voteBadgeTextSi}>✓ Tu voto</Text>
+                            <Text style={[
+                              styles.myVotePillText,
+                              {
+                                color: isExpulsion
+                                  ? (proposalDetail.my_vote === 'si'
+                                      ? '#f87171'
+                                      : proposalDetail.my_vote === 'no'
+                                        ? '#34d399'
+                                        : '#38bdf8')
+                                  : (proposalDetail.my_vote === 'si'
+                                      ? '#34d399'
+                                      : proposalDetail.my_vote === 'no'
+                                        ? '#f87171'
+                                        : '#38bdf8')
+                              }
+                            ]}>
+                              Tu voto: {isExpulsion
+                                ? (proposalDetail.my_vote === 'si' ? '⚠️ Sí, expulsar' : proposalDetail.my_vote === 'no' ? '🛡️ No, mantener' : '⬜ Abstención')
+                                : (proposalDetail.my_vote === 'si' ? '👍 SÍ' : proposalDetail.my_vote === 'no' ? '👎 NO' : '⬜ Abstención')}
+                            </Text>
                           </View>
                         ) : null}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.voteBtn,
-                          styles.voteBtnNo,
-                          proposalDetail.my_vote
-                            ? (proposalDetail.my_vote === 'no' ? styles.voteBtnSelectedNo : styles.voteBtnDimmed)
-                            : null
-                        ]}
-                        onPress={() => handleVotar('no')}
-                        disabled={submittingVote}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[
-                          styles.voteBtnText,
-                          proposalDetail.my_vote === 'no' && styles.voteBtnTextSelected,
-                          proposalDetail.my_vote && proposalDetail.my_vote !== 'no' && styles.voteBtnTextDimmed
-                        ]}>
-                          👎 NO {proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}
-                        </Text>
-                        {proposalDetail.my_vote === 'no' ? (
-                          <View style={[styles.voteBadge, styles.voteBadgeNo]}>
-                            <Text style={styles.voteBadgeTextNo}>✓ Tu voto</Text>
-                          </View>
-                        ) : null}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.voteBtn,
-                          styles.voteBtnAbstain,
-                          proposalDetail.my_vote
-                            ? (proposalDetail.my_vote === 'abstencion' ? styles.voteBtnSelectedAbstain : styles.voteBtnDimmed)
-                            : null
-                        ]}
-                        onPress={() => handleVotar('abstencion')}
-                        disabled={submittingVote}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[
-                          styles.voteBtnText,
-                          proposalDetail.my_vote === 'abstencion' && styles.voteBtnTextSelected,
-                          proposalDetail.my_vote && proposalDetail.my_vote !== 'abstencion' && styles.voteBtnTextDimmed
-                        ]}>
-                          ⬜ Abstención
-                        </Text>
-                        {proposalDetail.my_vote === 'abstencion' ? (
-                          <View style={[styles.voteBadge, styles.voteBadgeAbstain]}>
-                            <Text style={styles.voteBadgeTextAbstain}>✓ Tu voto</Text>
-                          </View>
-                        ) : null}
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Indicadores de Votos */}
-                    <View style={styles.voteStatsGrid}>
-                      <View style={[
-                        styles.voteStatBox,
-                        { borderColor: '#10b981' },
-                        proposalDetail.my_vote === 'si' && { backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 2 }
-                      ]}>
-                        <Text style={[styles.voteStatVal, { color: '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
-                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'si' && { color: '#34d399', fontWeight: '800' }]}>
-                          A FAVOR (SÍ){proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
-                        </Text>
                       </View>
-                      <View style={[
-                        styles.voteStatBox,
-                        { borderColor: '#ef4444' },
-                        proposalDetail.my_vote === 'no' && { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 2 }
-                      ]}>
-                        <Text style={[styles.voteStatVal, { color: '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
-                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'no' && { color: '#f87171', fontWeight: '800' }]}>
-                          EN CONTRA (NO){proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
-                        </Text>
-                      </View>
-                      <View style={[
-                        styles.voteStatBox,
-                        { borderColor: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' },
-                        proposalDetail.my_vote === 'abstencion' && { backgroundColor: 'rgba(56, 189, 248, 0.2)', borderWidth: 2 }
-                      ]}>
-                        <Text style={[styles.voteStatVal, { color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
-                        <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'abstencion' && { color: '#38bdf8', fontWeight: '800' }]}>
-                          ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? ' • Tú' : ''}
-                        </Text>
-                      </View>
-                    </View>
 
-                    {/* Avance del Censo y Participación */}
-                    <View style={styles.voteProgressStrip}>
-                      <Text style={styles.voteProgressText}>
-                        👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
-                          {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
-                        </Text>
-                        {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
-                          ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
-                          : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
-                            ? ' (100% del censo ha votado)'
-                            : ''}
-                      </Text>
-                    </View>
-
-                    {/* Botón para Concluir y Computar Votación si corresponde */}
-                    {proposalDetail.can_conclude ? (
-                      <View style={styles.concludeContainer}>
+                      {/* Botones de Voto */}
+                      <View style={styles.voteButtonsRow}>
                         <TouchableOpacity
-                          style={styles.concludeBtn}
-                          onPress={handleCerrarPropuesta}
-                          disabled={closingProposal}
-                          activeOpacity={0.8}
+                          style={[
+                            styles.voteBtn,
+                            isExpulsion ? styles.voteBtnNo : styles.voteBtnSi,
+                            proposalDetail.my_vote
+                              ? (proposalDetail.my_vote === 'si'
+                                  ? (isExpulsion ? styles.voteBtnSelectedNo : styles.voteBtnSelectedSi)
+                                  : styles.voteBtnDimmed)
+                              : null
+                          ]}
+                          onPress={() => handleVotar('si')}
+                          disabled={submittingVote}
+                          activeOpacity={0.7}
                         >
-                          {closingProposal ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
-                          )}
+                          <Text style={[
+                            styles.voteBtnText,
+                            proposalDetail.my_vote === 'si' && styles.voteBtnTextSelected,
+                            proposalDetail.my_vote && proposalDetail.my_vote !== 'si' && styles.voteBtnTextDimmed
+                          ]}>
+                            {isExpulsion ? '⚠️ Sí, expulsar' : '👍 SÍ'}
+                          </Text>
+                          {proposalDetail.my_vote === 'si' ? (
+                            <View style={[styles.voteBadge, isExpulsion ? styles.voteBadgeNo : styles.voteBadgeSi]}>
+                              <Text style={isExpulsion ? styles.voteBadgeTextNo : styles.voteBadgeTextSi}>✓ Tu voto</Text>
+                            </View>
+                          ) : null}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.voteBtn,
+                            isExpulsion ? styles.voteBtnSi : styles.voteBtnNo,
+                            proposalDetail.my_vote
+                              ? (proposalDetail.my_vote === 'no'
+                                  ? (isExpulsion ? styles.voteBtnSelectedSi : styles.voteBtnSelectedNo)
+                                  : styles.voteBtnDimmed)
+                              : null
+                          ]}
+                          onPress={() => handleVotar('no')}
+                          disabled={submittingVote}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[
+                            styles.voteBtnText,
+                            proposalDetail.my_vote === 'no' && styles.voteBtnTextSelected,
+                            proposalDetail.my_vote && proposalDetail.my_vote !== 'no' && styles.voteBtnTextDimmed
+                          ]}>
+                            {isExpulsion ? '🛡️ No, mantener' : `👎 NO ${proposalDetail.proposal_type === 'member_admission' ? '(Veto)' : ''}`}
+                          </Text>
+                          {proposalDetail.my_vote === 'no' ? (
+                            <View style={[styles.voteBadge, isExpulsion ? styles.voteBadgeSi : styles.voteBadgeNo]}>
+                              <Text style={isExpulsion ? styles.voteBadgeTextSi : styles.voteBadgeTextNo}>✓ Tu voto</Text>
+                            </View>
+                          ) : null}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.voteBtn,
+                            styles.voteBtnAbstain,
+                            proposalDetail.my_vote
+                              ? (proposalDetail.my_vote === 'abstencion' ? styles.voteBtnSelectedAbstain : styles.voteBtnDimmed)
+                              : null
+                          ]}
+                          onPress={() => handleVotar('abstencion')}
+                          disabled={submittingVote}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[
+                            styles.voteBtnText,
+                            proposalDetail.my_vote === 'abstencion' && styles.voteBtnTextSelected,
+                            proposalDetail.my_vote && proposalDetail.my_vote !== 'abstencion' && styles.voteBtnTextDimmed
+                          ]}>
+                            ⬜ Abstención
+                          </Text>
+                          {proposalDetail.my_vote === 'abstencion' ? (
+                            <View style={[styles.voteBadge, styles.voteBadgeAbstain]}>
+                              <Text style={styles.voteBadgeTextAbstain}>✓ Tu voto</Text>
+                            </View>
+                          ) : null}
                         </TouchableOpacity>
                       </View>
-                    ) : null}
 
-                    {/* Desplegable de Reglas y Detalles */}
-                    <TouchableOpacity
-                      style={styles.rulesToggleBtn}
-                      onPress={() => setShowVotingRules(!showVotingRules)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.rulesToggleBtnText}>
-                        ℹ️ {showVotingRules ? 'Ocultar regla y detalles' : 'Ver regla de votación y detalles'} {showVotingRules ? '▲' : '▼'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {showVotingRules && (
-                      <View style={styles.rulesCollapsibleContent}>
-                        {proposalDetail.proposal_type === 'member_admission' && (
-                          <Text style={styles.ruleNote}>
-                            * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
+                      {/* Indicadores de Votos */}
+                      <View style={styles.voteStatsGrid}>
+                        <View style={[
+                          styles.voteStatBox,
+                          { borderColor: isExpulsion ? '#ef4444' : '#10b981' },
+                          proposalDetail.my_vote === 'si' && {
+                            backgroundColor: isExpulsion ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                            borderWidth: 2
+                          }
+                        ]}>
+                          <Text style={[styles.voteStatVal, { color: isExpulsion ? '#ef4444' : '#10b981' }]}>{proposalDetail.votes_yes || 0}</Text>
+                          <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'si' && { color: isExpulsion ? '#f87171' : '#34d399', fontWeight: '800' }]}>
+                            {isExpulsion ? 'POR EXPULSAR (SÍ)' : 'A FAVOR (SÍ)'}{proposalDetail.my_vote === 'si' ? ' • Tú' : ''}
                           </Text>
-                        )}
-                        {proposalDetail.proposal_type === 'expulsion' && (
-                          <Text style={styles.ruleNote}>
-                            * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                        </View>
+                        <View style={[
+                          styles.voteStatBox,
+                          { borderColor: isExpulsion ? '#10b981' : '#ef4444' },
+                          proposalDetail.my_vote === 'no' && {
+                            backgroundColor: isExpulsion ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                            borderWidth: 2
+                          }
+                        ]}>
+                          <Text style={[styles.voteStatVal, { color: isExpulsion ? '#10b981' : '#ef4444' }]}>{proposalDetail.votes_no || 0}</Text>
+                          <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'no' && { color: isExpulsion ? '#34d399' : '#f87171', fontWeight: '800' }]}>
+                            {isExpulsion ? 'POR MANTENER (NO)' : 'EN CONTRA (NO)'}{proposalDetail.my_vote === 'no' ? ' • Tú' : ''}
                           </Text>
-                        )}
-                        <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
-                          {(() => {
-                            if (proposalDetail.has_veto) {
-                              return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
-                            }
-                            if (proposalDetail.proposal_type === 'member_admission') {
-                              const needed = proposalDetail.votes_yes_needed || 2;
-                              const currentYes = proposalDetail.votes_yes || 0;
-                              const total = proposalDetail.total_active_members || 2;
-                              const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
-
-                              if (proposalDetail.threshold_reached && pending === 0) {
-                                return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
-                              }
-                              if (currentYes >= total) {
-                                return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
-                              }
-                              return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
-                            }
-
-                            if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
-                              return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
-                            }
-                            return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
-                          })()}
-                        </Text>
-                        {proposalDetail.proposal_type === 'member_admission' && (
-                          <Text style={[styles.ruleNote, { marginTop: 6 }]}>
-                            El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                        </View>
+                        <View style={[
+                          styles.voteStatBox,
+                          { borderColor: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' },
+                          proposalDetail.my_vote === 'abstencion' && { backgroundColor: 'rgba(56, 189, 248, 0.2)', borderWidth: 2 }
+                        ]}>
+                          <Text style={[styles.voteStatVal, { color: proposalDetail.my_vote === 'abstencion' ? '#38bdf8' : '#94a3b8' }]}>{proposalDetail.votes_abstain || 0}</Text>
+                          <Text style={[styles.voteStatLbl, proposalDetail.my_vote === 'abstencion' && { color: '#38bdf8', fontWeight: '800' }]}>
+                            ABSTENCIÓN{proposalDetail.my_vote === 'abstencion' ? ' • Tú' : ''}
                           </Text>
-                        )}
+                        </View>
                       </View>
-                    )}
-                  </View>
-                )}
+
+                      {/* Avance del Censo y Participación */}
+                      <View style={styles.voteProgressStrip}>
+                        <Text style={styles.voteProgressText}>
+                          👥 Participación: <Text style={{ fontWeight: 'bold', color: '#f8fafc' }}>
+                            {(proposalDetail.total_votes_casted !== undefined ? proposalDetail.total_votes_casted : ((proposalDetail.votes_yes || 0) + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)))} de {proposalDetail.total_active_members || 2} miembros
+                          </Text>
+                          {proposalDetail.pending_votes !== undefined && proposalDetail.pending_votes > 0
+                            ? ` (Faltan ${proposalDetail.pending_votes} por votar)`
+                            : (proposalDetail.total_votes_casted !== undefined && proposalDetail.total_votes_casted >= (proposalDetail.total_active_members || 2))
+                              ? ' (100% del censo ha votado)'
+                              : ''}
+                        </Text>
+                      </View>
+
+                      {/* Botón para Concluir y Computar Votación si corresponde */}
+                      {proposalDetail.can_conclude ? (
+                        <View style={styles.concludeContainer}>
+                          <TouchableOpacity
+                            style={styles.concludeBtn}
+                            onPress={handleCerrarPropuesta}
+                            disabled={closingProposal}
+                            activeOpacity={0.8}
+                          >
+                            {closingProposal ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <Text style={styles.concludeBtnText}>⚖️ Computar y Concluir Votación</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+
+                      {/* Desplegable de Reglas y Detalles */}
+                      <TouchableOpacity
+                        style={styles.rulesToggleBtn}
+                        onPress={() => setShowVotingRules(!showVotingRules)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.rulesToggleBtnText}>
+                          ℹ️ {showVotingRules ? 'Ocultar regla y detalles' : 'Ver regla de votación y detalles'} {showVotingRules ? '▲' : '▼'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {showVotingRules && (
+                        <View style={styles.rulesCollapsibleContent}>
+                          {proposalDetail.proposal_type === 'member_admission' && (
+                            <Text style={styles.ruleNote}>
+                              * Regla de Admisión: Requiere ≥75% de aprobación ({proposalDetail.votes_yes_needed || 2} de {proposalDetail.total_active_members || 2} votos SÍ) y cero votos NO (Consenso con Veto).
+                            </Text>
+                          )}
+                          {proposalDetail.proposal_type === 'expulsion' && (
+                            <Text style={styles.ruleNote}>
+                              * Regla de Expulsión: Requiere supermayoría de 75% de los votos emitidos.
+                            </Text>
+                          )}
+                          <Text style={[styles.concludeNote, proposalDetail.threshold_reached ? { color: '#4ade80' } : null]}>
+                            {(() => {
+                              if (proposalDetail.has_veto) {
+                                return '🚫 Se ha registrado un voto en contra (Veto). Esta propuesta de admisión será rechazada.';
+                              }
+                              if (proposalDetail.proposal_type === 'member_admission') {
+                                const needed = proposalDetail.votes_yes_needed || 2;
+                                const currentYes = proposalDetail.votes_yes || 0;
+                                const total = proposalDetail.total_active_members || 2;
+                                const pending = proposalDetail.pending_votes !== undefined ? proposalDetail.pending_votes : (total - (currentYes + (proposalDetail.votes_no || 0) + (proposalDetail.votes_abstain || 0)));
+
+                                if (proposalDetail.threshold_reached && pending === 0) {
+                                  return '✓ Todos los miembros han votado y se alcanzó el umbral (≥75% SÍ sin vetos). Puedes registrar la resolución oficial ahora.';
+                                }
+                                if (currentYes >= total) {
+                                  return '🎉 ¡Unanimidad afirmativa alcanzada (100% SÍ)! Puedes registrar la resolución oficial ahora.';
+                                }
+                                return `⏳ Votación en curso (${currentYes} de ${needed} votos SÍ requeridos). Faltan ${pending} miembro(s) por votar; si algún miembro vota NO se activará el veto.`;
+                              }
+
+                              if (proposalDetail.threshold_reached && (proposalDetail.pending_votes === 0 || proposalDetail.time_remaining_seconds <= 0)) {
+                                return '✓ El umbral de aprobación ha sido alcanzado. Puedes registrar la resolución oficial ahora.';
+                              }
+                              return '⏳ Votación en curso. Se espera la participación de todos los miembros o el vencimiento del plazo para registrar el resultado oficial.';
+                            })()}
+                          </Text>
+                          {proposalDetail.proposal_type === 'member_admission' && (
+                            <Text style={[styles.ruleNote, { marginTop: 6 }]}>
+                              El enlace y código de invitación se generarán automáticamente en cuanto la asamblea apruebe el ingreso.
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
 
                 {/* ======================================================== */}
                 {/* 2. INVITACIÓN OFICIAL (Solo si está Aprobada)           */}
