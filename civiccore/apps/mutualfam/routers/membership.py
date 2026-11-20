@@ -100,6 +100,8 @@ def get_current_org_member(request: Request, current_user: User = Depends(get_cu
     
     if not membership:
         raise HTTPException(status_code=403, detail="No perteneces a esta mutual")
+    if membership.status == MemberStatus.EXPELLED:
+        raise HTTPException(status_code=403, detail="Tu membresía en esta mutual ha sido revocada por decisión de la asamblea.")
         
     org = db.query(Organization).filter(Organization.id == int(org_id)).first()
     return {"user": current_user, "membership": membership, "organization": org}
@@ -456,11 +458,18 @@ def get_invite_info(token: str, db: Session = Depends(get_db)):
 @router.get("")
 @router.get("/")
 @router.get("/members")
-def get_organization_members(org_member: dict = Depends(get_current_org_member), db: Session = Depends(get_db)):
+def get_organization_members(
+    include_all: bool = False,
+    org_member: dict = Depends(get_current_org_member),
+    db: Session = Depends(get_db)
+):
     if not org_member or not org_member.get("organization"):
         return []
     org_id = org_member["organization"].id
-    memberships = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id).all()
+    query = db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == org_id)
+    if not include_all:
+        query = query.filter(OrganizationMembership.status == MemberStatus.ACTIVE)
+    memberships = query.all()
     
     result = []
     for m in memberships:

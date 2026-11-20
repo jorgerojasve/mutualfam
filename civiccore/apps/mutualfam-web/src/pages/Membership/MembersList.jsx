@@ -756,7 +756,7 @@ const MembersList = () => {
                   )
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                    {members.map((member) => {
+                    {members.filter(m => !m.status || m.status === 'active').map((member) => {
                       const isMe = (user?.id && member.id === user.id) ||
                                    (user?.email && member.email?.toLowerCase() === user.email?.toLowerCase());
                       return (

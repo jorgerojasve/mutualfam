@@ -119,10 +119,19 @@ def dispatch_proposal_resolution_notifications(db: Session, proposal: Proposal, 
                 notify_users(
                     db,
                     all_user_ids,
-                    "📋 Expulsión Aprobada",
+                    "⚠️ Expulsión Aprobada",
                     f"{target_name} ha sido expulsado de la mutual.",
                     {"proposal_id": proposal.id}
                 )
+                if proposal.target_member_id:
+                    motivo_text = f" Motivo: {proposal.content}" if proposal.content else ""
+                    notify_users(
+                        db,
+                        [proposal.target_member_id],
+                        "⚠️ Membresía Revocada por la Asamblea",
+                        f"La asamblea familiar ha aprobado tu expulsión de la mutual.{motivo_text}",
+                        {"proposal_id": proposal.id, "type": "expulsion"}
+                    )
         elif proposal.status == ProposalStatus.REJECTED:
             if proposal.proposal_type == ProposalType.MEMBER_ADMISSION:
                 veto_info = ""

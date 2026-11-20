@@ -68,10 +68,11 @@ export default function InviteMembersScreen({ navigation, route }) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMembers(parsed);
+          const activeOnly = parsed.filter(m => !m.status || m.status === 'active');
+          setMembers(activeOnly);
           setHasLoadedMembers(true);
           if (activeOrg && !activeOrg.members_count) {
-            activeOrg.members_count = parsed.length;
+            activeOrg.members_count = activeOnly.length;
           }
         }
       }
@@ -145,13 +146,14 @@ export default function InviteMembersScreen({ navigation, route }) {
           authApi.getMembers(activeOrg.id),
           authApi.me().catch(() => null)
         ]);
-        if (Array.isArray(membersData) && membersData.length > 0) {
-          setMembers(membersData);
+        if (Array.isArray(membersData)) {
+          const activeOnly = membersData.filter(m => !m.status || m.status === 'active');
+          setMembers(activeOnly);
           setHasLoadedMembers(true);
           if (activeOrg) {
-            activeOrg.members_count = membersData.length;
+            activeOrg.members_count = activeOnly.length;
           }
-          await AsyncStorage.setItem(`cached_members_${activeOrg.id}`, JSON.stringify(membersData)).catch(() => {});
+          await AsyncStorage.setItem(`cached_members_${activeOrg.id}`, JSON.stringify(activeOnly)).catch(() => {});
         }
         if (meData) setCurrentUser(meData);
       } catch (memErr) {
@@ -206,8 +208,9 @@ export default function InviteMembersScreen({ navigation, route }) {
     }
   };
 
-  const effectiveMemberCount = members.length > 0
-    ? members.length
+  const activeMembersList = members.filter(m => !m.status || m.status === 'active');
+  const effectiveMemberCount = activeMembersList.length > 0
+    ? activeMembersList.length
     : (activeOrg?.members_count || 0);
 
   // Solo considerar miembro único si NO estamos offline y efectivamente hay exactamente 1 miembro verificado
@@ -409,12 +412,12 @@ export default function InviteMembersScreen({ navigation, route }) {
             <Text style={styles.cardTitle}>
               {hasLoadedMembers && effectiveMemberCount > 0 ? `Miembros Actuales (${effectiveMemberCount})` : 'Miembros Actuales'}
             </Text>
-            {members.length === 0 ? (
+            {activeMembersList.length === 0 ? (
               <Text style={styles.cardText}>
                 {isOffline ? 'Sin conexión de red. Conéctate para actualizar la lista de miembros.' : 'No hay miembros que mostrar.'}
               </Text>
             ) : (
-              members.map(member => {
+              activeMembersList.map(member => {
                 const isMe = (currentUser?.id && member.id === currentUser.id) ||
                              (currentUser?.email && member.email?.toLowerCase() === currentUser.email?.toLowerCase());
                 return (
