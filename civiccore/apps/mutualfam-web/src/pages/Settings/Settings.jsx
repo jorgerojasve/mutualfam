@@ -19,9 +19,10 @@ import {
 } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
+import packageJson from '../../../package.json';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = '1.0.64';
+const APP_VERSION = packageJson.version || '1.1.76';
 
 export default function ProfileAndSettings() {
   const { user, activeOrg, logout, isOffline } = useAuthStore();

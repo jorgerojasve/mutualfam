@@ -1,7 +1,7 @@
 {
   "name": "mutualfam-web",
   "private": true,
-  "version": "1.0.64",
+  "version": "1.1.76",
   "type": "module",
   "scripts": {
     "dev": "vite",
