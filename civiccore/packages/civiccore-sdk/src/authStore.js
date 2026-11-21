@@ -57,6 +57,7 @@ export const useAuthStore = create((set, get) => ({
           expelled_organizations: rawUser.expelled_organizations || []
         };
         await storage.setItem('cached_user_profile', JSON.stringify(user));
+        await storage.setItem('cached_expelled_organizations', JSON.stringify(rawUser.expelled_organizations || []));
         const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
         set({
           isAuthenticated: true,
@@ -92,6 +93,7 @@ export const useAuthStore = create((set, get) => ({
         let cachedOrg = null;
         let cachedOrgs = [];
         let cachedUser = null;
+        let cachedExpelled = [];
         try {
           const rawCachedOrg = await storage.getItem('cached_active_org');
           if (rawCachedOrg) cachedOrg = JSON.parse(rawCachedOrg);
@@ -99,6 +101,9 @@ export const useAuthStore = create((set, get) => ({
           if (rawCachedOrgs) cachedOrgs = JSON.parse(rawCachedOrgs);
           const rawCachedUser = await storage.getItem('cached_user_profile');
           if (rawCachedUser) cachedUser = JSON.parse(rawCachedUser);
+          const rawCachedExpelled = await storage.getItem('cached_expelled_organizations');
+          if (rawCachedExpelled) cachedExpelled = JSON.parse(rawCachedExpelled);
+          else if (cachedUser?.expelled_organizations) cachedExpelled = cachedUser.expelled_organizations;
         } catch (_) {}
 
         const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
@@ -108,7 +113,8 @@ export const useAuthStore = create((set, get) => ({
           isLoading: false,
           user: cachedUser,
           activeOrg: cachedOrg || (storedOrgId ? { id: storedOrgId, name: 'Mi Mutual' } : null),
-          organizations: cachedOrgs.length > 0 ? cachedOrgs : []
+          organizations: cachedOrgs.length > 0 ? cachedOrgs : [],
+          expelledOrganizations: cachedExpelled || []
         });
         return;
       }
@@ -146,6 +152,8 @@ export const useAuthStore = create((set, get) => ({
         cedula: rawUser.identifier,
         expelled_organizations: rawUser.expelled_organizations || []
       };
+      await storage.setItem('cached_user_profile', JSON.stringify(user));
+      await storage.setItem('cached_expelled_organizations', JSON.stringify(rawUser.expelled_organizations || []));
       const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
       set({
         user,
