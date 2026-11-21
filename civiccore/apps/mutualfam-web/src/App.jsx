@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
 import MainLayout from './components/Layout/MainLayout';
+import AutoUpdateDetector from './components/Common/AutoUpdateDetector';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import InviteLanding from './pages/Auth/InviteLanding';
@@ -25,6 +26,9 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* Detector y recarga automática ante nuevas versiones desplegadas */}
+      <AutoUpdateDetector />
+
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
