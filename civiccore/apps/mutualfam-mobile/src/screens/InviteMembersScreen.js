@@ -158,6 +158,25 @@ export default function InviteMembersScreen({ navigation, route }) {
         if (meData) setCurrentUser(meData);
       } catch (memErr) {
         console.warn("Could not fetch members online, preserving cached data", memErr);
+        const isRevoked = String(memErr?.message || '').toLowerCase().includes('revocada') ||
+                          String(memErr?.message || '').toLowerCase().includes('no perteneces') ||
+                          String(memErr?.message || '').toLowerCase().includes('expulsad') ||
+                          memErr?.response?.status === 403;
+        if (isRevoked) {
+          setMembers([]);
+          await AsyncStorage.multiRemove([
+            `cached_members_${activeOrg.id}`,
+            `cached_asambleas_${activeOrg.id}`,
+            'active_org_id',
+            'org_id',
+            'cached_active_org'
+          ]).catch(() => {});
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SelectMutual' }],
+          });
+          return;
+        }
         // En caso de fallo de red, asegurar que la caché local esté activa
         await loadCachedMembers(activeOrg.id);
       }

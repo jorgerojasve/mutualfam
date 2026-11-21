@@ -135,12 +135,13 @@ export default function LoginScreen({ route, navigation }) {
             identifier: me.identifier,
           }));
         } catch (_) {}
-        if (me.organizations && me.organizations.length > 0) {
-          if (me.organizations.length === 1) {
+        const activeOrgs = (me.organizations || []).filter(o => !o.status || o.status.toLowerCase() === 'active');
+        if (activeOrgs.length > 0) {
+          if (activeOrgs.length === 1) {
              if (selectOrg) {
-               await selectOrg(me.organizations[0]);
+               await selectOrg(activeOrgs[0]);
              } else {
-               const singleOrgId = me.organizations[0].id.toString();
+               const singleOrgId = activeOrgs[0].id.toString();
                await AsyncStorage.setItem('active_org_id', singleOrgId);
                await AsyncStorage.setItem('org_id', singleOrgId);
              }
@@ -150,7 +151,7 @@ export default function LoginScreen({ route, navigation }) {
              navigation.replace('SelectMutual');
           }
         } else {
-          // No tiene organizaciones, debe crear o unirse a una
+          // No tiene organizaciones activas, debe crear o unirse a una
           if (loadActiveOrg) await loadActiveOrg();
           navigation.replace('SelectMutual');
         }

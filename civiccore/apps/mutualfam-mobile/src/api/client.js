@@ -105,9 +105,23 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Manejo de Fase 0: Si el usuario ya no pertenece a la mutual seleccionada
-    if (error.response && error.response.status === 403 && error.response.data?.detail === "No perteneces a esta mutual") {
-      await AsyncStorage.removeItem('active_org_id');
+    // Manejo de revocación de membresía / expulsión o no pertenencia (HTTP 403)
+    if (
+      error.response &&
+      error.response.status === 403 &&
+      (
+        error.response.data?.detail === "No perteneces a esta mutual" ||
+        String(error.response.data?.detail || '').toLowerCase().includes('revocada') ||
+        String(error.response.data?.detail || '').toLowerCase().includes('expulsad')
+      )
+    ) {
+      const currentOrgId = await AsyncStorage.getItem('active_org_id');
+      const keysToRemove = ['active_org_id', 'org_id', 'cached_active_org'];
+      if (currentOrgId) {
+        keysToRemove.push(`cached_members_${currentOrgId}`);
+        keysToRemove.push(`cached_asambleas_${currentOrgId}`);
+      }
+      await AsyncStorage.multiRemove(keysToRemove);
       const { navigationRef } = require('../../App');
       if (navigationRef.isReady()) {
         navigationRef.reset({

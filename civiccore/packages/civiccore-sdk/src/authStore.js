@@ -4,7 +4,7 @@ import { getConfig } from './config.js';
 import { wsClient } from './wsClient.js';
 
 const resolveActiveOrg = async (rawUser, storage) => {
-  const orgs = rawUser.organizations || [];
+  const orgs = (rawUser.organizations || []).filter(o => !o.status || o.status.toLowerCase() === 'active');
   const storedOrgId = (await storage.getItem('active_org_id')) || (await storage.getItem('organizationId'));
   
   let targetOrg = null;
@@ -20,8 +20,16 @@ const resolveActiveOrg = async (rawUser, storage) => {
     await storage.setItem('cached_active_org', JSON.stringify(targetOrg));
     await storage.setItem('cached_organizations', JSON.stringify(orgs));
   } else {
+    if (storedOrgId) {
+      try {
+        await storage.removeItem(`cached_members_${storedOrgId}`);
+        await storage.removeItem(`cached_asambleas_${storedOrgId}`);
+      } catch (_) {}
+    }
+    await storage.removeItem('organizationId');
     await storage.removeItem('active_org_id');
     await storage.removeItem('cached_active_org');
+    await storage.removeItem('cached_organizations');
   }
   return { orgs, targetOrg };
 };
@@ -32,6 +40,7 @@ export const useAuthStore = create((set, get) => ({
   user: null,
   activeOrg: null,
   organizations: [],
+  expelledOrganizations: [],
   isLoading: true,
 
   loadUser: async () => {
@@ -40,10 +49,24 @@ export const useAuthStore = create((set, get) => ({
       const token = await storage.getItem('jwt_token');
       if (token) {
         const rawUser = await authApi.me();
-        const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+        const user = {
+          ...rawUser,
+          nombre: rawUser.first_name,
+          apellido: rawUser.last_name,
+          cedula: rawUser.identifier,
+          expelled_organizations: rawUser.expelled_organizations || []
+        };
         await storage.setItem('cached_user_profile', JSON.stringify(user));
         const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
-        set({ isAuthenticated: true, isOffline: false, user, organizations: orgs, activeOrg: targetOrg, isLoading: false });
+        set({
+          isAuthenticated: true,
+          isOffline: false,
+          user,
+          organizations: orgs,
+          expelledOrganizations: rawUser.expelled_organizations || [],
+          activeOrg: targetOrg,
+          isLoading: false
+        });
         
         // Conectar WS
         if (targetOrg?.id) {
@@ -116,9 +139,20 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { storage } = getConfig();
       const rawUser = await authApi.me();
-      const user = { ...rawUser, nombre: rawUser.first_name, apellido: rawUser.last_name, cedula: rawUser.identifier };
+      const user = {
+        ...rawUser,
+        nombre: rawUser.first_name,
+        apellido: rawUser.last_name,
+        cedula: rawUser.identifier,
+        expelled_organizations: rawUser.expelled_organizations || []
+      };
       const { orgs, targetOrg } = await resolveActiveOrg(rawUser, storage);
-      set({ user, organizations: orgs, activeOrg: targetOrg });
+      set({
+        user,
+        organizations: orgs,
+        expelledOrganizations: rawUser.expelled_organizations || [],
+        activeOrg: targetOrg
+      });
       return { user, organizations: orgs, activeOrg: targetOrg };
     } catch (e) {
       console.warn("Could not refresh user", e);

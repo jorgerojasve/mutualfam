@@ -387,9 +387,12 @@ def join_organization(req: JoinRequest, current_user: User = Depends(get_current
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    memberships = db.query(OrganizationMembership).filter(OrganizationMembership.user_id == current_user.id).all()
+    active_memberships = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == current_user.id,
+        OrganizationMembership.status == MemberStatus.ACTIVE
+    ).all()
     orgs = []
-    for m in memberships:
+    for m in active_memberships:
         org = db.query(Organization).filter(Organization.id == m.organization_id).first()
         if not org:
             continue
@@ -405,13 +408,29 @@ def get_me(current_user: User = Depends(get_current_user), db: Session = Depends
             "grace_period_ends_at": org.grace_period_ends_at,
             "members_count": m_count
         })
+
+    expelled_memberships = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == current_user.id,
+        OrganizationMembership.status == MemberStatus.EXPELLED
+    ).all()
+    expelled_orgs = []
+    for m in expelled_memberships:
+        org = db.query(Organization).filter(Organization.id == m.organization_id).first()
+        if org:
+            expelled_orgs.append({
+                "id": org.id,
+                "name": org.name,
+                "role": m.role,
+                "status": "expelled"
+            })
         
     return {
         "id": current_user.id,
         "email": current_user.email,
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
-        "organizations": orgs
+        "organizations": orgs,
+        "expelled_organizations": expelled_orgs
     }
 
 @router.get("/invites/{token}")

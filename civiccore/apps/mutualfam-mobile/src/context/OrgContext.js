@@ -17,19 +17,25 @@ export const OrgProvider = ({ children }) => {
   const fetchOrganizations = async () => {
     try {
       const data = await authApi.me();
-      const orgs = data.organizations || [];
+      const orgs = (data.organizations || []).filter(o => !o.status || o.status.toLowerCase() === 'active');
+      const expelled = data.expelled_organizations || [];
       const userProfile = {
         id: data.id,
         email: data.email,
         first_name: data.first_name,
         last_name: data.last_name,
         identifier: data.identifier,
+        expelled_organizations: expelled,
       };
       setCurrentUser(userProfile);
       setOrganizations(orgs);
       setIsOffline(false);
       await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
       await AsyncStorage.setItem('cached_user_profile', JSON.stringify(userProfile));
+      if (orgs.length === 0) {
+        setActiveOrg(null);
+        await AsyncStorage.multiRemove(['active_org_id', 'org_id', 'cached_active_org']);
+      }
       return orgs;
     } catch (e) {
       console.warn("Error fetching organizations", e);
@@ -85,7 +91,7 @@ export const OrgProvider = ({ children }) => {
       } else {
         // Solo limpiar si explícitamente el servidor confirmó una lista vacía (HTTP 200 sin organizaciones)
         setActiveOrg(null);
-        await AsyncStorage.removeItem('cached_active_org');
+        await AsyncStorage.multiRemove(['active_org_id', 'org_id', 'cached_active_org', 'cached_organizations']);
       }
     } catch (e) {
       console.warn("loadActiveOrg error:", e);
