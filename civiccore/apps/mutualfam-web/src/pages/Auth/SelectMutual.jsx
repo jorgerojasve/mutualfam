@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@civiccore/sdk';
-import { Users, Plus, Key, LogOut, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
+import { getEnvironmentConfig } from '../../utils/env';
 import { OfflineEmptyState } from '../../components/Common/OfflineEmptyState.jsx';
-
-const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : '?');
 
 export default function SelectMutual() {
   const navigate = useNavigate();
-  const { user, organizations, expelledOrganizations, activeOrg, selectOrg, joinOrg, createOrg, logout, refreshUser, isOffline } = useAuthStore();
-  
+  const {
+    user,
+    organizations,
+    expelledOrganizations,
+    activeOrg,
+    selectOrg,
+    joinOrg,
+    createOrg,
+    logout,
+    refreshUser,
+    isOffline,
+  } = useAuthStore();
+
+  const envConfig = getEnvironmentConfig();
+  const [loading, setLoading] = useState(true);
   const [modalMode, setModalMode] = useState(null); // 'create' | 'join' | null
-  
+
   // Join form state
   const [inviteCode, setInviteCode] = useState('');
   const [joinLoading, setJoinLoading] = useState(false);
@@ -27,8 +38,29 @@ export default function SelectMutual() {
   const [createSuccess, setCreateSuccess] = useState('');
 
   useEffect(() => {
-    refreshUser();
+    let mounted = true;
+    (async () => {
+      try {
+        await refreshUser();
+      } catch (_) {
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
+
+  const expelledList = (() => {
+    if (expelledOrganizations && expelledOrganizations.length > 0) return expelledOrganizations;
+    if (user?.expelled_organizations && user.expelled_organizations.length > 0) return user.expelled_organizations;
+    try {
+      const raw = localStorage.getItem('cached_expelled_organizations');
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return [];
+  })();
 
   const handleSelectOrg = async (org) => {
     await selectOrg(org);
@@ -47,7 +79,7 @@ export default function SelectMutual() {
       setTimeout(() => {
         setModalMode(null);
         navigate('/loans');
-      }, 1200);
+      }, 1000);
     } catch (err) {
       setJoinError(err?.message || 'Código de invitación inválido o expirado');
     } finally {
@@ -78,70 +110,182 @@ export default function SelectMutual() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (_) {}
+    navigate('/login');
+  };
+
+  const accentColor = envConfig.color || '#10b981';
+  const screenBg = envConfig.screenBg || '#06231c';
+  const cardBg = envConfig.cardBg || '#0c332b';
+
+  if (loading && !expelledList.length && (!organizations || organizations.length === 0)) {
+    return (
+      <div
+        style={{
+          minHeight: '100dvh',
+          backgroundColor: screenBg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: '36px',
+            height: '36px',
+            border: `3px solid ${accentColor}`,
+            borderTopColor: 'transparent',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-between p-4 sm:p-8 max-w-lg mx-auto">
-      <div className="w-full">
-        <div className="flex items-center justify-between mb-6 pt-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+    <div
+      style={{
+        minHeight: '100dvh',
+        backgroundColor: screenBg,
+        boxSizing: 'border-box',
+        padding: '20px',
+        paddingTop: 'max(20px, env(safe-area-inset-top, 20px))',
+        paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        maxWidth: '480px',
+        margin: '0 auto',
+        width: '100%',
+        fontFamily: 'var(--font-sans, system-ui, sans-serif)',
+      }}
+    >
+      <div style={{ width: '100%' }}>
+        {/* Title Row */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '20px',
+            paddingTop: '10px',
+          }}
+        >
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: 'bold',
+              color: '#f8fafc',
+              margin: 0,
+              letterSpacing: '-0.02em',
+            }}
+          >
             Mis Mutuales
           </h1>
           <EnvBadge size="small" />
         </div>
 
         {/* Aviso de Membresías Revocadas por la Asamblea */}
-        {((expelledOrganizations && expelledOrganizations.length > 0) || (user?.expelled_organizations && user.expelled_organizations.length > 0)) && (
-          <div className="mb-6 p-4 rounded-2xl bg-red-950/40 border border-red-500/40">
-            {(expelledOrganizations || user?.expelled_organizations || []).map((exp) => (
-              <div key={exp.id} className="flex items-start gap-3">
-                <span className="text-xl">⚠️</span>
-                <div>
-                  <h4 className="text-sm font-bold text-red-400">
+        {expelledList.length > 0 && (
+          <div
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: 'rgba(239, 68, 68, 0.35)',
+              borderRadius: '14px',
+              padding: '14px',
+              marginBottom: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+            }}
+          >
+            {expelledList.map((exp) => (
+              <div
+                key={exp.id}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                }}
+              >
+                <span style={{ fontSize: '20px', marginTop: '2px', lineHeight: 1 }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      color: '#f87171',
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      marginBottom: '4px',
+                    }}
+                  >
                     Membresía Revocada: {exp.name}
-                  </h4>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    La asamblea familiar ha aprobado la revocación de tu membresía en esta mutual. Tu acceso a sus datos, fondos y asambleas ha sido inhabilitado de forma definitiva.
-                  </p>
+                  </div>
+                  <div
+                    style={{
+                      color: '#cbd5e1',
+                      fontSize: '12px',
+                      lineHeight: '17px',
+                    }}
+                  >
+                    La asamblea familiar ha aprobado la revocación de tu membresía en esta mutual. Tu acceso a sus datos y operaciones ha sido inhabilitado de forma definitiva.
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
 
+        {/* Listado de Mutuales Activas */}
         {organizations && organizations.length > 0 ? (
-          <div className="flex flex-col gap-3 mb-6">
-            {organizations.map((org) => {
-              const isSelected = activeOrg?.id === org.id;
-              return (
+          <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: '20px' }}>
+            {organizations.map((org) => (
+              <div
+                key={org.id}
+                onClick={() => handleSelectOrg(org)}
+                style={{
+                  backgroundColor: cardBg,
+                  padding: '20px',
+                  borderRadius: '12px',
+                  marginBottom: '15px',
+                  borderLeftWidth: '4px',
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: accentColor,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'opacity 0.15s ease',
+                  boxSizing: 'border-box',
+                }}
+              >
                 <div
-                  key={org.id}
-                  onClick={() => handleSelectOrg(org)}
-                  className={`p-4 rounded-2xl bg-slate-900 border transition-all cursor-pointer flex items-center justify-between ${
-                    isSelected
-                      ? 'border-blue-500/60 bg-blue-500/10 shadow-lg shadow-blue-500/5'
-                      : 'border-white/10 hover:border-white/20 hover:bg-slate-800/80'
-                  }`}
+                  style={{
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    color: '#f8fafc',
+                    marginBottom: '5px',
+                  }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                      {initialOf(org.name)}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white text-base leading-snug">
-                        {org.name}
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Rol: {org.role === 'founder' ? 'Fundador' : 'Miembro'}
-                      </p>
-                    </div>
-                  </div>
-                  {isSelected ? (
-                    <Check size={20} className="text-blue-400" />
-                  ) : (
-                    <ArrowRight size={18} className="text-slate-500" />
-                  )}
+                  {org.name}
                 </div>
-              );
-            })}
+                <div
+                  style={{
+                    fontSize: '14px',
+                    color: '#94a3b8',
+                  }}
+                >
+                  Rol: {org.role === 'founder' ? 'Fundador' : 'Miembro'}
+                </div>
+              </div>
+            ))}
           </div>
         ) : isOffline ? (
           <OfflineEmptyState
@@ -150,154 +294,347 @@ export default function SelectMutual() {
             onRetry={refreshUser}
             style={{ margin: '0 0 1.5rem 0' }}
           />
-        ) : (
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 text-center mb-6">
-            <p className="text-slate-300 font-medium mb-1">
-              Aún no perteneces a ninguna familia/mutual.
-            </p>
-            <p className="text-xs text-slate-500">
-              Si alguien te invitó, haz clic en "Tengo un código de invitación" y escribe el código recibido.
-            </p>
-          </div>
-        )}
+        ) : null}
       </div>
 
-      <div className="flex flex-col gap-3 pb-6">
+      {/* Estado Vacío: Centrado en el espacio disponible */}
+      {(!organizations || organizations.length === 0) && !isOffline && (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            padding: '20px 0',
+          }}
+        >
+          <p
+            style={{
+              color: '#94a3b8',
+              fontSize: '16px',
+              textAlign: 'center',
+              margin: 0,
+            }}
+          >
+            Aún no perteneces a ninguna familia/mutual.
+          </p>
+          <p
+            style={{
+              color: '#64748b',
+              fontSize: '14px',
+              textAlign: 'center',
+              marginTop: '12px',
+              lineHeight: '20px',
+              padding: '0 10px',
+            }}
+          >
+            Si alguien te invitó, toca "Tengo un código de invitación" y escribe el código que aparece en tu mensaje.
+          </p>
+        </div>
+      )}
+
+      {/* Acciones Inferiores Homologadas */}
+      <div
+        style={{
+          marginTop: '20px',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          paddingTop: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
         <button
           type="button"
           onClick={() => setModalMode('join')}
-          className="btn btn-primary w-full py-3 rounded-xl flex items-center justify-center gap-2 font-semibold text-sm"
+          style={{
+            backgroundColor: accentColor,
+            color: '#fff',
+            fontWeight: 'bold',
+            fontSize: '16px',
+            padding: '15px',
+            borderRadius: '8px',
+            alignItems: 'center',
+            marginBottom: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            width: '100%',
+            textAlign: 'center',
+            display: 'block',
+            boxSizing: 'border-box',
+          }}
         >
-          <Key size={18} />
-          <span>Tengo un código de invitación</span>
+          Tengo un código de invitación
         </button>
 
         <button
           type="button"
           onClick={() => setModalMode('create')}
-          className="btn btn-secondary w-full py-3 rounded-xl flex items-center justify-center gap-2 font-semibold text-sm"
+          style={{
+            backgroundColor: 'transparent',
+            borderColor: accentColor,
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            padding: '15px',
+            borderRadius: '8px',
+            alignItems: 'center',
+            marginBottom: '20px',
+            color: accentColor,
+            fontWeight: 'bold',
+            fontSize: '16px',
+            cursor: 'pointer',
+            width: '100%',
+            textAlign: 'center',
+            display: 'block',
+            boxSizing: 'border-box',
+          }}
         >
-          <Plus size={18} />
-          <span>Crear una nueva mutual</span>
+          Crear una nueva mutual
         </button>
 
         <button
           type="button"
-          onClick={logout}
-          className="text-xs text-red-400 hover:text-red-300 py-3 flex items-center justify-center gap-2 font-medium"
+          onClick={handleLogout}
+          style={{
+            backgroundColor: 'transparent',
+            border: 'none',
+            padding: '15px',
+            alignItems: 'center',
+            color: '#ef4444',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            width: '100%',
+            textAlign: 'center',
+            display: 'block',
+            boxSizing: 'border-box',
+          }}
         >
-          <LogOut size={14} />
-          <span>Cerrar Sesión</span>
+          Cerrar Sesión
         </button>
       </div>
 
-      {/* Modal / Dialog para Crear o Unirse */}
+      {/* Modal / Dialog para Crear o Unirse (Homologados con Android) */}
       {modalMode && (
-        <div className="modal-backdrop" onClick={() => setModalMode(null)}>
-          <div className="mutual-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          onClick={() => setModalMode(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: cardBg,
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '440px',
+              boxSizing: 'border-box',
+              color: '#f8fafc',
+            }}
+          >
             {modalMode === 'create' ? (
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
-                  <Sparkles size={20} className="text-blue" />
-                  Crear mi Mutual
-                </h3>
-                <p className="text-xs text-secondary mb-3">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <h3 style={{ fontSize: '22px', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>
+                    Crear mi Mutual
+                  </h3>
+                  <EnvBadge size="small" />
+                </div>
+                <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: '20px' }}>
                   Inicia tu propia familia y administra sus préstamos y fondos.
                 </p>
 
-                <div className="mutual-policy-notice mb-3">
-                  <p>
+                <div
+                  style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderColor: 'rgba(245, 158, 11, 0.3)',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <p style={{ fontSize: '12px', color: '#f59e0b', margin: 0, lineHeight: '18px' }}>
                     📌 Cada miembro de la mutual inicial puede crear hasta 1 mutual adicional. Si deseas desplegar tu propia instancia o bot, contáctanos por soporte.
                   </p>
                 </div>
 
                 <form onSubmit={handleCreate}>
-                  <div className="form-group mb-3">
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Nombre de la familia *
-                    </label>
+                  <div style={{ marginBottom: '14px' }}>
                     <input
                       type="text"
-                      className="form-input text-sm w-full"
                       placeholder="Nombre de la familia (ej. Familia Pérez)"
                       value={createName}
                       onChange={(e) => setCreateName(e.target.value)}
                       autoFocus
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#071318',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        padding: '14px',
+                        color: '#f8fafc',
+                        fontSize: '15px',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                      }}
                     />
                   </div>
-                  <div className="form-group mb-3">
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Descripción (Opcional)
-                    </label>
+                  <div style={{ marginBottom: '16px' }}>
                     <textarea
-                      className="form-input text-sm w-full"
                       rows={3}
-                      placeholder="Describe el propósito o miembros..."
+                      placeholder="Descripción (Opcional)"
                       value={createDescription}
                       onChange={(e) => setCreateDescription(e.target.value)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#071318',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        padding: '14px',
+                        color: '#f8fafc',
+                        fontSize: '15px',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                        resize: 'none',
+                      }}
                     />
                   </div>
-                  {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
-                  {createSuccess && <p className="text-xs text-green-400 mb-3">{createSuccess}</p>}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-secondary flex-1 py-2 text-sm"
-                      onClick={() => setModalMode(null)}
-                      disabled={createLoading}
-                    >
-                      Cancelar
-                    </button>
+                  {createError && (
+                    <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>
+                      {createError}
+                    </div>
+                  )}
+                  {createSuccess && (
+                    <div style={{ color: '#10b981', fontSize: '13px', marginBottom: '12px' }}>
+                      {createSuccess}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <button
                       type="submit"
-                      className="btn btn-primary flex-1 py-2 text-sm"
                       disabled={createLoading || !createName.trim()}
+                      style={{
+                        backgroundColor: accentColor,
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        fontSize: '16px',
+                        padding: '14px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: createLoading || !createName.trim() ? 'not-allowed' : 'pointer',
+                        opacity: createLoading || !createName.trim() ? 0.6 : 1,
+                      }}
                     >
                       {createLoading ? 'Creando...' : 'Crear Mutual'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalMode(null)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        color: '#94a3b8',
+                        fontWeight: 'bold',
+                        fontSize: '15px',
+                        padding: '12px',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar
                     </button>
                   </div>
                 </form>
               </div>
             ) : (
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
-                  <Key size={20} className="text-blue" />
-                  Unirme con código
-                </h3>
-                <p className="text-xs text-secondary mb-3">
-                  Ingresa el código o token de invitación que te hayan compartido.
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <h3 style={{ fontSize: '22px', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>
+                    Unirse a una Mutual
+                  </h3>
+                  <EnvBadge size="small" />
+                </div>
+                <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: '20px' }}>
+                  Ingresa el código de 8 caracteres que aparece en tu invitación (ej. K7P3-QX9M) o el enlace completo.
                 </p>
                 <form onSubmit={handleJoin}>
-                  <div className="form-group mb-3">
-                    <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Código de invitación *
-                    </label>
+                  <div style={{ marginBottom: '16px' }}>
                     <input
                       type="text"
-                      className="form-input text-sm w-full"
-                      placeholder="Código o token (ej. MF-XXXX)"
+                      placeholder="Código o enlace de invitación"
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value)}
                       autoFocus
+                      style={{
+                        width: '100%',
+                        backgroundColor: '#071318',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        padding: '14px',
+                        color: '#f8fafc',
+                        fontSize: '15px',
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                      }}
                     />
                   </div>
-                  {joinError && <p className="text-xs text-red-400 mb-3">{joinError}</p>}
-                  {joinSuccess && <p className="text-xs text-green-400 mb-3">{joinSuccess}</p>}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-secondary flex-1 py-2 text-sm"
-                      onClick={() => setModalMode(null)}
-                      disabled={joinLoading}
-                    >
-                      Cancelar
-                    </button>
+                  {joinError && (
+                    <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>
+                      {joinError}
+                    </div>
+                  )}
+                  {joinSuccess && (
+                    <div style={{ color: '#10b981', fontSize: '13px', marginBottom: '12px' }}>
+                      {joinSuccess}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <button
                       type="submit"
-                      className="btn btn-primary flex-1 py-2 text-sm"
                       disabled={joinLoading || !inviteCode.trim()}
+                      style={{
+                        backgroundColor: accentColor,
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        fontSize: '16px',
+                        padding: '14px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: joinLoading || !inviteCode.trim() ? 'not-allowed' : 'pointer',
+                        opacity: joinLoading || !inviteCode.trim() ? 0.6 : 1,
+                      }}
                     >
-                      {joinLoading ? 'Uniendo...' : 'Unirme'}
+                      {joinLoading ? 'Uniendo...' : 'Unirme a la mutual'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalMode(null)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        color: '#94a3b8',
+                        fontWeight: 'bold',
+                        fontSize: '15px',
+                        padding: '12px',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancelar
                     </button>
                   </div>
                 </form>

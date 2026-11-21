@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { membershipApi, asambleasApi, useAuthStore, eventBus } from '@civiccore/sdk';
-import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2, Landmark, CheckCircle, XCircle, AlertCircle, Clock, ShieldAlert, Vote, X, RefreshCw, Send, MessageCircle } from 'lucide-react';
+import { Users, Search, Filter, UserPlus, Copy, Check, Sparkles, Share2, Landmark, CheckCircle, XCircle, AlertCircle, Clock, ShieldAlert, Vote, X, RefreshCw, Send, MessageCircle, Shield, AlertTriangle, ChevronDown, ChevronUp, LogOut } from 'lucide-react';
 import { OfflineEmptyState, OfflineNoticeBanner } from '../../components/Common/OfflineEmptyState.jsx';
 
 const MembersList = () => {
@@ -49,6 +49,11 @@ const MembersList = () => {
   const [showDefenseModal, setShowDefenseModal] = useState(false);
   const [selectedPropuesta, setSelectedPropuesta] = useState(null);
   const [throttleStatus, setThrottleStatus] = useState(null);
+
+  // Zona de Seguridad / Retiro Voluntario (Homologada con Android)
+  const [showSecurityZone, setShowSecurityZone] = useState(false);
+  const [safetyConfirmed, setSafetyConfirmed] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   // Modal Detalle de Propuesta y Debate (Homologado con Móvil)
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -660,6 +665,31 @@ const MembersList = () => {
     return st === 'debate' || st === 'voting';
   };
 
+  const handleRequestWithdrawal = async () => {
+    if (!safetyConfirmed) {
+      alert('Para activar el retiro voluntario, debes marcar primero la casilla de confirmación en la Zona de Seguridad.');
+      return;
+    }
+    const confirmed = window.confirm(
+      `¿Estás completamente seguro de que deseas tramitar tu retiro de la mutual "${activeOrg?.name}"?\n\nEsta acción finalizará tu condición de miembro activo. Se verificará tu solvencia inmediata para autorizar la salida.`
+    );
+    if (!confirmed) return;
+
+    setWithdrawing(true);
+    try {
+      const res = await membershipApi.solicitarRetiro(activeOrg.id);
+      alert(res?.message || 'Tu retiro voluntario ha sido registrado exitosamente.');
+      setShowSecurityZone(false);
+      setSafetyConfirmed(false);
+      window.location.href = '/select-mutual';
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || 'No se pudo procesar el retiro voluntario.';
+      alert(`Solvencia Requerida:\n${msg}`);
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   const activeProposals = propuestas.filter(isProposalActive);
   const historyProposals = propuestas.filter(p => !isProposalActive(p));
   const displayedPropuestas = asambleaFilter === 'activas' ? activeProposals : historyProposals;
@@ -904,6 +934,132 @@ const MembersList = () => {
               </div>
             </>
           )}
+
+          {/* Zona de Seguridad / Retiro Voluntario (Homologada con Android) */}
+          <div style={{
+            backgroundColor: '#0c332b',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            marginTop: '20px',
+            overflow: 'hidden',
+          }}>
+            <div
+              onClick={() => setShowSecurityZone(!showSecurityZone)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Shield size={20} color="#94a3b8" />
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#f8fafc' }}>
+                    Zona de Seguridad
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                    Gestión de salida y solvencia
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#94a3b8', fontSize: '13px', fontWeight: '600' }}>
+                <span>{showSecurityZone ? 'Ocultar' : 'Acceder'}</span>
+                {showSecurityZone ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </div>
+            </div>
+
+            {showSecurityZone && (
+              <div style={{
+                padding: '0 16px 16px 16px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  color: '#fbbf24',
+                  fontSize: '12px',
+                  lineHeight: '1.4',
+                  marginTop: '12px',
+                }}>
+                  <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <span>
+                    Esta es una acción definitiva. Al tramitar tu retiro voluntario, finalizará tu condición de miembro activo en la mutual familiar.
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#f8fafc' }}>
+                  Solicitud de Retiro Voluntario
+                </div>
+                <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.4' }}>
+                  Puedes solicitar tu retiro en cualquier momento, siempre y cuando no tengas deudas activas o préstamos pendientes por liquidar en esta mutual.
+                </div>
+
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  margin: '8px 0',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={safetyConfirmed}
+                    onChange={(e) => setSafetyConfirmed(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#ef4444',
+                      cursor: 'pointer',
+                      marginTop: '2px',
+                    }}
+                  />
+                  <span style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    He verificado mi solvencia y confirmo que deseo habilitar la opción de retiro voluntario.
+                  </span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleRequestWithdrawal}
+                  disabled={!safetyConfirmed || withdrawing}
+                  style={{
+                    backgroundColor: safetyConfirmed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                    border: `1px solid ${safetyConfirmed ? '#ef4444' : 'rgba(255, 255, 255, 0.1)'}`,
+                    color: safetyConfirmed ? '#ef4444' : '#64748b',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    cursor: safetyConfirmed && !withdrawing ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <LogOut size={16} />
+                  <span>
+                    {withdrawing
+                      ? 'Procesando retiro...'
+                      : safetyConfirmed
+                      ? 'Solicitar Retiro Voluntario'
+                      : 'Retiro Bloqueado (Marca la casilla)'}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -153,6 +153,8 @@ export const membershipApi = {
     return request('/membership/organizations/join', { method: 'POST', body: JSON.stringify({ token: tokenToSend }) });
   },
   getInvite: (token) => request(`/membership/invites/${encodeURIComponent(token)}`),
+  solicitarRetiro: (orgId) => request(`/membership/organizations/${orgId}/withdrawal/request`, { method: 'POST' }),
+  consultarSolvencia: (orgId) => request(`/membership/organizations/${orgId}/solvencia`),
   solicitarBaja: () => request('/membership/withdrawal/request', { method: 'POST' }),
   cancelarBaja: () => request('/membership/withdrawal/cancel', { method: 'POST' }),
   estadoBaja: () => request('/membership/withdrawal/status'),
