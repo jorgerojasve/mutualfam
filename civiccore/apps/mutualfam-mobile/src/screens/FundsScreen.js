@@ -285,6 +285,7 @@ export default function FundsScreen({ navigation }) {
   const [targetCompromiso, setTargetCompromiso] = useState(null);
   const [expandedContribs, setExpandedContribs] = useState({});
   const [expandedSocioContribs, setExpandedSocioContribs] = useState({});
+  const [expandedStalled, setExpandedStalled] = useState({});
 
   const toggleExpandedContribs = (colectaId) => {
     setExpandedContribs(prev => ({
@@ -297,6 +298,13 @@ export default function FundsScreen({ navigation }) {
     setExpandedSocioContribs(prev => ({
       ...prev,
       [key]: !prev[key],
+    }));
+  };
+
+  const toggleExpandedStalled = (colectaId) => {
+    setExpandedStalled(prev => ({
+      ...prev,
+      [colectaId]: !prev[colectaId],
     }));
   };
 
@@ -2243,15 +2251,30 @@ export default function FundsScreen({ navigation }) {
         {/* Banner de Rescate / Colecta Estancada (Watchdog) */}
         {isStalled && canPledgeMore && (
           <View style={styles.stalledColectaBanner}>
-            <View style={styles.stalledBannerHeader}>
-              <Text style={styles.stalledBannerIcon}>⏳</Text>
-              <View style={{ flex: 1 }}>
+            <TouchableOpacity
+              style={styles.stalledBannerHeader}
+              onPress={() => toggleExpandedStalled(item.id)}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Text style={styles.stalledBannerIcon}>⏳</Text>
                 <Text style={styles.stalledBannerTitle}>Meta aún no alcanzada</Text>
+              </View>
+              <View style={styles.stalledToggleBtn}>
+                <Text style={styles.stalledToggleBtnText}>
+                  {expandedStalled[item.id] ? 'Ocultar ▲' : 'Ver explicación ▼'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {expandedStalled[item.id] && (
+              <View style={styles.stalledBannerBody}>
                 <Text style={styles.stalledBannerDesc}>
                   Faltan ${formatVE(stats.restanteUsd)} USD para completar esta colecta. Cualquier miembro puede colaborar con un monto extra para alcanzar la meta y desbloquear el fondo.
                 </Text>
               </View>
-            </View>
+            )}
+
             {!hasPendingPayment && (
               <TouchableOpacity
                 style={styles.stalledBannerBtn}
@@ -4630,19 +4653,33 @@ const styles = StyleSheet.create({
   },
   stalledBannerHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   stalledBannerIcon: {
     fontSize: 16,
-    marginTop: 1,
   },
   stalledBannerTitle: {
     color: '#facc15',
     fontSize: 13,
     fontWeight: '700',
-    marginBottom: 2,
+  },
+  stalledToggleBtn: {
+    backgroundColor: 'rgba(250, 204, 21, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  stalledToggleBtnText: {
+    color: '#facc15',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  stalledBannerBody: {
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(250, 204, 21, 0.2)',
   },
   stalledBannerDesc: {
     color: '#cbd5e1',

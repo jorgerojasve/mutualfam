@@ -1,6 +1,6 @@
 import packageJson from '../../package.json';
 
-export const CURRENT_APP_VERSION = packageJson.version || '1.1.78';
+export const CURRENT_APP_VERSION = packageJson.version || '1.1.79';
 
 /**
  * Consulta /version.json con cache-busting estricto para ver si Vercel/Producción tiene

@@ -107,6 +107,40 @@ const isPlannedDateReached = (fechaPago) => {
   }
 };
 
+/** Helper para determinar si una colecta está estancada y requiere rescate/impulso (Watchdog) */
+const isColectaStalled = (colectaItem, activeOrg) => {
+  if (!colectaItem) return false;
+  if (colectaItem.estado !== 'propuesta' && colectaItem.estado !== 'activa') return false;
+  const stats = getColectaFinancialStats(colectaItem);
+  if (stats.restanteUsd <= 0) return false;
+
+  // Trigger 1: La fecha planificada de pago ya llegó o pasó
+  if (isPlannedDateReached(colectaItem.fecha_pago)) return true;
+
+  // Trigger 2: Watchdog de tiempo (más de 48 horas creada sin alcanzar la meta)
+  if (colectaItem.created_at) {
+    try {
+      let iso = String(colectaItem.created_at).trim();
+      if (!iso.endsWith('Z') && !/[+-]\d{2}(:?\d{2})?$/.test(iso)) {
+        iso = iso.replace(' ', 'T') + 'Z';
+      }
+      const createdMs = new Date(iso).getTime();
+      if (!isNaN(createdMs) && (Date.now() - createdMs) >= 48 * 3600 * 1000) {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Trigger 3: Quórum de aportantes alcanzado (todos los miembros aportaron pero no se llegó a la meta)
+  const activeMembersCount = activeOrg?.members_count;
+  const totalAportantes = colectaItem.total_aportantes || (colectaItem.compromisos ? new Set(colectaItem.compromisos.map(c => c.socio_id)).size : 0);
+  if (activeMembersCount && activeMembersCount > 1 && totalAportantes >= activeMembersCount) {
+    return true;
+  }
+
+  return false;
+};
+
 const isHardCurrencyMethod = (method) => {
   if (!method) return false;
   const m = String(method).toLowerCase().trim();
@@ -217,6 +251,14 @@ export default function FundsDashboard() {
 
   // Desglose de aportes expandidos
   const [expandedBreakdown, setExpandedBreakdown] = useState({});
+  const [expandedStalled, setExpandedStalled] = useState({});
+
+  const toggleExpandedStalled = (colectaId) => {
+    setExpandedStalled(prev => ({
+      ...prev,
+      [colectaId]: !prev[colectaId],
+    }));
+  };
 
   // Form: Comprometer Aporte
   const [pledgeAmount, setPledgeAmount] = useState('');
@@ -1010,6 +1052,7 @@ export default function FundsDashboard() {
                   (item.mis_compromisos && item.mis_compromisos.some(c => c.estado === 'prometido' || c.estado === 'notificado'))
                 );
                 const canPledgeMore = (item.estado === 'propuesta' || item.estado === 'activa') && stats.restanteUsd > 0;
+                const isStalled = isColectaStalled(item, activeOrg);
                 const badge = getStatusBadge(item.estado, item);
                 const progressPct = Math.min(100, Math.round(item.porcentaje_prometido || item.porcentaje_recaudado || 0));
 
@@ -1499,6 +1542,83 @@ export default function FundsDashboard() {
                         </div>
                       );
                     })()}
+
+                    {/* Banner de Rescate / Colecta Estancada (Watchdog) - Homologado con Android */}
+                    {isStalled && canPledgeMore && (
+                      <div style={{
+                        backgroundColor: 'rgba(234, 179, 8, 0.10)',
+                        border: '1px solid rgba(234, 179, 8, 0.35)',
+                        borderRadius: '8px',
+                        padding: '10px',
+                        marginTop: '10px',
+                        marginBottom: '4px',
+                      }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                          }}
+                          onClick={() => toggleExpandedStalled(item.id)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1rem' }}>⏳</span>
+                            <span style={{ color: '#facc15', fontSize: '0.82rem', fontWeight: '700' }}>
+                              Meta aún no alcanzada
+                            </span>
+                          </div>
+                          <div style={{
+                            backgroundColor: 'rgba(250, 204, 21, 0.15)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            color: '#facc15',
+                            fontSize: '0.72rem',
+                            fontWeight: '700',
+                          }}>
+                            {expandedStalled[item.id] ? 'Ocultar ▲' : 'Ver explicación ▼'}
+                          </div>
+                        </div>
+
+                        {expandedStalled[item.id] && (
+                          <div style={{
+                            marginTop: '8px',
+                            paddingTop: '6px',
+                            borderTop: '1px solid rgba(250, 204, 21, 0.2)',
+                            color: '#cbd5e1',
+                            fontSize: '0.78rem',
+                            lineHeight: '1.4',
+                          }}>
+                            Faltan ${formatVE(stats.restanteUsd)} USD para completar esta colecta. Cualquier miembro puede colaborar con un monto extra para alcanzar la meta y desbloquear el fondo.
+                          </div>
+                        )}
+
+                        {!hasPendingPayment && (
+                          <button
+                            type="button"
+                            style={{
+                              width: '100%',
+                              backgroundColor: '#ca8a04',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '8px',
+                              fontSize: '0.8rem',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              marginTop: '8px',
+                            }}
+                            onClick={() => {
+                              setTargetColecta(item);
+                              setShowPledgeModal(true);
+                            }}
+                          >
+                            🤝 Aportar para completar meta
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Botonera de Acciones de la Colecta (Homologada con Android) */}
                     <div style={{
