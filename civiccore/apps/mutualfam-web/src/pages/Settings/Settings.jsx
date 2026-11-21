@@ -19,10 +19,11 @@ import {
 } from 'lucide-react';
 import { EnvBadge } from '../../components/Common/EnvBadge';
 import { getEnvironmentConfig } from '../../utils/env';
+import { checkForWebUpdate, applyWebUpdate } from '../../utils/versionCheck';
 import packageJson from '../../../package.json';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = packageJson.version || '1.1.76';
+const APP_VERSION = packageJson.version || '1.1.77';
 
 export default function ProfileAndSettings() {
   const { user, activeOrg, logout, isOffline } = useAuthStore();
@@ -71,16 +72,28 @@ export default function ProfileAndSettings() {
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
-    setUpdateMsg('Limpiando caché y descargando última versión...');
+    setUpdateMsg('Consultando versión en el servidor...');
     try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
+      const res = await checkForWebUpdate();
+      if (res.hasUpdate) {
+        setUpdateMsg(`¡Nueva versión disponible (${res.latestVersion ? `v${res.latestVersion}` : ''})! Actualizando aplicación...`);
+        setTimeout(() => {
+          applyWebUpdate(res.latestVersion);
+        }, 1200);
+      } else {
+        setCheckingUpdate(false);
+        setUpdateMsg(`¡Estás al día! Tienes instalada la versión más reciente (v${APP_VERSION}).`);
+        setTimeout(() => {
+          setUpdateMsg('');
+        }, 4000);
       }
-    } catch (_) {}
-    setTimeout(() => {
-      window.location.href = window.location.origin + '/loans?v=' + Date.now();
-    }, 600);
+    } catch (_) {
+      setCheckingUpdate(false);
+      setUpdateMsg('No se pudo verificar la versión. Intenta nuevamente.');
+      setTimeout(() => {
+        setUpdateMsg('');
+      }, 4000);
+    }
   };
 
   return (
