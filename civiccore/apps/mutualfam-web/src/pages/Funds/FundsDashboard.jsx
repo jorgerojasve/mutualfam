@@ -46,6 +46,52 @@ const getColectaFinancialStats = (colecta) => {
   };
 };
 
+const getStatusBadge = (estado, item = null) => {
+  if (item?.gasto_validado || estado === 'completada') {
+    return { label: '✅ CULMINADA', bg: 'rgba(168, 85, 247, 0.2)', text: '#c084fc', border: 'rgba(168, 85, 247, 0.4)' };
+  }
+  switch (estado) {
+    case 'propuesta':
+      return { label: '⏳ PROPUESTA', bg: 'rgba(245, 158, 11, 0.2)', text: '#fbbf24', border: 'rgba(245, 158, 11, 0.4)' };
+    case 'activa':
+      return { label: '🚀 ACTIVA', bg: 'rgba(16, 185, 129, 0.2)', text: '#34d399', border: 'rgba(16, 185, 129, 0.4)' };
+    case 'cerrada':
+      return { label: '📥 RECAUDADA', bg: 'rgba(59, 130, 246, 0.2)', text: '#60a5fa', border: 'rgba(59, 130, 246, 0.4)' };
+    case 'cancelada':
+      return { label: '⚠️ CANCELADA', bg: 'rgba(239, 68, 68, 0.2)', text: '#f87171', border: 'rgba(239, 68, 68, 0.4)' };
+    default:
+      return { label: estado ? estado.toUpperCase() : 'ACTIVA', bg: 'rgba(59, 130, 246, 0.2)', text: '#60a5fa', border: 'rgba(59, 130, 246, 0.4)' };
+  }
+};
+
+const contribStatusMap = {
+  prometido:  { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+  notificado: { bg: 'rgba(251, 146, 60, 0.10)', border: '#f97316', badgeBg: '#f97316', badgeText: '#fff', icon: '⏳', label: 'Pendiente de pago' },
+  pagado:     { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'Por validar' },
+  paid:       { bg: 'rgba(250, 204, 21, 0.10)', border: '#facc15', badgeBg: '#ca8a04', badgeText: '#fef08a', icon: '🕐', label: 'Por validar' },
+  validado:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+  verified:   { bg: 'rgba(59, 130, 246, 0.10)', border: '#3b82f6', badgeBg: '#1d4ed8', badgeText: '#bfdbfe', icon: '✅', label: 'Validado' },
+  devuelto:   { bg: 'rgba(16, 185, 129, 0.10)', border: '#10b981', badgeBg: '#047857', badgeText: '#a7f3d0', icon: '🎉', label: 'Devuelto' },
+};
+
+const getContribStatusConfig = (estado, isGestor = false) => {
+  const base = contribStatusMap[estado] || {
+    bg: 'rgba(100, 116, 139, 0.08)',
+    border: '#475569',
+    badgeBg: '#334155',
+    badgeText: '#94a3b8',
+    icon: '📋',
+    label: estado || 'Compromiso',
+  };
+  if (estado === 'pagado' || estado === 'paid') {
+    return {
+      ...base,
+      label: isGestor ? 'Por validar' : 'En revisión por el gestor',
+    };
+  }
+  return base;
+};
+
 const isPlannedDateReached = (fechaPago) => {
   if (!fechaPago) return false;
   try {
@@ -148,6 +194,9 @@ export default function FundsDashboard() {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [userPaymentConfig, setUserPaymentConfig] = useState({});
   const [targetColecta, setTargetColecta] = useState(null);
+  const [selectedCompromiso, setSelectedCompromiso] = useState(null);
+  const [receiptModalUrl, setReceiptModalUrl] = useState(null);
+  const [receiptModalTitle, setReceiptModalTitle] = useState('');
 
   // Form: Proponer Colecta
   const [titulo, setTitulo] = useState('');
@@ -517,6 +566,47 @@ export default function FundsDashboard() {
     }
   };
 
+  // Abrir modal de pago para un compromiso específico
+  const openPaymentModalForComp = (colecta, comp) => {
+    setTargetColecta(colecta);
+    setSelectedCompromiso(comp);
+    setPaymentMethod('pago_movil');
+    setShowPaymentModal(true);
+  };
+
+  // Cancelar Compromiso de Aporte (Socio)
+  const handleCancelCommitment = async (colecta, comp) => {
+    if (!window.confirm(`¿Seguro que deseas cancelar tu aporte de $${formatVE(comp.monto_usd)} USD?`)) return;
+    try {
+      await colectasApi.cancelCommitment(colecta.id, comp.id);
+      await fetchColectas();
+    } catch (err) {
+      alert(err.message || 'Error al cancelar aporte');
+    }
+  };
+
+  // Rechazar Pago (Gestor)
+  const handleRejectPayment = async (colectaId, compromisoId) => {
+    const motivo = window.prompt('Indica el motivo por el cual no se reconoce este pago (ej: referencia no encontrada, monto incorrecto):');
+    if (!motivo) return;
+    try {
+      await colectasApi.rejectPayment(colectaId, compromisoId, { motivo_rechazo: motivo });
+      await fetchColectas();
+    } catch (err) {
+      alert(err.message || 'Error al rechazar pago');
+    }
+  };
+
+  // Recordar Pago a Pendientes (Gestor)
+  const handleRemindPending = async (colecta) => {
+    try {
+      await colectasApi.recordarPendientes(colecta.id);
+      alert('Se envió un recordatorio de pago a los miembros con aportes pendientes.');
+    } catch (err) {
+      alert(err.message || 'Error al enviar recordatorio');
+    }
+  };
+
   // Validar Aporte Recibido (Gestor)
   const handleValidatePayment = async (colectaId, compromisoId) => {
     if (!window.confirm('¿Confirmas que recibiste el dinero correspondiente a este aporte?')) return;
@@ -588,7 +678,8 @@ export default function FundsDashboard() {
 
     setSubmittingPayment(true);
     try {
-      const compromisoId = targetColecta.mi_compromiso?.id;
+      const compToPay = selectedCompromiso || targetColecta.mi_compromiso;
+      const compromisoId = compToPay?.id;
       if (!compromisoId) {
         throw new Error('No tienes un compromiso registrado en esta colecta.');
       }
@@ -602,6 +693,7 @@ export default function FundsDashboard() {
       };
       await colectasApi.confirmPayment(targetColecta.id, compromisoId, payload);
       setShowPaymentModal(false);
+      setSelectedCompromiso(null);
       setPaymentRef('');
       setPaymentReceiptUrl('');
       setCashPayroll({});
@@ -909,8 +1001,17 @@ export default function FundsDashboard() {
               {displayedColectas.map((item) => {
                 const isOwner = user && item.proponente_id === user.id;
                 const isBeneficiary = user && (item.beneficiario_id === user.id || item.beneficiario_nombre === `${user.first_name || ''} ${user.last_name || ''}`.trim());
+                const isGestor = Boolean(user && (user.id === (item.beneficiario_id || item.proponente_id)));
                 const myPledge = item.mi_compromiso;
-                const progressPct = Math.min(100, Math.round(item.porcentaje_recaudado || 0));
+                const stats = getColectaFinancialStats(item);
+                const hasAnyCommitment = Boolean((item.mis_compromisos && item.mis_compromisos.length > 0) || myPledge);
+                const hasPendingPayment = Boolean(
+                  (myPledge && (myPledge.estado === 'prometido' || myPledge.estado === 'notificado')) ||
+                  (item.mis_compromisos && item.mis_compromisos.some(c => c.estado === 'prometido' || c.estado === 'notificado'))
+                );
+                const canPledgeMore = (item.estado === 'propuesta' || item.estado === 'activa') && stats.restanteUsd > 0;
+                const badge = getStatusBadge(item.estado, item);
+                const progressPct = Math.min(100, Math.round(item.porcentaje_prometido || item.porcentaje_recaudado || 0));
 
                 return (
                   <div
@@ -923,102 +1024,122 @@ export default function FundsDashboard() {
                       padding: '1.25rem',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '1rem',
+                      gap: '0.85rem',
                     }}
                   >
                     {/* Encabezado de la Colecta */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div>
+                      <div style={{ flex: 1 }}>
                         <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#f8fafc', margin: '0 0 0.25rem 0' }}>
                           🐮 {item.titulo}
                         </h3>
-                        <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
-                          Gestionado por: <strong style={{ color: '#f1f5f9' }}>{item.beneficiario_nombre || 'Familiar'}</strong> • Propuesto por: {item.proponente_nombre || 'Familiar'}
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0 }}>
+                          Propuesto por <strong style={{ color: '#cbd5e1' }}>{item.proponente_name || item.proponente_nombre || 'Familiar'}</strong>
                         </p>
-                        {item.fecha_pago && (
-                          <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
-                            📅 Fecha de pago: <strong style={{ color: '#f1f5f9' }}>{item.fecha_pago}{item.hora_pago ? ` (${formatTimeAMPM(item.hora_pago)})` : ''}</strong>
-                          </p>
-                        )}
                       </div>
 
-                      {/* Pill de Estado */}
+                      {/* Badge de Estado Homologado */}
                       <span style={{
                         padding: '4px 10px',
-                        borderRadius: '20px',
+                        borderRadius: '6px',
                         fontSize: '0.75rem',
-                        fontWeight: '700',
+                        fontWeight: '800',
                         textTransform: 'uppercase',
                         whiteSpace: 'nowrap',
-                        backgroundColor: (item.gasto_validado || item.estado === 'completada')
-                          ? 'rgba(168, 85, 247, 0.2)'
-                          : item.estado === 'abierta' || item.estado === 'activa'
-                          ? 'rgba(16, 185, 129, 0.2)'
-                          : item.estado === 'cerrada'
-                          ? 'rgba(59, 130, 246, 0.2)'
-                          : item.estado === 'propuesta'
-                          ? 'rgba(245, 158, 11, 0.2)'
-                          : 'rgba(239, 68, 68, 0.2)',
-                        color: (item.gasto_validado || item.estado === 'completada')
-                          ? '#c084fc'
-                          : item.estado === 'abierta' || item.estado === 'activa'
-                          ? '#34d399'
-                          : item.estado === 'cerrada'
-                          ? '#60a5fa'
-                          : item.estado === 'propuesta'
-                          ? '#fbbf24'
-                          : '#f87171',
-                        border: `1px solid ${
-                          (item.gasto_validado || item.estado === 'completada')
-                            ? 'rgba(168, 85, 247, 0.3)'
-                            : item.estado === 'abierta' || item.estado === 'activa'
-                            ? 'rgba(16, 185, 129, 0.3)'
-                            : item.estado === 'cerrada'
-                            ? 'rgba(59, 130, 246, 0.3)'
-                            : item.estado === 'propuesta'
-                            ? 'rgba(245, 158, 11, 0.3)'
-                            : 'rgba(239, 68, 68, 0.3)'
-                        }`,
+                        backgroundColor: badge.bg,
+                        color: badge.text,
+                        border: `1px solid ${badge.border}`,
                       }}>
-                        {(item.gasto_validado || item.estado === 'completada')
-                          ? '✅ Culminada'
-                          : item.estado === 'cerrada'
-                          ? '📥 Recaudada'
-                          : item.estado}
+                        {badge.label}
                       </span>
                     </div>
 
-                    <p style={{ color: '#cbd5e1', fontSize: '0.875rem', margin: 0, lineHeight: '1.4' }}>
+                    {/* Badge de Tasa de Cambio Prominente */}
+                    <div style={{
+                      backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      alignSelf: 'flex-start',
+                      fontSize: '0.8rem',
+                      color: '#cbd5e1',
+                    }}>
+                      📊 Tasa: <strong style={{ color: '#38bdf8' }}>{item.tasa_label || item.tipo_tasa?.toUpperCase() || 'BCV'}</strong> • Ref: Bs {formatVE(item.tasa_actual || rates?.bcv?.rate || 1)}
+                    </div>
+
+                    {/* Propósito */}
+                    <p style={{ color: '#cbd5e1', fontSize: '0.875rem', margin: 0, lineHeight: '1.45' }}>
                       {item.proposito}
                     </p>
 
-                    {/* Barra de Progreso y Montos Duales */}
+                    {/* Responsable de gestión y Fecha de pago */}
                     <div style={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                      padding: '1rem',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      paddingTop: '8px',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      fontSize: '0.82rem',
+                      color: '#94a3b8',
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-                        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Recaudación Familiar</span>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ color: '#10b981', fontSize: '1.25rem', fontWeight: '800' }}>
-                            ${formatVE(item.monto_recaudado_usd || 0)} <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>/ ${formatVE(item.monto_meta_usd)} USD</span>
-                          </span>
-                          <span style={{ display: 'block', fontSize: '0.78rem', color: '#38bdf8', fontWeight: '600' }}>
-                            Bs. {formatVE(item.monto_recaudado_bs || ((item.monto_recaudado_usd || 0) * (item.tasa_actual || 1)))} / Bs. {formatVE(item.monto_meta_bs || (item.monto_meta_usd * (item.tasa_actual || 1)))}
-                          </span>
+                      <div>
+                        👤 Gestionado por: <strong style={{ color: '#f1f5f9' }}>{item.beneficiario_nombre || 'Familiar'}</strong>
+                      </div>
+                      {item.fecha_pago && (
+                        <div>
+                          📅 Fecha de pago: <strong style={{ color: '#f1f5f9' }}>{item.fecha_pago}{item.hora_pago ? ` (${formatTimeAMPM(item.hora_pago)})` : ''}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Barra de Progreso Financiero (Homologada con Android) */}
+                    <div style={{
+                      backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}>
+                      {/* Cabecera del Progreso: Meta y Badge Faltan / Meta alcanzada */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#f8fafc' }}>
+                            🎯 Meta: ${formatVE(item.monto_meta_usd)} USD
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+                            ~Bs {formatVE(item.monto_meta_bs || (item.monto_meta_usd * (item.tasa_actual || 1)))}
+                          </div>
+                        </div>
+
+                        <div style={{
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: `1px solid ${item.is_active || stats.restanteUsd <= 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
+                          backgroundColor: item.is_active || stats.restanteUsd <= 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                          color: item.is_active || stats.restanteUsd <= 0 ? '#4ade80' : '#fbbf24',
+                          fontSize: '0.78rem',
+                          fontWeight: '700',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {item.is_active || stats.restanteUsd <= 0
+                            ? '🎉 ¡Meta alcanzada!'
+                            : `Faltan $${formatVE(stats.restanteUsd)} USD`}
                         </div>
                       </div>
 
-                      {/* Barra visual */}
+                      {/* Detalle de montos */}
+                      <div style={{ fontSize: '0.82rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
+                        <div>📢 Prometido: <strong style={{ color: '#38bdf8' }}>${formatVE(item.monto_prometido_usd || 0)} USD</strong></div>
+                        <div>💸 Pagado: <strong style={{ color: '#facc15' }}>${formatVE(item.monto_pagado_usd || 0)} USD</strong></div>
+                        <div>✅ Validado: <strong style={{ color: '#4ade80' }}>${formatVE(item.monto_validado_usd || 0)} USD</strong></div>
+                      </div>
+
+                      {/* Barra visual de progreso */}
                       <div style={{
-                        width: '100%',
                         height: '8px',
                         backgroundColor: '#334155',
                         borderRadius: '4px',
                         overflow: 'hidden',
-                        marginBottom: '8px',
+                        marginBottom: '6px',
                       }}>
                         <div style={{
                           width: `${progressPct}%`,
@@ -1030,273 +1151,527 @@ export default function FundsDashboard() {
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
                         <span>Progreso: {progressPct}%</span>
-                        <span style={{ backgroundColor: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '6px', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-                          Tasa {item.tipo_tasa?.toUpperCase()}: Bs. {formatVE(item.tasa_actual || rates?.bcv?.rate || 1)}
-                        </span>
+                        <span>Tasa {item.tipo_tasa?.toUpperCase() || 'BCV'}: Bs. {formatVE(item.tasa_actual || 1)}</span>
                       </div>
                     </div>
 
-                    {/* Badge de Gasto Validado si aplica */}
-                    {item.gasto_validado ? (
-                      <div style={{
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontSize: '0.8rem',
-                        color: '#34d399',
-                      }}>
-                        <ShieldCheck size={16} />
-                        <span><strong>Rendición de cuentas:</strong> {item.gasto_descripcion || 'Comprobante y soporte presentados ante la familia'}</span>
-                      </div>
-                    ) : item.estado === 'cerrada' || progressPct >= 100 ? (
-                      <div style={{
-                        backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                        border: '1px solid rgba(234, 179, 8, 0.3)',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontSize: '0.8rem',
-                        color: '#facc15',
-                      }}>
-                        <Clock size={16} />
-                        <span>Meta alcanzada · Pendiente de validación de compra/factura</span>
-                      </div>
-                    ) : null}
-
-                    {/* Resumen de Mi Compromiso si existe */}
-                    {myPledge && (
-                      <div style={{
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: '0.85rem',
-                      }}>
-                        <div>
-                          <span style={{ color: '#93c5fd', fontWeight: '600' }}>Tu Aporte: </span>
-                          <span style={{ color: '#ffffff', fontWeight: '700' }}>${formatVE(myPledge.monto_usd)} USD</span>
-                          <span style={{ color: '#38bdf8', fontSize: '0.8rem', display: 'block', fontWeight: '600' }}>
-                            • Bs. {formatVE(myPledge.monto_bs || (myPledge.monto_usd * (item.tasa_actual || 1)))}
+                    {/* Resumen de Mi Compromiso si existe (Homologado a Android) */}
+                    {myPledge && (() => {
+                      const myCfg = getContribStatusConfig(myPledge.estado, isGestor);
+                      return (
+                        <div style={{
+                          borderRadius: '8px',
+                          border: `1px solid ${myCfg.border}`,
+                          backgroundColor: myCfg.bg,
+                          padding: '10px 12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: '600', color: myCfg.border }}>
+                              Mi compromiso voluntario:
+                            </div>
+                            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#ffffff', marginTop: '2px' }}>
+                              ${formatVE(myPledge.monto_usd)} USD
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                              ~Bs {formatVE(myPledge.monto_bs || (myPledge.monto_usd * (item.tasa_actual || 1)))}
+                            </div>
+                          </div>
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: '700',
+                            backgroundColor: myCfg.badgeBg,
+                            color: myCfg.badgeText,
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {myCfg.icon} {myCfg.label}
                           </span>
                         </div>
-                        <span style={{
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: '700',
-                          backgroundColor: myPledge.estado === 'confirmado' ? '#10b981' : myPledge.estado === 'pagado' ? '#eab308' : '#64748b',
-                          color: '#ffffff',
-                        }}>
-                          {myPledge.estado === 'confirmado' ? 'Confirmado' : myPledge.estado === 'pagado' ? 'En Revisión' : 'Por Pagar'}
-                        </span>
-                      </div>
-                    )}
+                      );
+                    })()}
 
-                    {/* Desglose de todos los aportes de los miembros */}
-                    {item.compromisos && item.compromisos.length > 0 && (
-                      <div style={{ marginTop: '0.5rem' }}>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedBreakdown((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-                          style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '6px',
-                            background: 'rgba(255, 255, 255, 0.04)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                            borderRadius: '8px',
-                            padding: '6px 10px',
-                            color: '#38bdf8',
-                            fontSize: '0.8rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {expandedBreakdown[item.id] ? '▲ Ocultar desglose de aportes' : `▼ Ver desglose (${item.compromisos.length} aportes)`}
-                        </button>
-                        {expandedBreakdown[item.id] && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                            {item.compromisos.map((comp, idx) => (
-                              <div
-                                key={comp.id || idx}
-                                style={{
-                                  backgroundColor: 'rgba(15, 23, 42, 0.65)',
-                                  borderRadius: '8px',
-                                  padding: '10px 12px',
-                                  border: '1px solid rgba(255, 255, 255, 0.06)',
-                                  borderLeft: `4px solid ${
-                                    comp.estado === 'confirmado' ? '#10b981' : comp.estado === 'pagado' ? '#eab308' : '#f97316'
-                                  }`,
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                  <div>
-                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>
-                                      Aporte #{idx + 1} • {comp.socio_name || 'Miembro'}
-                                    </span>
-                                    {comp.fecha_compromiso && (
-                                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
-                                        📅 Prometido: {formatDateTime(comp.fecha_compromiso)}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 'bold',
-                                    padding: '2px 8px',
-                                    borderRadius: '6px',
-                                    backgroundColor: comp.estado === 'confirmado'
-                                      ? 'rgba(16, 185, 129, 0.2)'
-                                      : comp.estado === 'pagado'
-                                      ? 'rgba(234, 179, 8, 0.2)'
-                                      : 'rgba(249, 115, 22, 0.2)',
-                                    color: comp.estado === 'confirmado'
-                                      ? '#34d399'
-                                      : comp.estado === 'pagado'
-                                      ? '#facc15'
-                                      : '#fb923c',
-                                  }}>
-                                    {comp.estado === 'confirmado' ? '✅ Confirmado' : comp.estado === 'pagado' ? '⏳ En validación' : '⏳ Pendiente de pago'}
-                                  </span>
-                                </div>
-
-                                <div style={{ marginTop: '6px' }}>
-                                  <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#10b981' }}>
-                                    ${formatVE(comp.monto_usd)} USD
-                                  </span>
-                                  <span style={{ fontSize: '0.8rem', color: '#38bdf8', marginLeft: '6px' }}>
-                                    ~Bs {formatVE(comp.monto_bs || (comp.monto_usd * (item.tasa_actual || 1)))}
-                                  </span>
-                                </div>
-
-                                {comp.fecha_pago && (
-                                  <div style={{ fontSize: '0.72rem', color: '#facc15', marginTop: '4px' }}>
-                                    🕐 Notificado el {formatDateTime(comp.fecha_pago)}
-                                  </div>
-                                )}
-
-                                {comp.payment_method && (
-                                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{
-                                      fontSize: '0.72rem',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                                      color: '#38bdf8',
-                                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                                    }}>
-                                      {comp.payment_method}
-                                    </span>
-                                    {comp.referencia_pago && (
-                                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
-                                        Ref: {comp.referencia_pago}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-
-                                {isBeneficiary && comp.estado === 'pagado' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleValidatePayment(item.id, comp.id)}
-                                    style={{
-                                      marginTop: '8px',
-                                      width: '100%',
-                                      padding: '6px',
-                                      backgroundColor: '#10b981',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      color: '#fff',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 'bold',
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    ✓ Validar Aporte Recibido
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                    {/* Rendición de cuentas si aplica */}
+                    {item.gasto_validado && (
+                      <div style={{
+                        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        color: '#34d399',
+                        fontSize: '0.82rem',
+                      }}>
+                        <div style={{ fontWeight: '700', marginBottom: '2px' }}>✅ Rendición de cuentas:</div>
+                        <div>{item.descripcion_gasto || item.gasto_descripcion || 'Comprobante y soporte presentados ante la familia'}</div>
+                        {(item.comprobante_gasto_url || item.gasto_comprobante_url) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReceiptModalUrl(item.comprobante_gasto_url || item.gasto_comprobante_url);
+                              setReceiptModalTitle(`Factura / Gasto - ${item.titulo}`);
+                            }}
+                            style={{
+                              marginTop: '8px',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              color: '#ffffff',
+                              borderRadius: '6px',
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            🧾 Ver factura / comprobante de gasto
+                          </button>
                         )}
                       </div>
                     )}
 
-                    {/* Botonera de Acciones de la Colecta */}
+                    {/* Lista de Aportes en curso (Agrupados por persona con desglose desplegable) */}
+                    {(() => {
+                      const activeCompromisos = (item.compromisos || []).filter(c => c.estado !== 'cancelado');
+                      if (activeCompromisos.length === 0) return null;
+                      const isExpanded = !!expandedBreakdown[item.id];
+                      const pendingVerifCount = activeCompromisos.filter(c => c.estado === 'pagado').length;
+                      const devueltosCount = activeCompromisos.filter(c => c.estado === 'devuelto').length;
+
+                      // Agrupar por persona
+                      const groupedBySocio = [];
+                      const socioMap = new Map();
+
+                      for (const comp of activeCompromisos) {
+                        const sKey = String(comp.socio_id ?? comp.socio_name ?? comp.id);
+                        if (!socioMap.has(sKey)) {
+                          const group = {
+                            key: sKey,
+                            socio_id: comp.socio_id,
+                            socio_name: comp.socio_name || 'Socio',
+                            compromisos: [],
+                            total_usd: 0,
+                            total_bs: 0,
+                          };
+                          socioMap.set(sKey, group);
+                          groupedBySocio.push(group);
+                        }
+                        const group = socioMap.get(sKey);
+                        group.compromisos.push(comp);
+                        group.total_usd += (Number(comp.monto_usd) || 0);
+                        group.total_bs += (Number(comp.monto_bs) || ((Number(comp.monto_usd) || 0) * (item.tasa_actual || 1)));
+                      }
+
+                      return (
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBreakdown(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '8px',
+                              padding: '8px 12px',
+                              color: '#38bdf8',
+                              fontSize: '0.82rem',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span>Aportes en curso ({groupedBySocio.length} persona{groupedBySocio.length !== 1 ? 's' : ''} · {activeCompromisos.length} aporte{activeCompromisos.length !== 1 ? 's' : ''})</span>
+                              {isGestor && pendingVerifCount > 0 && (
+                                <span style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#facc15', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                                  ⏳ {pendingVerifCount} por validar
+                                </span>
+                              )}
+                              {devueltosCount > 0 && (
+                                <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                                  🎉 {devueltosCount} devuelto{devueltosCount > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </span>
+                            <span>{isExpanded ? '▲ Ocultar detalle' : '▼ Ver detalle'}</span>
+                          </button>
+
+                          {isExpanded && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                              {groupedBySocio.map(group => {
+                                const initial = group.socio_name ? group.socio_name.trim()[0].toUpperCase() : '?';
+                                return (
+                                  <div
+                                    key={group.key}
+                                    style={{
+                                      backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                                      borderRadius: '8px',
+                                      padding: '10px 12px',
+                                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    }}
+                                  >
+                                    {/* Cabecera del socio */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{
+                                          width: '32px',
+                                          height: '32px',
+                                          borderRadius: '50%',
+                                          backgroundColor: '#3b82f633',
+                                          border: '1px solid #3b82f6',
+                                          color: '#60a5fa',
+                                          display: 'grid',
+                                          placeItems: 'center',
+                                          fontSize: '0.9rem',
+                                          fontWeight: '700',
+                                        }}>
+                                          {initial}
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#f8fafc' }}>
+                                            {group.socio_name}
+                                          </div>
+                                          <div style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: '600' }}>
+                                            ${formatVE(group.total_usd)} USD <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>(~Bs {formatVE(group.total_bs)})</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <span style={{
+                                        fontSize: '0.72rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                        color: '#94a3b8',
+                                      }}>
+                                        {group.compromisos.length} {group.compromisos.length === 1 ? 'aporte' : 'aportes'}
+                                      </span>
+                                    </div>
+
+                                    {/* Sub-aportes del socio */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '6px' }}>
+                                      {group.compromisos.map((comp, idx) => {
+                                        const cs = getContribStatusConfig(comp.estado, isGestor);
+                                        const isMyComp = user && comp.socio_id === user.id;
+
+                                        return (
+                                          <div
+                                            key={comp.id || idx}
+                                            style={{
+                                              backgroundColor: 'rgba(30, 41, 59, 0.6)',
+                                              borderRadius: '6px',
+                                              padding: '8px 10px',
+                                              borderLeft: `3px solid ${cs.border}`,
+                                            }}
+                                          >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#f8fafc' }}>
+                                                Aporte #{idx + 1}: ${formatVE(comp.monto_usd)} USD
+                                              </span>
+                                              <span style={{
+                                                fontSize: '0.7rem',
+                                                fontWeight: '700',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px',
+                                                backgroundColor: cs.badgeBg,
+                                                color: cs.badgeText,
+                                              }}>
+                                                {cs.icon} {cs.label}
+                                              </span>
+                                            </div>
+
+                                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>
+                                              ~Bs {formatVE(comp.monto_bs || (comp.monto_usd * (item.tasa_actual || 1)))}
+                                              {comp.payment_method && ` • ${comp.payment_method}`}
+                                              {comp.referencia_pago && ` (Ref: ${comp.referencia_pago})`}
+                                            </div>
+
+                                            {comp.comprobante_url && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setReceiptModalUrl(comp.comprobante_url);
+                                                  setReceiptModalTitle(`Comprobante de Pago - ${group.socio_name}`);
+                                                }}
+                                                style={{
+                                                  marginTop: '4px',
+                                                  background: 'rgba(255, 255, 255, 0.08)',
+                                                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                  borderRadius: '4px',
+                                                  padding: '3px 8px',
+                                                  color: '#38bdf8',
+                                                  fontSize: '0.72rem',
+                                                  cursor: 'pointer',
+                                                }}
+                                              >
+                                                🧾 Ver comprobante de pago
+                                              </button>
+                                            )}
+
+                                            {/* Acciones para el Gestor sobre el aporte */}
+                                            {isGestor && comp.estado === 'pagado' && (
+                                              <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleValidatePayment(item.id, comp.id)}
+                                                  style={{
+                                                    flex: 1,
+                                                    padding: '6px',
+                                                    backgroundColor: '#10b981',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    color: '#fff',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                  }}
+                                                >
+                                                  ✓ Validar Aporte Recibido
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRejectPayment(item.id, comp.id)}
+                                                  style={{
+                                                    padding: '6px 10px',
+                                                    backgroundColor: 'transparent',
+                                                    border: '1px solid rgba(239, 68, 68, 0.5)',
+                                                    borderRadius: '6px',
+                                                    color: '#f87171',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                  }}
+                                                >
+                                                  ✕ Rechazar
+                                                </button>
+                                              </div>
+                                            )}
+
+                                            {/* Acciones para el socio sobre su propio aporte pendiente */}
+                                            {isMyComp && (comp.estado === 'prometido' || comp.estado === 'notificado') && (item.estado === 'propuesta' || item.estado === 'activa') && (
+                                              <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => openPaymentModalForComp(item, comp)}
+                                                  style={{
+                                                    flex: 1,
+                                                    padding: '6px',
+                                                    backgroundColor: '#10b981',
+                                                    border: 'none',
+                                                    borderRadius: '6px',
+                                                    color: '#fff',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                  }}
+                                                >
+                                                  💵 Pagar este aporte
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleCancelCommitment(item, comp)}
+                                                  style={{
+                                                    padding: '6px 10px',
+                                                    backgroundColor: 'transparent',
+                                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                    borderRadius: '6px',
+                                                    color: '#f87171',
+                                                    fontSize: '0.75rem',
+                                                    cursor: 'pointer',
+                                                  }}
+                                                >
+                                                  ✕ Cancelar
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Botonera de Acciones de la Colecta (Homologada con Android) */}
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
                       gap: '8px',
                       borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                      paddingTop: '0.75rem',
+                      paddingTop: '0.85rem',
                       marginTop: 'auto',
                     }}>
-                      {/* Comprometer Aporte */}
-                      {!myPledge && item.estado === 'abierta' && (
+                      {/* PRIORIDAD 1: Si el usuario tiene pago pendiente, la acción principal es Pagar */}
+                      {hasPendingPayment && myPledge && (
                         <button
                           type="button"
-                          className="btn btn-primary"
-                          style={{ flex: 1, minWidth: '130px', fontSize: '0.85rem', backgroundColor: '#10b981', border: 'none' }}
+                          style={{
+                            flex: 1,
+                            minWidth: '140px',
+                            fontSize: '0.9rem',
+                            fontWeight: '700',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                          }}
+                          onClick={() => openPaymentModalForComp(item, myPledge)}
+                        >
+                          💵 Pagar (${formatVE(myPledge.monto_usd)} USD)
+                        </button>
+                      )}
+
+                      {/* Cancelar Mi Aporte (permitido antes de pagado) */}
+                      {hasPendingPayment && myPledge && (
+                        <button
+                          type="button"
+                          style={{
+                            fontSize: '0.82rem',
+                            fontWeight: '600',
+                            backgroundColor: 'transparent',
+                            color: '#f87171',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => handleCancelCommitment(item, myPledge)}
+                        >
+                          Cancelar aporte
+                        </button>
+                      )}
+
+                      {/* PRIORIDAD 2: Si el usuario NO tiene compromisos y la colecta está abierta/propuesta */}
+                      {!hasAnyCommitment && (item.estado === 'propuesta' || item.estado === 'activa') && (
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1,
+                            minWidth: '150px',
+                            fontSize: '0.9rem',
+                            fontWeight: '700',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                          }}
                           onClick={() => {
                             setTargetColecta(item);
                             setShowPledgeModal(true);
                           }}
                         >
-                          🤝 Aportar a la Vaca
+                          🤝 Aportar a la Colecta
                         </button>
                       )}
 
-                      {/* Notificar Pago */}
-                      {myPledge && myPledge.estado === 'prometido' && (
+                      {/* PRIORIDAD 3: Si el usuario ya aportó, no tiene pagos pendientes, y la colecta sigue abierta */}
+                      {hasAnyCommitment && !hasPendingPayment && canPledgeMore && (
                         <button
                           type="button"
-                          className="btn btn-secondary"
-                          style={{ flex: 1, minWidth: '130px', fontSize: '0.85rem', backgroundColor: '#2563eb', color: '#fff', border: 'none' }}
+                          style={{
+                            flex: 1,
+                            minWidth: '150px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            borderRadius: '8px',
+                            padding: '9px 12px',
+                            cursor: 'pointer',
+                          }}
                           onClick={() => {
                             setTargetColecta(item);
-                            setPaymentMethod('pago_movil');
-                            setShowPaymentModal(true);
+                            setShowPledgeModal(true);
                           }}
                         >
-                          💵 Notificar / Pagar
+                          ➕ Aportar monto adicional
                         </button>
                       )}
 
-                      {/* Rendir Cuentas (Beneficiario / Proponente) */}
-                      {(isOwner || isBeneficiary) && (item.estado === 'cerrada' || progressPct >= 100) && !item.gasto_validado && (
+                      {/* PRIORIDAD 4: Rendir Cuentas (Beneficiario / Gestor si alcanzó meta o cerrada y no ha rendido) */}
+                      {isGestor && (item.estado === 'cerrada' || item.monto_recaudado_usd >= item.monto_meta_usd || stats.restanteUsd <= 0) && !item.gasto_validado && (
                         <button
                           type="button"
-                          className="btn btn-secondary"
-                          style={{ flex: 1, minWidth: '130px', fontSize: '0.85rem', backgroundColor: '#8b5cf6', color: '#fff', border: 'none' }}
+                          style={{
+                            flex: 1,
+                            minWidth: '140px',
+                            fontSize: '0.85rem',
+                            fontWeight: '700',
+                            backgroundColor: '#8b5cf6',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '9px 12px',
+                            cursor: 'pointer',
+                          }}
                           onClick={() => {
                             setTargetColecta(item);
                             setShowExpenseModal(true);
                           }}
                         >
-                          📋 Rendir Cuentas
+                          ✅ Rendir Cuentas
                         </button>
                       )}
 
-                      {/* Cancelar (solo si nadie ha pagado y es el creador) */}
-                      {isOwner && item.monto_recaudado_usd === 0 && item.estado === 'abierta' && (
+                      {/* PRIORIDAD 5: Cancelar Colecta por Fuerza Mayor (Gestor) */}
+                      {isGestor && (item.estado === 'propuesta' || item.estado === 'activa' || item.estado === 'cerrada') && !item.gasto_validado && (
                         <button
                           type="button"
-                          className="btn btn-secondary"
-                          style={{ fontSize: '0.85rem', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                          style={{
+                            fontSize: '0.82rem',
+                            color: '#f87171',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            backgroundColor: 'transparent',
+                            cursor: 'pointer',
+                          }}
                           onClick={() => handleCancelColecta(item.id)}
                         >
-                          Cancelar
+                          ⚠️ Cancelar Colecta
+                        </button>
+                      )}
+
+                      {/* PRIORIDAD 6: Recordar Pago a Pendientes (Gestor) */}
+                      {isGestor && (item.estado === 'activa' || item.estado === 'propuesta') && isPlannedDateReached(item.fecha_pago) && item.compromisos?.some(c => c.estado === 'prometido' || c.estado === 'notificado') && (
+                        <button
+                          type="button"
+                          style={{
+                            fontSize: '0.82rem',
+                            fontWeight: '600',
+                            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+                            color: '#facc15',
+                            border: '1px solid rgba(234, 179, 8, 0.35)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => handleRemindPending(item)}
+                        >
+                          🔔 Recordar Pago
                         </button>
                       )}
                     </div>
@@ -1903,54 +2278,66 @@ export default function FundsDashboard() {
       {/* ========================================================= */}
       {/* MODAL 3: NOTIFICAR PAGO EN BOLÍVARES                     */}
       {/* ========================================================= */}
-      {showPaymentModal && targetColecta && createPortal(
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(8px)',
-          display: 'grid',
-          placeItems: 'center',
-          zIndex: 99999,
-          padding: '1rem',
-        }} onClick={() => setShowPaymentModal(false)}>
-          <div style={{
-            backgroundColor: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
-            padding: '1.5rem',
-            maxWidth: '26rem',
-            width: '100%',
-            color: '#f8fafc',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-          }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>🔔 Notificar Pago de Colecta</h3>
-              <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => setShowPaymentModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
+      {showPaymentModal && targetColecta && (() => {
+        const compToPay = selectedCompromiso || targetColecta.mi_compromiso;
+        const compMontoUsd = compToPay?.monto_usd || 0;
+        const compMontoBs = compToPay?.monto_bs || (compMontoUsd * (targetColecta.tasa_actual || 1));
+        const formattedBs = formatVE(compMontoBs);
 
-            {/* Resumen del compromiso */}
+        return createPortal(
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 99999,
+            padding: '1rem',
+          }} onClick={() => {
+            setSelectedCompromiso(null);
+            setShowPaymentModal(false);
+          }}>
             <div style={{
-              backgroundColor: '#0f172a',
-              borderRadius: '8px',
-              padding: '12px',
-              marginBottom: '1rem',
-              border: '1px solid #334155'
-            }}>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>Monto a Transferir / Pagar:</p>
-              <p style={{ margin: '4px 0 0 0', fontSize: '1.35rem', fontWeight: 'bold', color: '#10b981' }}>
-                Bs. {formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
-                <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginLeft: '8px' }}>
-                  (${formatVE(targetColecta.mi_compromiso?.monto_usd)} USD)
-                </span>
-              </p>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                Tasa aplicada ({targetColecta.tipo_tasa?.toUpperCase() || 'BCV'}): Bs. {formatVE(targetColecta.tasa_actual || 1)}
-              </p>
-            </div>
+              backgroundColor: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '16px',
+              padding: '1.5rem',
+              maxWidth: '26rem',
+              width: '100%',
+              color: '#f8fafc',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>🔔 Notificar Pago de Colecta</h3>
+                <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }} onClick={() => {
+                  setSelectedCompromiso(null);
+                  setShowPaymentModal(false);
+                }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Resumen del compromiso */}
+              <div style={{
+                backgroundColor: '#0f172a',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '1rem',
+                border: '1px solid #334155'
+              }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>Monto a Transferir / Pagar:</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '1.35rem', fontWeight: 'bold', color: '#10b981' }}>
+                  Bs. {formattedBs}
+                  <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginLeft: '8px' }}>
+                    (${formatVE(compMontoUsd)} USD)
+                  </span>
+                </p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                  Tasa aplicada ({targetColecta.tipo_tasa?.toUpperCase() || 'BCV'}): Bs. {formatVE(targetColecta.tasa_actual || 1)}
+                </p>
+              </div>
 
             <form onSubmit={handleNotifyPayment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
@@ -2033,12 +2420,12 @@ export default function FundsDashboard() {
                 <div>
                   <CashDeliveryCard
                     data={targetColecta.beneficiario_datos_pago?.['Efectivo USD'] || targetColecta.beneficiario_datos_pago?.efectivo}
-                    montoUsd={targetColecta.mi_compromiso?.monto_usd}
+                    montoUsd={compMontoUsd}
                     recipientName={targetColecta.beneficiario_nombre}
                   />
 
                   <CashPayrollInput
-                    targetAmount={targetColecta.mi_compromiso?.monto_usd || 0}
+                    targetAmount={compMontoUsd || 0}
                     payroll={cashPayroll}
                     onPayrollChange={setCashPayroll}
                     serials={cashSerials}
@@ -2053,7 +2440,7 @@ export default function FundsDashboard() {
               {(paymentMethod === 'transferencia' || normalizePaymentMethodKey(paymentMethod) === 'Transferencia Bancaria') && (
                 <BankTransferCard
                   data={targetColecta.beneficiario_datos_pago?.['Transferencia Bancaria'] || targetColecta.beneficiario_datos_pago?.transferencia}
-                  montoBs={formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)))}
+                  montoBs={formattedBs}
                   recipientName={targetColecta.beneficiario_nombre}
                   tasaLabel={`${targetColecta.tipo_tasa?.toUpperCase() || 'BCV'}: Bs. ${formatVE(targetColecta.tasa_actual || 1)}`}
                 />
@@ -2067,7 +2454,7 @@ export default function FundsDashboard() {
                 const docPrefix = pmData.tipo_doc ? (pmData.tipo_doc === 'Persona' ? 'V' : pmData.tipo_doc[0]) : 'V';
                 const cleanCedula = pmData.cedula ? String(pmData.cedula).replace(/^[VJEGC]-?/i, '') : '';
                 const safeDoc = cleanCedula ? `${docPrefix}-${cleanCedula}` : '';
-                const montoBs = formatVE(targetColecta.mi_compromiso?.monto_bs || ((targetColecta.mi_compromiso?.monto_usd || 0) * (targetColecta.tasa_actual || 1)));
+                const montoBs = formattedBs;
                 const copyAllText = `Banco: ${safeBanco} | Documento: ${safeDoc} | Teléfono: ${pmData.telefono || ''} | Monto: ${montoBs} Bs`;
 
                 return (
@@ -2179,7 +2566,10 @@ export default function FundsDashboard() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setShowPaymentModal(false)}
+                  onClick={() => {
+                    setSelectedCompromiso(null);
+                    setShowPaymentModal(false);
+                  }}
                 >
                   Cancelar
                 </button>
@@ -2199,7 +2589,8 @@ export default function FundsDashboard() {
           </div>
         </div>,
         document.body
-      )}
+      );
+    })()}
 
       {/* ========================================================= */}
       {/* MODAL 4: VALIDAR GASTO FAMILIAR                          */}
@@ -2283,6 +2674,77 @@ export default function FundsDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 5: VISOR DE COMPROBANTES DE PAGO / FACTURAS        */}
+      {/* ========================================================= */}
+      {receiptModalUrl && createPortal(
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'grid',
+          placeItems: 'center',
+          zIndex: 999999,
+          padding: '1rem',
+        }} onClick={() => setReceiptModalUrl(null)}>
+          <div style={{
+            backgroundColor: '#1e293b',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '16px',
+            padding: '1.25rem',
+            maxWidth: '32rem',
+            width: '100%',
+            color: '#f8fafc',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>
+                {receiptModalTitle || 'Comprobante'}
+              </h3>
+              <button
+                type="button"
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                onClick={() => setReceiptModalUrl(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              borderRadius: '8px',
+              backgroundColor: '#0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '200px',
+              maxHeight: '65vh',
+            }}>
+              <img
+                src={receiptModalUrl}
+                alt="Comprobante"
+                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                }}
+              />
+              <div style={{ display: 'none', padding: '1rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                <p>No se pudo previsualizar la imagen.</p>
+                <a href={receiptModalUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
+                  Abrir enlace en nueva pestaña
+                </a>
+              </div>
+            </div>
           </div>
         </div>,
         document.body
