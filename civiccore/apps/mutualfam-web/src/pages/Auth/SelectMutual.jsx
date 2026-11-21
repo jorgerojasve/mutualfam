@@ -9,7 +9,7 @@ const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : '?');
 
 export default function SelectMutual() {
   const navigate = useNavigate();
-  const { user, organizations, activeOrg, selectOrg, joinOrg, createOrg, logout, refreshUser, isOffline } = useAuthStore();
+  const { user, organizations, expelledOrganizations, activeOrg, selectOrg, joinOrg, createOrg, logout, refreshUser, isOffline } = useAuthStore();
   
   const [modalMode, setModalMode] = useState(null); // 'create' | 'join' | null
   
@@ -87,6 +87,25 @@ export default function SelectMutual() {
           </h1>
           <EnvBadge size="small" />
         </div>
+
+        {/* Aviso de Membresías Revocadas por la Asamblea */}
+        {((expelledOrganizations && expelledOrganizations.length > 0) || (user?.expelled_organizations && user.expelled_organizations.length > 0)) && (
+          <div className="mb-6 p-4 rounded-2xl bg-red-950/40 border border-red-500/40">
+            {(expelledOrganizations || user?.expelled_organizations || []).map((exp) => (
+              <div key={exp.id} className="flex items-start gap-3">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <h4 className="text-sm font-bold text-red-400">
+                    Membresía Revocada: {exp.name}
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    La asamblea familiar ha aprobado la revocación de tu membresía en esta mutual. Tu acceso a sus datos, fondos y asambleas ha sido inhabilitado de forma definitiva.
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {organizations && organizations.length > 0 ? (
           <div className="flex flex-col gap-3 mb-6">

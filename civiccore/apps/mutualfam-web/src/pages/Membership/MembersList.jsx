@@ -126,6 +126,22 @@ const MembersList = () => {
       } catch (_) {}
     } catch (error) {
       console.warn("Could not fetch members:", error);
+      const isRevoked = String(error?.message || '').toLowerCase().includes('revocada') ||
+                        String(error?.message || '').toLowerCase().includes('no perteneces') ||
+                        String(error?.message || '').toLowerCase().includes('expulsad');
+      if (isRevoked) {
+        setMembers([]);
+        try {
+          localStorage.removeItem(`cached_members_${activeOrg.id}`);
+          localStorage.removeItem(`cached_asambleas_${activeOrg.id}`);
+          localStorage.removeItem('active_org_id');
+          localStorage.removeItem('cached_active_org');
+        } catch (_) {}
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.href = '/select-mutual';
+        }
+        return;
+      }
       const isNet = !error?.response && (
         Boolean(error?.request) ||
         Boolean(error?.message && (
@@ -170,6 +186,22 @@ const MembersList = () => {
       } catch (_) {}
     } catch (error) {
       console.warn("Could not fetch propuestas:", error);
+      const isRevoked = String(error?.message || '').toLowerCase().includes('revocada') ||
+                        String(error?.message || '').toLowerCase().includes('no perteneces') ||
+                        String(error?.message || '').toLowerCase().includes('expulsad');
+      if (isRevoked) {
+        setPropuestas([]);
+        try {
+          localStorage.removeItem(`cached_asambleas_${activeOrg.id}`);
+          localStorage.removeItem(`cached_members_${activeOrg.id}`);
+          localStorage.removeItem('active_org_id');
+          localStorage.removeItem('cached_active_org');
+        } catch (_) {}
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.href = '/select-mutual';
+        }
+        return;
+      }
       const isNet = !error?.response && (
         Boolean(error?.request) ||
         Boolean(error?.message && (

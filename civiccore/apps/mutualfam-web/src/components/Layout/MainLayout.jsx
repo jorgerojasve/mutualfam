@@ -22,7 +22,7 @@ const MainLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!activeOrg && (!organizations || organizations.length === 0)) {
+  if (!activeOrg || activeOrg.status === 'expelled' || !organizations || organizations.length === 0) {
     return <Navigate to="/select-mutual" replace />;
   }
 

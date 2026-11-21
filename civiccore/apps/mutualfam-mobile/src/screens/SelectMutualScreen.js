@@ -12,6 +12,7 @@ import { OfflineEmptyState } from '../components/OfflineNotice';
 export default function SelectMutualScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState([]);
+  const [expelledOrganizations, setExpelledOrganizations] = useState([]);
   const [connectionError, setConnectionError] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [detectedInvite, setDetectedInvite] = useState(null); // { token, organization_name }
@@ -27,7 +28,9 @@ export default function SelectMutualScreen({ navigation }) {
     setConnectionError(false);
     try {
       const data = await authApi.me();
-      const orgs = data.organizations || [];
+      const orgs = (data.organizations || []).filter(o => !o.status || o.status.toLowerCase() === 'active');
+      const expelled = data.expelled_organizations || [];
+      setExpelledOrganizations(expelled);
       setOrganizations(orgs);
       await AsyncStorage.setItem('cached_organizations', JSON.stringify(orgs));
       if (orgs.length === 0) detectInvite();
@@ -102,6 +105,23 @@ export default function SelectMutualScreen({ navigation }) {
           </View>
         ) : null}
       </View>
+
+      {/* Aviso de Membresías Revocadas por la Asamblea */}
+      {expelledOrganizations.length > 0 && (
+        <View style={styles.revokedCard}>
+          {expelledOrganizations.map((exp) => (
+            <View key={exp.id} style={styles.revokedItem}>
+              <Text style={styles.revokedIcon}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.revokedTitle}>Membresía Revocada: {exp.name}</Text>
+                <Text style={styles.revokedText}>
+                  La asamblea familiar ha aprobado la revocación de tu membresía en esta mutual. Tu acceso a sus datos y operaciones ha sido inhabilitado de forma definitiva.
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {organizations.length > 0 ? (
         <FlatList
@@ -312,5 +332,33 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  revokedCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  revokedItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  revokedIcon: {
+    fontSize: 20,
+    marginTop: 2,
+  },
+  revokedTitle: {
+    color: '#f87171',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  revokedText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 17,
   }
 });

@@ -65,6 +65,27 @@ const request = async (endpoint, options = {}) => {
       } else if (rawText) {
         message = `Error del servidor (${response.status}): ${rawText.slice(0, 150)}`;
       }
+
+      // Interceptor de Membresía Revocada / Expulsión (HTTP 403)
+      if (response.status === 403 && (
+        message.toLowerCase().includes('revocada') ||
+        message.toLowerCase().includes('expulsad') ||
+        message.toLowerCase().includes('no perteneces a esta mutual')
+      )) {
+        try {
+          await storage.removeItem('active_org_id');
+          await storage.removeItem('organizationId');
+          await storage.removeItem('cached_active_org');
+          if (orgId) {
+            await storage.removeItem(`cached_members_${orgId}`);
+            await storage.removeItem(`cached_asambleas_${orgId}`);
+          }
+          if (typeof window !== 'undefined' && window.location && !window.location.pathname.includes('/select-mutual') && !window.location.pathname.includes('/login')) {
+            window.location.href = '/select-mutual';
+          }
+        } catch (_) {}
+      }
+
       throw new Error(message);
     }
     return data;
