@@ -1126,10 +1126,8 @@ export default function AssemblyScreen({ embedded = false }) {
     );
   }
 
-  return (
-    <View style={[styles.container, embedded && { paddingHorizontal: 0, backgroundColor: 'transparent' }]}>
-      {!embedded && <ScreenTitle title="🏛️ Asamblea Familiar" />}
-
+  const renderAssemblyHeader = () => (
+    <View>
       {/* Indicador de límite o enfriamiento contra spam */}
       {throttleStatus && !throttleStatus.can_propose && (
         <View style={styles.throttleNoticeContainer}>
@@ -1167,12 +1165,12 @@ export default function AssemblyScreen({ embedded = false }) {
       >
         <View style={styles.assemblyRulesHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-            <Ionicons name="information-circle-outline" size={17} color="#38bdf8" />
+            <Ionicons name="information-circle-outline" size={16} color="#38bdf8" />
             <Text style={styles.assemblyRulesToggleText}>
               {showAssemblyRules ? 'Ocultar Reglas de Votación y Quórum' : 'Ver Reglas de Votación y Quórum de Asamblea'}
             </Text>
           </View>
-          <Ionicons name={showAssemblyRules ? 'chevron-up' : 'chevron-down'} size={17} color="#38bdf8" />
+          <Ionicons name={showAssemblyRules ? 'chevron-up' : 'chevron-down'} size={16} color="#38bdf8" />
         </View>
       </TouchableOpacity>
 
@@ -1197,7 +1195,7 @@ export default function AssemblyScreen({ embedded = false }) {
           <View style={[styles.ruleItem, { marginTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', paddingTop: 8 }]}>
             <Text style={[styles.ruleItemTitle, { color: '#38bdf8' }]}>🏛️ Propuestas Ordinarias:</Text>
             <Text style={styles.ruleItemDesc}>
-              • Quórum mínimo del 20% y mayoría absoluta (>50% de los votos) para resoluciones generales.
+              • Quórum mínimo del 20% y mayoría absoluta (&gt;50% de los votos) para resoluciones generales.
             </Text>
           </View>
         </View>
@@ -1232,49 +1230,55 @@ export default function AssemblyScreen({ embedded = false }) {
           loading={retrying}
         />
       ) : null}
+    </View>
+  );
 
-      {/* Lista de propuestas */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.accent || '#10b981'} />
-        </View>
-      ) : (
-        <FlatList
-          data={propuestasFiltradas}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderProposalCard}
-          contentContainerStyle={{ paddingBottom: 60 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => fetchPropuestas(true)}
-              tintColor={theme.accent || '#10b981'}
+  return (
+    <View style={[styles.container, embedded && { paddingHorizontal: 0, backgroundColor: 'transparent' }]}>
+      {!embedded && <ScreenTitle title="🏛️ Asamblea Familiar" />}
+
+      {/* Lista de propuestas con encabezado desplazable para maximizar el área visible */}
+      <FlatList
+        data={loading ? [] : propuestasFiltradas}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderProposalCard}
+        ListHeaderComponent={renderAssemblyHeader()}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 60, flexGrow: 1 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchPropuestas(true)}
+            tintColor={theme.accent || '#10b981'}
+          />
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={theme.accent || '#10b981'} />
+            </View>
+          ) : (isOffline || connectionError) ? (
+            <OfflineEmptyState
+              title="Sin conexión de red"
+              message="No se pudieron cargar las propuestas de asamblea. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
+              onRetry={handleRetryAsambleas}
+              loading={retrying}
             />
-          }
-          ListEmptyComponent={
-            (isOffline || connectionError) ? (
-              <OfflineEmptyState
-                title="Sin conexión de red"
-                message="No se pudieron cargar las propuestas de asamblea. Tus datos están seguros y no se han eliminado. Por favor, intenta de nuevo cuando tengas conexión."
-                onRetry={handleRetryAsambleas}
-                loading={retrying}
-              />
-            ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>🏛️</Text>
-                <Text style={styles.emptyTitle}>
-                  {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  {activeTab === 'activas'
-                    ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
-                    : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
-                </Text>
-              </View>
-            )
-          }
-        />
-      )}
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🏛️</Text>
+              <Text style={styles.emptyTitle}>
+                {activeTab === 'activas' ? 'No hay propuestas en debate o votación' : 'No hay propuestas en el historial'}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {activeTab === 'activas'
+                  ? 'Cualquier miembro activo puede proponer nuevos ingresos o temas a la asamblea.'
+                  : 'Las decisiones aprobadas o rechazadas aparecerán aquí.'}
+              </Text>
+            </View>
+          )
+        }
+      />
 
       {/* ======================================================== */}
       {/* MODAL DETALLE Y VOTACIÓN                                 */}
@@ -2492,8 +2496,8 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16
+    gap: 10,
+    marginBottom: 10
   },
   proposeAdmissionButton: {
     flex: 1,
@@ -2501,14 +2505,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0284c7',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
     gap: 6
   },
   admissionButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 14
+    fontSize: 13.5
   },
   proposeExpulsionButton: {
     flex: 1,
@@ -2518,24 +2522,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderWidth: 1,
     borderColor: '#ef4444',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
     gap: 6
   },
   expulsionButtonText: {
     color: '#f87171',
     fontWeight: '700',
-    fontSize: 14
+    fontSize: 13.5
   },
   buttonIcon: {
-    fontSize: 16
+    fontSize: 15
   },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 10
   },
   tabButton: {
     flex: 1,
@@ -2981,10 +2985,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(30, 41, 59, 0.6)',
     borderWidth: 1,
     borderColor: 'rgba(56, 189, 248, 0.25)',
-    borderRadius: 12,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   assemblyRulesHeaderRow: {
     flexDirection: 'row',
@@ -4029,9 +4033,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.35)',
     borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    marginBottom: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginBottom: 8,
   },
   throttleNoticeIcon: {
     fontSize: 16,

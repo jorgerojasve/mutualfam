@@ -1077,19 +1077,19 @@ const MembersList = () => {
               backgroundColor: 'rgba(245, 158, 11, 0.12)',
               border: '1px solid rgba(245, 158, 11, 0.35)',
               borderRadius: '10px',
-              padding: '10px 14px',
-              marginBottom: '14px',
+              padding: '8px 12px',
+              marginBottom: '10px',
               color: '#fbbf24',
-              fontSize: '13px',
-              lineHeight: '1.4'
+              fontSize: '12.5px',
+              lineHeight: '1.35'
             }}>
-              <span style={{ fontSize: '18px' }}>⏱️</span>
+              <span style={{ fontSize: '16px' }}>⏱️</span>
               <span>{throttleStatus.reason}</span>
             </div>
           )}
 
           {/* Botones de acción principales Homologados con Android */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
             <button
               type="button"
               onClick={handleOpenIngresoModal}
