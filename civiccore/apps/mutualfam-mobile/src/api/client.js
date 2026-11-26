@@ -275,9 +275,12 @@ export const loansApi = {
     return data;
   },
   uploadFile: async (fileUri) => {
-    let filename = fileUri.split('/').pop();
+    const cleanUri = String(fileUri || '').split('?')[0];
+    let filename = cleanUri.split('/').pop() || `comprobante_${Date.now()}.jpg`;
     let match = /\.(\w+)$/.exec(filename);
-    let type = match ? `image/${match[1]}` : `image`;
+    let ext = match ? match[1].toLowerCase() : 'jpg';
+    if (!match) filename = `${filename}.jpg`;
+    let type = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
     let formData = new FormData();
     formData.append('file', { uri: fileUri, name: filename, type });
     
