@@ -94,7 +94,14 @@ def auto_verify_pending_repayments(db) -> int:
             ).all()
 
             all_repaid = len(all_contribs) > 0 and all(c.status == ContributionStatus.REPAID for c in all_contribs)
+            has_unvalidated = False
             if all_repaid:
+                contrib_ids = [c.id for c in all_contribs]
+                has_unvalidated = db.query(LoanRepayment).filter(
+                    LoanRepayment.contribution_id.in_(contrib_ids),
+                    LoanRepayment.status == RepaymentStatus.PAID
+                ).first() is not None
+            if all_repaid and not has_unvalidated:
                 loan.status = LoanStatus.REPAID
                 loan.repaid_at = now_dt
 

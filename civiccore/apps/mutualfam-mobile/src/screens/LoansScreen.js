@@ -1280,7 +1280,11 @@ export default function LoansScreen({ navigation }) {
         <View style={styles.cardFooter}>
           {isMine ? (
             <View style={{ gap: 10 }}>
-              {item.status !== 'repaid' && item.status !== 'cancelled' && (item.amount_paid || 0) === 0 && (item.amount_verified || 0) === 0 && (
+              {item.status !== 'repaid' &&
+                item.status !== 'cancelled' &&
+                (item.amount_paid || 0) === 0 &&
+                (item.amount_verified || 0) === 0 &&
+                !(item.contributions || []).some(c => ['paid', 'verified', 'repay_notified', 'repaid'].includes(c.status)) && (
                 <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => handleCancelLoan(item.id)}>
                   <Text style={styles.cancelButtonText}>Cancelar Solicitud</Text>
                 </TouchableOpacity>

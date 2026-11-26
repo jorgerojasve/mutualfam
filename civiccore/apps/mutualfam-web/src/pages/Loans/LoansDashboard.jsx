@@ -1184,7 +1184,11 @@ export default function LoansDashboard() {
                     
                     <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', marginTop: 'auto' }}>
                       {isMine ? (
-                         loan.status === 'pending' ? (
+                         loan.status !== 'repaid' &&
+                         loan.status !== 'cancelled' &&
+                         (loan.amount_paid || 0) === 0 &&
+                         (loan.amount_verified || 0) === 0 &&
+                         !(loan.contributions || []).some(c => ['paid', 'verified', 'repay_notified', 'repaid'].includes(c.status)) ? (
                            <button className="w-full btn btn-danger" onClick={() => handleCancelLoan(loan.id)}>
                              Cancelar Solicitud
                            </button>
