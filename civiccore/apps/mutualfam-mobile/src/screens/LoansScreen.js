@@ -784,10 +784,12 @@ export default function LoansScreen({ navigation }) {
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Error', 'Monto inválido'); return;
     }
-    const totalRepaid = (selectedContrib?.repayments || []).reduce(
-      (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
-      0
-    );
+    const totalRepaid = (selectedContrib?.repayments || [])
+      .filter(r => r.status !== 'rejected')
+      .reduce(
+        (sum, r) => sum + (parseFloat(r.amount_usd) || 0),
+        0
+      );
     const remaining = Math.max(0, +((selectedContrib?.amount_usd || 0) - totalRepaid).toFixed(2));
     if (remaining > 0 && parsedAmount > (remaining + 0.05)) {
       Alert.alert(

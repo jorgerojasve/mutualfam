@@ -2460,20 +2460,21 @@ export default function LoansDashboard() {
                   type="file"
                   id="repay-receipt-file-input"
                   accept="image/*"
-                  style={{ display: 'none' }}
+                  style={{ position: 'absolute', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       setRepayReceiptFile(file);
                       setRepayReceiptPreview(URL.createObjectURL(file));
                     }
+                    e.target.value = '';
                   }}
                 />
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('repay-receipt-file-input')?.click()}
+                <label
+                  htmlFor="repay-receipt-file-input"
                   style={{
                     width: '100%',
+                    boxSizing: 'border-box',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     border: '1px dashed rgba(59, 130, 246, 0.4)',
                     borderRadius: '8px',
@@ -2489,7 +2490,7 @@ export default function LoansDashboard() {
                   }}
                 >
                   📎 {repayReceiptFile ? 'Cambiar Comprobante' : 'Adjuntar Comprobante'}
-                </button>
+                </label>
                 {repayReceiptPreview && (
                   <div style={{ marginTop: '0.65rem', textAlign: 'center' }}>
                     <img

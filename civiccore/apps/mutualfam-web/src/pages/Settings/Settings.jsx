@@ -23,7 +23,7 @@ import { checkForWebUpdate, applyWebUpdate } from '../../utils/versionCheck';
 import packageJson from '../../../package.json';
 
 const SUPPORT_EMAIL = 'mutualfam@gmail.com';
-const APP_VERSION = packageJson.version || '1.1.81';
+const APP_VERSION = packageJson.version || '1.1.82';
 
 export default function ProfileAndSettings() {
   const { user, activeOrg, logout, isOffline } = useAuthStore();

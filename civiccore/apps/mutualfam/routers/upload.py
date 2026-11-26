@@ -55,7 +55,10 @@ def get_or_restore_file(filename: str) -> str:
 
 @router.post("/")
 async def upload_file(file: UploadFile = File(...)):
-    ext = file.filename.split(".")[-1]
+    orig_name = (file.filename or "comprobante.jpg").split("?")[0]
+    ext = orig_name.rsplit(".", 1)[-1].lower() if "." in orig_name else "jpg"
+    if not ext.isalnum() or len(ext) > 6:
+        ext = "jpg"
     filename = f"{uuid.uuid4()}.{ext}"
     filepath = os.path.join(UPLOADS_DIR, filename)
     
