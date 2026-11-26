@@ -210,7 +210,7 @@ def get_loan_requests(
                 amt_pledged += c.amount_usd
             elif c.status == ContributionStatus.PAID:
                 amt_paid += c.amount_usd
-            elif c.status == ContributionStatus.VERIFIED:
+            elif c.status in (ContributionStatus.VERIFIED, ContributionStatus.REPAY_NOTIFIED, ContributionStatus.REPAID):
                 amt_verified += c.amount_usd
                 
             db_repayments = db.query(LoanRepayment).filter(LoanRepayment.contribution_id == c.id).all()
@@ -800,8 +800,17 @@ def verify_return_payment(
         if c.status != ContributionStatus.REPAID:
             all_repaid = False
             break
-            
+
+    has_unvalidated_repayment = False
     if all_repaid and len(all_contribs) > 0:
+        contrib_ids = [c.id for c in all_contribs]
+        unvalidated = db.query(LoanRepayment).filter(
+            LoanRepayment.contribution_id.in_(contrib_ids),
+            LoanRepayment.status == RepaymentStatus.PAID
+        ).first()
+        has_unvalidated_repayment = unvalidated is not None
+            
+    if all_repaid and len(all_contribs) > 0 and not has_unvalidated_repayment:
         loan.status = LoanStatus.REPAID
         loan.repaid_at = datetime.now(timezone.utc)
         db.commit()
